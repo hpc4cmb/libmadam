@@ -1,0 +1,1021 @@
+MODULE parameter_control
+
+  use iso_c_binding
+
+  use simulation
+  use commonparam
+  use mpi_wrappers
+  use noise_routines, only : interpolate_psd
+
+  implicit none
+  private
+
+  public init_parameters, init_parallelization, start_timeloop, &
+       write_parameters, baseline_times       
+
+  real(sp), save, public :: memory_basis_functions = 0
+  character(len=40),parameter :: mstr='(x,a,t32,f9.1," MB")', mstr3='(x,a,t32,3(f9.1," MB"))'
+
+CONTAINS
+
+  !-------------------------------------------------------------------------
+
+
+  SUBROUTINE init_parameters()
+
+    ! extensively rewritten for TOAST: use_pntperiods is now
+    ! enabled by default and looping over pointing, time and buffer
+    ! are disabled
+
+    integer  :: nodets_per_point, nodet_pol
+    integer  :: idet, ipoint, ndet, i, m, n
+    integer  :: nleft, ns
+    real(dp) :: weight
+    logical  :: use_all_data
+    integer :: idet1, idet2, horn1, horn2
+    character(len=SLEN) :: subsetname
+
+    real(dp), allocatable :: weights(:)
+
+    ! noise weighting parameters
+    real(dp) :: sigma, rms, fbase, psdmin
+    integer(i8b) :: nn, ipsd
+
+    integer ( i8b ) :: nbin
+    real ( dp ), allocatable :: freqs(:), data(:)
+
+    ! Make sure path_output contains the separator
+    
+    n = len_trim(path_output)
+    if (n /= 0) then
+       if (path_output(n:n) /= '/') path_output = path_output(1:n) // '/'
+    end if
+
+    ! expand the file names
+
+    subsetname = trim(file_root)
+    if ( len_trim( detsets(0)%name ) /= 0 ) subsetname = trim(subsetname) // '_' // trim( detsets(0)%name )
+    if ( len_trim( surveys(0)%name ) /= 0 ) subsetname = trim(subsetname) // '_' // trim( surveys(0)%name )
+
+    if ( do_map )    file_map    = trim(subsetname) // '_map.fits'
+    if ( do_binmap ) file_binmap = trim(subsetname) // '_bmap.fits'
+    if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
+    if ( do_matrix ) file_matrix = trim(subsetname) // '_wcov_inv.fits'
+    if ( do_wcov )   file_wcov   = trim(subsetname) // '_wcov.fits'
+    if ( do_base )   file_base   = trim(subsetname) // '_base.fits'
+    if ( do_mask )   file_mask   = trim(subsetname) // '_mask.fits'
+
+    ! in a Monte Carlo, the binary maps are appended into a single file rather than storing
+    ! each realization separately
+
+    if ( binary_output .and. ( mc_loops > 1 .or. mc_id > 0 ) ) then
+       concatenate_binary = .true.
+    else
+       concatenate_binary = .false.
+    end if
+
+    ! Set common parameters
+
+    if (id == 0 .and. info > 0) then
+       write(*,*)
+       write(*,*) 'Initializing parameters'
+    end if
+
+    if ( noise_weights_from_psd ) then
+
+       ! Improve noise weighting in case we have full PSDs from TOAST
+
+       if (id == 0) write (*,*) 'Adjusting noise weights using noise spectra '
+
+       if ( radiometers ) then
+
+          ! well-behaved PSD, just get the last PSD bin value
+
+          nbin = 1
+          allocate( freqs(nbin), data(nbin) )
+          freqs = fsample / 2
+             
+          do idet = 1, nodetectors
+             do ipsd = 1, detectors(idet)%npsd
+                call interpolate_psd( detectors(idet)%psdfreqs, detectors(idet)%psds(:,ipsd), freqs, data )
+                rms = sqrt( data(1) * fsample )
+
+                !if (id == 0 .and. ipsd == 1) then
+                !   sigma = detectors(idet)%sigmas(ipsd)
+                !   write (*,'(2(a,e15.6))') '   ' // trim(detectors(idet)%name) // &
+                !        ' : TOAST rms = ', sigma, ', high freq rms = ', rms
+                !end if
+                detectors(idet)%sigmas(ipsd) = rms
+                !write (100+id,*) trim(detectors(idet)%name), rms ! DEBUG
+             end do
+          end do
+
+          deallocate( freqs, data )
+
+          !call wait_mpi; call close_mpi; stop ! DEBUG
+
+       else
+
+          ! Measure the plateau value, VERY Planck Specific but will work for white noise filters
+
+          nbin = 10
+          allocate( freqs(nbin), data(nbin) )
+          freqs = (/ (dble(i), i=1,nbin) /)
+             
+          do idet = 1, nodetectors
+             do ipsd = 1, detectors(idet)%npsd
+                call interpolate_psd( detectors(idet)%psdfreqs, detectors(idet)%psds(:,ipsd), freqs, data )
+                rms = sqrt( minval(data) * fsample )
+                
+                !if (id == 0) then
+                !   sigma = detectors(idet)%sigma
+                !   write (*,'(2(a,e15.6))') '   ' // trim(detectors(idet)%name) // &
+                !        ' : TOAST rms = ', sigma, ', high freq rms = ', rms
+                !end if
+                detectors(idet)%sigmas(ipsd) = rms
+             end do
+          end do
+
+          deallocate( freqs, data )
+
+       end if
+
+    end if
+
+    ! Check for FPDB supplement
+
+    if (len_trim(file_fpdb_supplement) > 0) call parse_fpdb_supplement()
+
+    ! Checkings
+
+    if (nsubchunk < 2) then
+       nsubchunk = 0
+       isubchunk = 0
+    end if
+
+    if (isubchunk > nsubchunk) call abort_mpi('ERROR: isubchunk > nsubchunk')
+
+    if (nread_concurrent < 1 .or. nread_concurrent > ntasks) &
+         nread_concurrent = ntasks
+    if (id == 0) write (*,'(" nread_concurrent == ",i0)') nread_concurrent
+
+    if (id == 0) write (*,'(" read_buffer_len == ",i0)') read_buffer_len
+
+    if (len_trim(file_covmat) > 0) kwrite_covmat = .true.
+    if (kwrite_covmat) then
+       kfilter = .true.
+       kfirst = .true. 
+       filter_mean = .true.
+       run_submap_test = .false.
+    end if
+
+    if (nthreads > nthreads_max) nthreads = nthreads_max
+
+    if (good_baseline_fraction < 0 .or. good_baseline_fraction > 1) &
+         call abort_mpi('ERROR: good_baseline_fraction must be in 0..1')
+
+    if (nside_cross < 0) nside_cross = nside_map
+
+    call nside_check(nside_map, 'nside_map')
+    call nside_check(nside_submap, 'nside_submap')
+    call nside_check(nside_cross, 'nside_cross')
+
+    if ( nside_map < nside_cross ) &
+         call abort_mpi('nside_cross > nside_map not supported by Madam/TOAST')
+
+    if (pixlim_cross < 0) pixlim_cross = pixlim_map
+
+    if (pixmode_map < 0 .or. pixmode_map > 2) then
+       if (id == 0) write(*,*) 'ERROR in input parameters:',  &
+            ' Pixmode_map must be in range [0-2]'
+       call exit_with_status(1)
+    elseif (pixmode_cross < 0 .or. pixmode_cross > 4) then
+       if (id == 0) write(*,*) 'ERROR in input parameters:',  &
+            ' Pixmode_cross must be in range [0-4]'
+       call exit_with_status(1)
+    end if
+
+    use_inmask = (len_trim(file_inmask).gt.0)
+
+    if (force_pol) detectors%kpolar = .true.
+
+    ! Polarized/unpolarized case
+    nodet_pol = count(detectors%kpolar)
+
+    if (nodet_pol == 0 .or. nmap == 1) then
+
+       if (id == 0 .and. info >= 1) then
+          write(*,*) 'Only unpolarized detectors:' // &
+               ' Will produce only temperature map'
+          if (.not.temperature_only)  &
+               write(*,*) 'Setting temperature_only = T'
+       end if
+
+       temperature_only = .true.
+       nmap = 1
+    elseif (temperature_only) then
+       if (id == 0 .and. info >= 1) then
+          write(*,*) 'Temperature_only = T:' // &
+               ' Only temperature map will be produced'
+       end if
+       nmap = 1
+    else
+       if (id == 0 .and. info >= 1) then
+          write(*,*) 'Polarized detectors present: ' // &
+               ' Will produce polarization maps'
+       end if
+    end if
+
+    ncc = nmap * (nmap + 1) / 2
+
+    ! Detector weighting
+
+    if (id == 0) print *,'noise_weights_from_psd = ', noise_weights_from_psd
+    if (id == 0) print *,'radiometers = ', radiometers
+    if (id == 0) print *,'mode_detweight = ', mode_detweight
+
+    if (mode_detweight == 0) then ! Detector weights from RMS
+
+       do idet = 1,nodetectors
+          where (detectors(idet)%sigmas == 0 )
+             detectors(idet)%weights = 0
+          elsewhere
+             detectors(idet)%weights = 1.d0 / detectors(idet)%sigmas**2
+          end where
+       end do
+
+    elseif (mode_detweight == 1) then ! uniform weights
+
+       do idet = 1,nodetectors
+          detectors(idet)%weights = 1.d0
+       end do
+
+    elseif (mode_detweight == 2) then ! one weight per horn
+       ! each detector has its own pointing so figuring out which
+       ! detectors share a horn is a little more involved
+       do idet1 = 1,nodetectors-1
+          horn1 = get_horn(detectors(idet1)%name)
+          do idet2 = idet1+1,nodetectors
+             horn2 = get_horn(detectors(idet2)%name)
+             if (horn1 == horn2) then
+
+                if ( detectors(idet1)%npsd /= detectors(idet2)%npsd ) &
+                     stop 'Detectors in the same horn do not have the same number of PSDs'
+
+                allocate( weights( detectors(idet1)%npsd ) )
+                
+                where ( detectors(idet1)%sigmas == 0 .or. detectors(idet2)%sigmas == 0 )
+                   weights = 0
+                elsewhere
+                   weights = 2 / (detectors(idet1)%sigmas**2 + detectors(idet2)%sigmas**2)
+                end where
+                detectors(idet1)%weights = weights
+                detectors(idet2)%weights = weights
+                if (id == 0) write (*,'(a,es15.6,a)') &
+                     'Assigning horn weight, ',weights(1),', to ' // &
+                     trim(detectors(idet1)%name) // ' and ' // & 
+                     trim(detectors(idet2)%name)  // ' for the FIRST period'
+
+                deallocate( weights )
+             end if
+          end do
+       end do
+    else
+       print *,' ERROR: bad mode_detweight : ',mode_detweight
+       call abort_mpi('bad mode_detweight')
+    end if
+
+    nside_max = max(nside_map,nside_cross)
+    nside_submap = min(nside_submap,nside_map,nside_cross)
+
+    nosubmaps_tot = 12*nside_submap**2
+
+    use_all_data = .true.
+
+    istart_mission = 0
+    nosamples_tot = nosamples_simulation
+    use_all_data = .true.
+
+    if (id == 0 .and. info > 2) then
+       write(*,*)
+       write(*,'(x,a,t24,"= ",i12)') 'istart_mission',istart_mission
+       write(*,'(x,a,t24,"= ",i12)') 'nosamples_tot', nosamples_tot
+       write(*,'(x,a,t24,"= ",i12)') &
+            'nosamples_simulation',nosamples_simulation
+    end if
+
+    ! Non-integer baseline length allowed in standard mode + use_pntperiods=T
+
+    nshort = int(dnshort + .5)
+
+    ! Baseline length
+
+    if (.not. kfirst) then
+       dnshort = 1e6
+       nshort = int(dnshort  +.5)
+       precond_width = 0
+       kfilter = .false.
+    end if
+
+    ! Data divided by pointing periods
+
+    if (nopntperiods <= 0) then
+       if (id == 0) write(*,*) 'ERROR: Pointing periods not known.'
+       call exit_with_status(1)
+    end if
+
+    ! Store the number of baselines per pointing period
+    ! Most loops now iterate over baselines, even whenno destriping is done
+    !if (kfirst) then
+    allocate(noba_short_pp(nopntperiods))
+    noba_short_pp = 0
+
+    do i = 1,nopntperiods
+       if (id == 0 .and. info > 3) then
+          if (pntperiods(i) < dnshort) &
+               write (*,'(a,i0,a,i0,a,i0,a)') &
+               'WARNING: pointing period ',pntperiod_id(i),' is ', &
+               pntperiods(i), ' samples long but the baseline length is ', &
+               int(dnshort, i8b), ' samples. Baseline truncated.'
+       endif
+       noba_short_pp(i) = (pntperiods(i)-1) / dnshort + 1
+    end do
+    !end if
+
+    ! Resolution
+    nosubpix_max = nside_max**2 / nside_submap**2
+    nosubpix_map = nside_map**2 / nside_submap**2
+    nosubpix_cross = nside_cross**2 / nside_submap**2
+
+    ! covmat specific checks
+    if (kwrite_covmat) then
+       ! ensure that the baseline correlation is evaluated far enough
+       filter_time = 48.*3600
+    end if
+
+
+    if (checknan) then
+       do idet = 1,nodetectors
+          if (any(isnan(detectors(idet)%weights)) &
+               .or. any(isnan(detectors(idet)%sigmas))) then
+             print *,id,' : Bad detector params (NaN in sigmas or weights) : ',detectors(idet)%name
+          end if
+       end do
+    end if
+
+    
+    
+  CONTAINS
+
+    
+    subroutine parse_fpdb_supplement()
+      !
+      ! file_fpdb_supplement is used to override information from TOAST
+      !
+      character(len=200) :: line, name, key
+      integer :: iend, nline, iline, i, i2, ifield, idet, ierr
+      logical :: there
+      real(dp) :: value
+      
+      if (id == 0) then
+         ! Check file and count the number of lines
+         inquire(file=file_fpdb_supplement, exist=there)
+         if (.not. there) call abort_mpi('fpdb_supplement not found')
+
+         open(unit=55, file=trim(file_fpdb_supplement))
+         nline = 0
+         do
+            read(55, '(a)',iostat=iend) line
+            if (iend < 0) exit
+            nline = nline + 1
+         end do
+         rewind(55)
+      end if
+
+      call broadcast_mpi(nline, 0)
+
+      do iline = 1,nline
+         if (id == 0) read(55, '(a)') line
+         call broadcast_mpi(line, 0)
+
+         ! check for comment lines
+         if (index(adjustl(line),'#') == 1 .or. len_trim(line) == 0) cycle
+
+         i = 1
+         do ifield = 1,2
+            i2 = scan(line(i:), ',') - 1
+            if (i2 < 1) call abort_mpi('Bad line in fpdb_supplement: ' // trim(line))
+
+            select case(ifield)
+            case (1)
+               name = line(i:i+i2-1)
+            case (2)
+               key = line(i:i+i2-1)
+            end select
+
+            i = i + i2 + 1
+         end do
+
+         read(line(i:), *, iostat=ierr) value
+         if (ierr /= 0) call abort_mpi('Failed to parse ' // trim(line(i:)) // ' in ' // trim(line))
+
+         if (id == 0) write (*,'(3(a," : "),g15.5)') &
+              'supplemental', trim(name), trim(key), value
+
+         do idet = 1,nodetectors
+            if (detectors(idet)%name == trim(name)) then
+               select case(trim(key))
+               case ('slope')
+                  detectors(idet)%slope = value
+               case ('fknee')
+                  detectors(idet)%fknee= value
+               case ('fmin')
+                  detectors(idet)%fmin = value
+               case ('sigma')
+                  detectors(idet)%sigmas = value
+               case ('psipol')
+                  detectors(idet)%psipol = value
+               case default
+                  call abort_mpi('Unknown key in fpdb_supplement: ' // trim(key))
+               end select
+               exit
+            end if
+         end do
+      end do
+      
+    end subroutine parse_fpdb_supplement
+
+
+
+    !------------------------------------------------------------------------
+
+
+    SUBROUTINE nside_check(nside,varname)
+
+      integer,intent(in) :: nside
+      character(len=*)   :: varname
+      integer            :: n, k
+
+      k = 1
+      n = nside
+      do
+         if (n==1) exit
+         n = n/2
+         k = k*2
+      end do
+
+      if (n*k.ne.nside) then
+         write(*,*) 'ERROR: Illegal parameter value.'
+         write(*,*) varname,' must be a power of two.'
+         call exit_with_status(1)
+      end if
+
+    END SUBROUTINE nside_check
+
+
+    function get_horn(name)
+      integer :: get_horn
+      character(len=*) :: name
+
+      integer :: ierr
+
+      if (name(1:3) == 'LFI') then
+         read(name(4:5), '(i2)', iostat=ierr) get_horn
+      else
+         read(name(5:5), '(i1)', iostat=ierr) get_horn
+      end if
+
+      if (ierr /= 0) &
+           call abort_mpi('ERROR : Failed to extract horn from '//trim(name))
+
+    end function get_horn
+
+
+  END SUBROUTINE init_parameters
+
+
+  !-------------------------------------------------------------------------
+
+
+  SUBROUTINE init_parallelization
+
+    ! Substantially rewritten: TOAST does now the data distribution.
+    ! Looping over time, pointings and buffer are disabled.
+
+    character(len=30) :: fi
+
+    integer(idp) :: nleft, kstart, n, nmax
+    integer      :: i, k, iloop, nba
+
+    fi = '(x,a,t24,"= ",i12,   2x,a)'
+
+    if (id == 0 .and. info >= 3) write(*,*) 'Initializing parallelization'
+    if (info > 4) write(*,idf) id,'Initializing parallelization'
+
+    if (allocated(id_submap)) deallocate(id_submap)
+
+    ! Compute the total number of short baselines (first destriping)
+    ! and the maximum number per process.
+
+    ! most loops now iterate over baselines regardless of kfirst
+    !if (kfirst) then
+    noba_short_max = 0
+    noba_short_tot = 0
+
+    nba = sum(noba_short_pp(first_chunk:last_chunk))
+    noba_short_max = nba
+    call max_mpi(noba_short_max)
+    noba_short_tot = nba
+    call sum_mpi(noba_short_tot)
+    !end if
+
+    ! set Madam parameters describing load balancing
+
+    nosamples_proc_max = sum(pntperiods(first_chunk:last_chunk))
+    call max_mpi(nosamples_proc_max)
+
+    ! Distribute submaps
+
+    allocate(id_submap(0:nosubmaps_tot-1))
+
+    nosubmaps_max = (nosubmaps_tot-1) / ntasks + 1
+
+    nosubmaps = 0
+    do i = 0,nosubmaps_tot-1
+       k = mod(i,ntasks)
+       id_submap(i) = k
+       if (id == k) nosubmaps = nosubmaps + 1
+    end do
+
+    nopix_map = nosubmaps * nosubpix_map
+    nopix_cross = nosubmaps * nosubpix_cross
+
+    if (id == 0 .and. info > 2) then
+       write(*,fi) 'ntasks', ntasks, 'Number or processes'
+       write(*,fi) 'nosamples_tot',     nosamples_tot,     'Total samples'
+       write(*,fi) 'nosamples_proc_max',nosamples_proc_max,'Samples/process'
+
+       if (kfirst) then
+          write(*,fi) 'noba_short_tot', noba_short_tot, 'Total baselines'
+          write(*,fi) 'noba_short_max', noba_short_max, 'Baselines/process'
+       end if
+
+       write(*,*)
+    end if
+
+  END SUBROUTINE init_parallelization
+
+
+  !--------------------------------------------------------------------------
+
+
+  SUBROUTINE write_parameters()
+
+    integer :: idet, itod, i
+    character(len=30) :: fi, fe, ff, fk, fs
+    real(dp) :: sigma
+
+    fi = '(x,a,t24,"= ",i12,   t40,a)'
+    fe = '(x,a,t24,"= ",es12.5,t40,a)'
+    ff = '(x,a,t24,"= ",f12.4, t40,a)'
+    fk = '(x,a,t24,"= ",l12,   t40,a)'
+    fs = '(x,a,t24,"= ",a,     t40,a)'
+
+    if (ntasks > 1 .and. id /= 0) return
+    if (info == 0) return
+
+    write (*,fk) 'dist_by_obs', dist_by_obs
+    write (*,fk) 'write_cut', write_cut
+    select case (basis_func)
+    case (basis_poly)
+       write (*,fs) 'basis_func', 'Polynomial', 'Destriping funtion basis'
+    case (basis_fourier)
+       write (*,fs) 'basis_func', 'Fourier', 'Destriping funtion basis'
+    case (basis_cheby)
+       write (*,fs) 'basis_func', 'Chebyshev', 'Destriping funtion basis'
+    case (basis_legendre)
+       write (*,fs) 'basis_func', 'Legendre', 'Destriping funtion basis'
+    case default
+       call abort_mpi('Unknown function basis')
+    end select
+    write (*,fi) 'basis_order', basis_order, 'Destriping funtion order'
+
+    write (*,*)
+    write (*,fi) 'ntasks',ntasks,'Number of processes'
+    write (*,fi) 'nthreads',nthreads,'Number of threads per process'
+    if (nthreads < nthreads_max) &
+         write (*,fi) 'nthreads_max',nthreads_max, &
+         'Maximum number of threads per process'
+    write (*,fi) 'info',info,'Screen output level'
+    write (*,ff) 'fsample',fsample,'Sampling frequency (Hz)'
+
+    if (nmap /= 1) then
+       write (*,fi) 'nmap',nmap,'Polarization included'
+    else
+       write (*,fi) 'nmap',nmap,  &
+            'Temperature-only treatment (no polarization)'
+    end if
+    write (*,fi) 'ncc',ncc,'Independent wcov elements'
+       
+    if (nsubchunk > 1) then
+       write (*,*)
+       write (*,*) 'Mapping SUBCHUNKS'
+       write (*,fi) 'nsubchunk', nsubchunk, &
+            'split chunks into subchunks and map all separately'
+       if (isubchunk > 0) write (*,fi) 'isubchunk', isubchunk, &
+            'Begin from a preset subchunk instead of all data'
+       write (*,*)
+    end if
+
+    if (mc_loops > 1) then
+       write (*,*)
+       write (*,*) 'Monte Carlo mode ON:'
+       write (*,fi) 'mc_loops', mc_loops,  &
+            'number of MC maps to produce'
+       write (*,fi) 'mc_increment', mc_increment,  &
+            'random stream increment between MC loops'
+       write (*,*)
+    end if
+
+    if (skip_existing) write (*,*) 'Will SKIP existing files'
+
+    write (*,*) 'Input files:'
+    if (len_trim(file_gap) > 0) write (*,fs) 'file_gap',trim(file_gap)
+
+    if (len_trim(file_inmask) > 0) then
+       write (*,fs) 'file_inmask',trim(file_inmask)
+       use_inmask = .true.
+    end if
+
+    if (len_trim(file_pntperiod) > 0)  &
+         write (*,fs) 'file_pntperiod',trim(file_pntperiod)
+    if (len_trim(file_objectsize) > 0) then
+       write (*,fs) 'file_objectsize',trim(file_objectsize)
+       write (*,*) 'Warning: file check suppressed.'
+    end if
+
+    write (*,*)
+    write (*,fi) 'nside_map',  nside_map,'Healpix resolution (output map)'
+    write (*,fi) 'nside_cross',nside_cross,'Healpix resolution (destriping)'
+    if (info > 1) &
+         write (*,fi) 'nside_submap',nside_submap,'Submap resolution'
+    write (*,fk) 'concatenate_messages',concatenate_messages,'use mpi_alltoallv to communicate'
+    write (*,fk) 'reassign_submaps',reassign_submaps,'minimize communication by reassigning submaps'
+
+    if (info > 1) then
+       write (*,fi) 'pixmode_map',  pixmode_map,    &
+            'Pixel rejection criterion (output map)'
+       write (*,fi) 'pixmode_cross',pixmode_cross,  &
+            'Pixel rejection criterion (destriping)'
+       write (*,fe)  'pixlim_map',   pixlim_map,    &
+            'Pixel rejection limit (output map)'
+       write (*,fe)  'pixlim_cross', pixlim_cross,    &
+            'Pixel rejection limit (destriping)'
+    end if
+
+    write (*,*)
+    write (*,*) 'Standard mode'
+
+    if (basis_order > 0 .and. kfilter) call abort_mpi('Filter only implemented for basis_order==0')
+
+    if (noise_weights_from_psd .or. kfilter) then
+       write (*,fi) 'psdlen',psdlen,'Length of requested noise PSD'
+       write (*,fi) 'psd_downsample',psd_downsample,'PSD downsampling factor'
+    end if
+
+    if (kfirst) then
+       write (*,*)
+       write (*,fk) 'kfirst',kfirst, 'First destriping ON'
+       write (*,ff) 'dnshort',dnshort,'Baseline length (samples)'
+       write (*,ff) ' ',dnshort/fsample,'seconds'
+
+       if (kfilter) then
+          write (*,fk) 'kfilter',kfilter,'Noise filter ON'
+          write (*,fk) 'filter_mean',filter_mean,'Constrain baseline mean'
+          if (info > 1) then
+             write (*,ff) 'filter_time',filter_time,'Filter length (s)'
+             write (*,ff) 'tail_time',tail_time,'Filter overlap (s)'
+          end if
+       else
+          write (*,fk) 'kfilter',kfilter,'Noise filter OFF'
+          write (*,ff) 'good_baseline_fraction',good_baseline_fraction, &
+               'fraction of samples needed to use baseline'
+       end if
+    else
+       write (*,fk) 'kfirst',kfirst, 'First destriping OFF'
+    end if
+
+    write (*,*)
+    if (info > 1) then
+       write (*,fe) 'cglimit',cglimit, 'Iteration convergence limit'
+       write (*,fi) 'iter_min',iter_min, 'Minimum number of iterations'
+       write (*,fi) 'iter_max',iter_max, 'Maximum number of iterations'
+       write (*,fk) 'initialize_by_regression',initialize_by_regression,'Baseline first guess'
+    end if
+
+    write(*,fi) 'precond_width',precond_width,'Width of the preconditioner band matrix'
+    if (precond_width==0) write(*,*) 'No preconditioning'
+
+    if (flag_by_horn) then
+       write (*,fk) 'flag_by_horn',flag_by_horn,'Combining flags within horns'
+    else
+       write (*,fk) 'flag_by_horn',flag_by_horn,'Flags are independent'
+    end if
+
+    if (mode_detweight == 0) then
+       write (*,fi) 'mode_detweight',mode_detweight,  &
+            'Detector weighting mode: sigma from simulation file'
+    elseif (mode_detweight == 1) then
+       write (*,fi) 'mode_detweight',mode_detweight,  &
+            'Detector weighting mode: uniform'
+    elseif (mode_detweight == 2) then
+       write (*,fi) 'mode_detweight',mode_detweight,  &
+            'Detector weighting mode: one weight per horn'
+    end if
+
+    if (kwrite_covmat) then
+       write (*,fk) 'kwrite_covmat',kwrite_covmat,'Covariance matrix written'
+       write (*,fs)  'file_covmat',trim(file_covmat)
+       write (*,fk) 'bfinvert',bfinvert,'Brute force invert middle matrix'
+    end if
+
+    write (*,*)
+    if (mc_loops > 1) then
+       write (*,fi) 'mc_increment', mc_increment, &
+            'Random number increment for iterations'
+       write (*,fi) 'mc_loops', mc_loops, &
+            'Number of Monte Carlo iterations'
+       write (*,fi) 'mc_id', mc_id, &
+            'Starting iteration identifier'
+    end if
+    write (*,fk) 'run_submap_test', run_submap_test, &
+         'Run test for optimal nside_submap'
+
+    write (*,*)
+    if (time_unit >= 0) then
+       write (*,fe) 'time_unit',time_unit,'Time unit/samples'
+    else
+       write (*,fs) 'time_unit','          pp','Time unit = pointing period'
+    end if
+    write (*,fi) 'mission_time', n_chunk_tot, 'Mission length in time units'
+    write (*,fi) 'nosamples_tot',nosamples_tot,'Total samples'
+    write (*,ff) '',nosamples_tot/fsample/3600.,'hours'
+
+    write (*,*)
+    write (*,*) 'Detectors available on the FIRST process and noise according to the FIRST period'
+    write (*,'(a)') ' Detectors:   psi_pol    kpolar       sigma' // &
+         '       slope       fknee        fmin      weight      1/sqrt(weight)'
+    do idet = 1,nodetectors
+       sigma = 0.0
+       if (detectors(idet)%weights(1) > 0) &
+            sigma = 1.d0 / sqrt(detectors(idet)%weights(1))
+       write (*,'(x,a,t12,f12.4,l5,3x,6es12.4)') detectors(idet)%name,  &
+            detectors(idet)%psipol, detectors(idet)%kpolar, &
+            detectors(idet)%sigmas(1), detectors(idet)%slope, &
+            detectors(idet)%fknee, detectors(idet)%fmin, &
+            detectors(idet)%weights(1), sigma
+    end do
+
+    !write (*,*)
+    !write (*,'(a)') ' Detector      weight      1/sqrt(weight)'
+    !do idet = 1,nodetectors
+    !   sigma = 0.0
+    !   if (detectors(idet)%weight > 0) &
+    !        sigma = 1.d0 / sqrt(detectors(idet)%weight)
+    !   write (*,'(x,a,t12,2es14.4)') detectors(idet)%name,  &
+    !        detectors(idet)%weight, sigma
+    !end do
+
+    if (info > 1) then
+       write (*,*)
+       write (*,*) 'Output files'
+       write (*,*) 'file_root    = ',trim(file_root)
+       if (len_trim(file_map) > 0)      &
+            write (*,*) 'file_map     = ',trim(file_map)
+       if (len_trim(file_binmap) > 0)   &
+            write (*,*) 'file_binmap  = ',trim(file_binmap)
+       if (len_trim(file_mask) > 0)     &
+            write (*,*) 'file_mask    = ',trim(file_mask)
+       if (len_trim(file_hit) > 0)      &
+            write (*,*) 'file_hit     = ',trim(file_hit)
+       if (len_trim(file_matrix) > 0)   &
+            write (*,*) 'file_matrix  = ',trim(file_matrix)
+       if (len_trim(file_wcov) > 0)   &
+            write (*,*) 'file_wcov    = ',trim(file_wcov)
+       if (len_trim(file_base) > 0)     &
+            write (*,*) 'file_base    = ',trim(file_base)
+       if (len_trim(file_gap_out) > 0)  &
+            write (*,*) 'file_gap_out = ',trim(file_gap_out)
+       if (len_trim(file_mc) > 0)       &
+            write (*,*) 'file_mc      = ',trim(file_mc)
+       write (*,*) 'binary_output      = ',binary_output
+       write (*,*) 'concatenate_binary = ',concatenate_binary
+    end if
+    write (*,*)
+
+  END SUBROUTINE write_parameters
+
+
+  !--------------------------------------------------------------------------
+
+
+  SUBROUTINE start_timeloop()
+    ! Initialize the next split-mode step.
+    ! Find the TOD chunk handled in this step. In standard mode = all TOD.
+    ! Also initialize parameters defining the division of TOD to processes.
+    integer :: i, j, k, m, n0, n, ierr
+    integer(i8b) :: nsamp, order
+    real(dp) :: dn, dn0, ninv, r
+    real(dp), pointer :: basis_function(:,:)
+    real(sp) :: memsum, mem_min, mem_max
+
+    call wait_mpi
+
+    !id_prev = toast_chunkset_prev(chunksets(1))
+    !id_next = toast_chunkset_next(chunksets(1))
+
+    ! Samples handled by the current process
+
+    istart_proc = sum(pntperiods(1:first_chunk-1))
+    nosamples_proc = sum(pntperiods(first_chunk:last_chunk))
+
+    ! Short baselines handled by the current process.
+
+    ! most loops iterate over baselines when there is no destriping
+    !if (kfirst) then
+    kshort_start = sum(noba_short_pp(1:first_chunk-1))
+    noba_short = sum(noba_short_pp(first_chunk:last_chunk))
+    !end if
+
+    ! Store the baseline lengths for first destriping
+
+    !if (kfirst) then
+    allocate(baselines_short(noba_short_max), &
+         base_pntid_short(noba_short_max), basis_functions(noba_short_max), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for baselines_short')
+
+    !Split the pointing period into short baselines of length int(dnshort)
+    ! or int(dnshort+1).
+    m = 0
+    baselines_short = 0
+    base_pntid_short = 0
+    do i = first_chunk, last_chunk
+       dn = 0.0 
+       n = 0
+       do k = 1, noba_short_pp(i) - 1 ! Loop over all but the last
+          dn0 = dn
+          n0 = n
+          dn = dn0 + dnshort
+          n = int(dn + .5)
+          m = m + 1
+          baselines_short(m) = n - n0
+          base_pntid_short(m) = pntperiod_id(i)
+       end do
+       m = m + 1
+       baselines_short(m) = pntperiods(i) - n !Last baseline takes the rest
+       base_pntid_short(m) = pntperiod_id(i)
+       
+       if ( kfirst ) then
+          !if (baselines_short(m) < 1 .or. baselines_short(m) > int(dnshort) + 1) then
+          if (baselines_short(m) < 0 .or. baselines_short(m) > int(dnshort, i8b) + 1) then
+             write (*,*) id,' : ERROR in start_timeloop: Lengths do not match., dnshort = ',dnshort
+             write (*,*) id,' : i, pntperiods(i), noba_short_max =', i, pntperiods(i), noba_short_max
+             write (*,*) id,' : last baseline =', baselines_short(m)
+             print *,id,' : noba_short_pp(i) = ',noba_short_pp(i)
+             do k=1,noba_short_pp(i)
+                print *,k,baselines_short(m-k+1),base_pntid_short(m-k+1)
+             end do
+             call exit_with_status(1)
+          end if
+       end if
+    end do
+    
+    ! Auxiliary arrays for OpenMP threading and output
+    
+    allocate(baselines_short_start(noba_short_max), &
+         baselines_short_stop(noba_short_max), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for baselines_short_start')
+    baselines_short_start = 1
+    baselines_short_stop  = 1
+
+    do k = 1,noba_short
+       if (k > 1) baselines_short_start(k) = baselines_short_start(k-1) + baselines_short(k-1)
+       baselines_short_stop(k) = baselines_short_start(k) + baselines_short(k) - 1
+    end do
+    
+    ! Set up the basis function arrays.
+    
+    do k = 1,noba_short
+       basis_functions(k)%copy = .false.
+       basis_functions(k)%nsamp = baselines_short(k)
+       basis_functions(k)%arr => NULL()
+       do j = 1, k-1
+          if (basis_functions(j)%nsamp == basis_functions(k)%nsamp) then
+             ! we already have a basis function of this length stored. 
+             basis_functions(k) = basis_functions(j)
+             basis_functions(k)%copy = .true.
+             exit
+          end if
+       end do
+       if (.not. basis_functions(k)%copy) then
+          ! Allocate and initialize the basis function array for this baseline length
+          nsamp = basis_functions(k)%nsamp
+          allocate(basis_functions(k)%arr(0:basis_order, 0:nsamp-1), stat=ierr )
+          if (ierr /= 0) stop 'No room for basis function'
+          memory_basis_functions = memory_basis_functions + (basis_order+1)*nsamp*8
+          basis_function => basis_functions(k)%arr
+          ninv = 1 / dble(size(basis_function, 2)-1) * 2
+          select case (basis_func)
+          case (basis_poly)
+             ! Simple polynomial basis
+             do i = 0,nsamp-1
+                r = i * ninv - 1
+                do order = 0,basis_order
+                   basis_function(order, i) = r**order
+                end do
+             end do
+          case (basis_fourier)
+             ! Real Fourier basis
+             ninv = pi / nsamp
+             do i = 0,nsamp-1
+                r = i * ninv
+                do order = 0,basis_order
+                   if (modulo(order, 2) == 0) then
+                      basis_function(order, i) = cos( order * r )
+                   else
+                      basis_function(order, i) = sin( (order + 1) * r )
+                   end if
+                end do
+             end do
+          case (basis_cheby)
+             ! use recursive formula for Chebyshev polynomials of the second kind
+             do i = 0,nsamp-1
+                r = i * ninv - 1
+                do order = 0,basis_order
+                   if (order == 0) basis_function(order, i) = 1
+                   if (order == 1) basis_function(order, i) = 2 * r
+                   if (order > 1) basis_function(order, i) = &
+                        2*r*basis_function(order-1, i) - basis_function(order-2, i)
+                end do
+                ! normalize, Chebyshev polynomials are not orthogonal wrt the L2 norm
+                basis_function(:, i) = basis_function(:, i) * (1 - r**2)**.25
+             end do
+          case (basis_legendre)
+             ! use recursive formula for Legendre polynomials
+             do i = 0,nsamp-1
+                r = i * ninv - 1
+                do order = 0,basis_order
+                   if (order == 0) basis_function(order, i) = 1
+                   if (order == 1) basis_function(order, i) = r
+                   if (order > 1) basis_function(order, i) = &
+                        ((2*order-1)*r*basis_function(order-1, i) - (order-1)*basis_function(order-2, i))/order
+                end do
+             end do
+          case default
+             call abort_mpi('Unknown function basis')
+          end select
+       end if
+    end do
+
+    memsum = memory_basis_functions / 1024. / 1024.
+    mem_min = memsum; mem_max = memsum ! -RK
+    call min_mpi(mem_min); call max_mpi(mem_max) ! -RK
+    call sum_mpi(memsum)
+    if (ID==0.and.info.ge.1) write(*,mstr3) 'Allocated memory for basis_functions:',memsum, mem_min, mem_max ! -RK
+    
+    !end if
+
+    if (info > 3) then
+       write (*,'(i3,a,i11)') ID,': nosamples_proc =', nosamples_proc
+       write (*,'(i3,a,i11)') ID,': istart_proc    =', istart_proc
+       if (kfirst) write (*,'(i3,a,i11)') ID,': noba_short     =', noba_short
+    end if
+
+  END SUBROUTINE start_timeloop
+
+
+  !------------------------------------------------------------------------
+
+
+  subroutine baseline_times(short_times, sample_times)
+
+    ! new utility routine for madam/TOAST
+
+    real(dp), allocatable, intent(out) :: short_times(:)
+    real(c_double), pointer, intent(in) :: sample_times(:)
+
+    integer(i8b) :: i, j
+    integer :: ierr
+
+    ! insert the baseline start times
+    !if (kfirst) then 
+    ! local array of short baseline start times
+    allocate(short_times(noba_short_max), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for short_times')
+
+    short_times = sample_times(baselines_short_start)
+    !end if
+
+  end subroutine baseline_times
+
+END MODULE parameter_control
