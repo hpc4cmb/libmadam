@@ -83,6 +83,22 @@ ACX_CFITSIO([], [AC_MSG_ERROR([Could not find the CFITSIO library!])])
 AC_LANG_POP([C])
 
 dnl +------------------------------------------------
+dnl | Check for FFTW
+dnl +------------------------------------------------
+AC_LANG_PUSH([C])
+ACX_FFTW([],[
+  AC_MSG_FAILURE([FFTW is required.])
+])
+AC_LANG_POP([C])
+AX_F90_HEADER([fftw3.f03],[fftw3.f03],[
+	use, intrinsic :: iso_c_binding
+	include 'fftw3.f03'
+],[/usr/include],[],[
+  AC_MSG_FAILURE([fftw3.f03 is required.])
+])
+AC_SUBST([FFTW_CPPFLAGS],["$FFTW_CPPFLAGS $F90_HEADER_fftw3_f03"])
+
+dnl +------------------------------------------------
 dnl | Set outputs
 dnl +------------------------------------------------
 AC_CONFIG_FILES([Makefile])
@@ -104,6 +120,8 @@ AC_MSG_NOTICE([  Fortran Compile Flags     : $FCFLAGS])
 AC_MSG_NOTICE([  Fortran Linking Flags     : $LDFLAGS])
 AC_MSG_NOTICE([  C Compiler                : $CC])
 AC_MSG_NOTICE([  C Compile Flags           : $CFLAGS])
+AC_MSG_NOTICE([  FFTW_CPPFLAGS             : $FFTW_CPPFLAGS])
+AC_MSG_NOTICE([  FFTW                      : $FFTW])
 AC_MSG_NOTICE([  CFITSIO Compile           : $CFITSIO_CPPFLAGS])
 AC_MSG_NOTICE([  CFITSIO Link              : $CFITSIO])
 AC_MSG_NOTICE([                                           ])
