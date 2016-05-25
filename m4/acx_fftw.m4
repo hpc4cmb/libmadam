@@ -71,13 +71,24 @@ acx_fftw_threads=no
 FFTW_CPPFLAGS=""
 FFTW=""
 
+AC_ARG_WITH(fftw, [AC_HELP_STRING([--with-fftw=<PATH>], [use FFTW installed in <path>.  Set to "no" to disable.])])
+
 AC_ARG_WITH(fftw-cpp, [AC_HELP_STRING([--with-fftw-cpp=<flags>], [use FFTW preprocessing flags <flags>.  Set to "no" to disable.])])
 
 AC_ARG_WITH(fftw-libs, [AC_HELP_STRING([--with-fftw-libs=<flags>], [use FFTW linking flags <flags>.  Set to "no" to disable.])])
 
+if test x"$with_fftw" != x; then
+   if test x"$with_fftw" != xno; then
+      FFTW_CPPFLAGS="-I$with_fftw/include"
+      FFTW="-L$with_fftw/lib -lfftw3"
+   else
+      acx_fftw_ok=disable
+   fi
+fi
+
 if test x"$with_fftw_cpp" != x; then
    if test x"$with_fftw_cpp" != xno; then
-      FFTW_CPPFLAGS="$with_fftw_cpp"
+      FFTW_CPPFLAGS="$FFTW_CPPFLAGS $with_fftw_cpp"
    else
       acx_fftw_ok=disable
    fi
@@ -85,7 +96,7 @@ fi
 
 if test x"$with_fftw_libs" != x; then
    if test x"$with_fftw_libs" != xno; then
-      FFTW="$with_fftw_libs"
+      FFTW="$FFTW $with_fftw_libs"
    else
       acx_fftw_ok=disable
    fi

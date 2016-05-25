@@ -93,7 +93,7 @@ AC_LANG_POP([C])
 AX_F90_HEADER([fftw3.f03],[fftw3.f03],[
 	use, intrinsic :: iso_c_binding
 	include 'fftw3.f03'
-],[/usr/include],[],[
+],[$with_fftw/include],[],[
   AC_MSG_FAILURE([fftw3.f03 is required.])
 ])
 AC_SUBST([FFTW_CPPFLAGS],["$FFTW_CPPFLAGS $F90_HEADER_fftw3_f03"])
