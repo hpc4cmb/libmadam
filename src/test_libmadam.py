@@ -8,10 +8,10 @@ _libdir = os.path.dirname( __file__ )
 
 path = os.path.join( _libdir, '.libs', 'libmadam.so' )
 try:
-    #_madam = ctypes.CDLL( path )
+    _madam = ctypes.CDLL( path )
 except:
     try:
-        #_madam = ctypes.CDLL( path.replace('.so','.dylib') )
+        _madam = ctypes.CDLL( path.replace('.so','.dylib') )
     except:
         print('Failed to load libmadam at ', path)
         raise
@@ -22,7 +22,7 @@ def dict2parstring( d ):
     for key, value in d.items():
         s += '{} = {};'.format( key, value )
 
-    return s
+    return s.encode('ascii')
 
 def dets2detstring( dets ):
 
@@ -30,7 +30,7 @@ def dets2detstring( dets ):
     for d in dets:
         s += '{};'.format( d )
 
-    return s
+    return s.encode('ascii')
 
 if __name__ == '__main__':
 
@@ -69,6 +69,9 @@ if __name__ == '__main__':
     pars[ 'write_hits' ] = True
     pars[ 'kfilter' ] = True
     pars[ 'path_output' ] = './maps/'
+
+    if not os.path.isdir('maps') and itask == 0:
+        os.mkdir('maps')
 
     parstring = dict2parstring( pars )
 
