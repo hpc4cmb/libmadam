@@ -60,4 +60,4 @@ test_libmadam_LDADD = libmadam.la $(AM_LIBS)
 TESTS = test_libmadam test_libmadam.py
 
 clean-local:
-	rm -rf *.mod maps
+	rm -rf *.mod maps/*
