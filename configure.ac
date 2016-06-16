@@ -76,6 +76,14 @@ AC_LANG_POP([C])
 AC_SUBST([CFLAGS],["$CFLAGS $OPENMP_CFLAGS"])
 
 dnl +------------------------------------------------
+dnl | Check for BLAS and LAPACK
+dnl +------------------------------------------------
+AC_LANG_PUSH([C])
+AX_CHECK_BLAS(,AC_MSG_ERROR([Could not find a BLAS library!]))
+AX_CHECK_LAPACK(,AC_MSG_ERROR([Could not find a LAPACK library!]))
+AC_LANG_POP([C])
+
+dnl +------------------------------------------------
 dnl | Check for CFITSIO
 dnl +------------------------------------------------
 AC_LANG_PUSH([C])
@@ -120,6 +128,8 @@ AC_MSG_NOTICE([  Fortran Compile Flags     : $FCFLAGS])
 AC_MSG_NOTICE([  Fortran Linking Flags     : $LDFLAGS])
 AC_MSG_NOTICE([  C Compiler                : $CC])
 AC_MSG_NOTICE([  C Compile Flags           : $CFLAGS])
+AC_MSG_NOTICE([  BLAS Link                 : $BLAS_LIBS])
+AC_MSG_NOTICE([  LAPACK Link               : $LAPACK_LIBS])
 AC_MSG_NOTICE([  FFTW_CPPFLAGS             : $FFTW_CPPFLAGS])
 AC_MSG_NOTICE([  FFTW                      : $FFTW])
 AC_MSG_NOTICE([  CFITSIO Compile           : $CFITSIO_CPPFLAGS])

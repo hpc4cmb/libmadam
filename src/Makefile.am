@@ -7,9 +7,9 @@ AM_FCFLAGS =
 AM_LDFLAGS =
 AM_LIBS = 
 
-# Append CFITSIO and FFTW to compile and link flags
+# Append CFITSIO, FFTW, BLAS and LAPACK to compile and link flags
 AM_FCFLAGS += $(CFITSIO_CPPFLAGS) $(FFTW_CPPFLAGS)
-AM_LIBS += $(CFITSIO) $(FFTW)
+AM_LIBS += $(CFITSIO) $(FFTW) $(BLAS_LIBS) $(LAPACK_LIBS)
 
 # Always need libm
 AM_LIBS += -lm
