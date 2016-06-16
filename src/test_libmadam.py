@@ -8,10 +8,13 @@ _libdir = os.path.dirname( __file__ )
 
 path = os.path.join( _libdir, '.libs', 'libmadam.so' )
 try:
-    _madam = ctypes.CDLL( path )
+    #_madam = ctypes.CDLL( path )
 except:
-    print 'Failed to load libmadam at ' + path    
-    raise
+    try:
+        #_madam = ctypes.CDLL( path.replace('.so','.dylib') )
+    except:
+        print('Failed to load libmadam at ', path)
+        raise
 
 def dict2parstring( d ):
 
@@ -45,9 +48,9 @@ if __name__ == '__main__':
 
     fcomm = comm.py2f()
 
-    if itask == 0: print 'Running with ', ntask, ' MPI tasks'
+    if itask == 0: print('Running with ', ntask, ' MPI tasks')
 
-    print 'Calling Madam'
+    print('Calling Madam')
 
     nside = 8
     npix = 12*nside**2
@@ -167,14 +170,14 @@ if __name__ == '__main__':
         bindiff = np.std( (madam_bmap - bmap)[good] )
 
         if hitdiff != 0:
-            print 'Hit map check FAILED: hit map difference RMS ', hitdiff
+            print('Hit map check FAILED: hit map difference RMS ', hitdiff)
         else:
-            print 'Hit map check PASSED'
+            print('Hit map check PASSED')
 
         if bindiff != 0:
-            print 'Binned map check FAILED: Binned map difference RMS ', bindiff
+            print('Binned map check FAILED: Binned map difference RMS ', bindiff)
         else:
-            print 'Binned map check PASSED'
+            print('Binned map check PASSED')
 
-    print 'Done'
+    print('Done')
 
