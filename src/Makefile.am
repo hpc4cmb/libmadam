@@ -52,19 +52,12 @@ libmadam_la_SOURCES = \
 
 libmadam_la_LIBADD = $(AM_LIBS)
 
-#noinst_PROGRAMS = test_libmadam test_libcmadam
+noinst_PROGRAMS = test_libmadam
 
-#test_libmadam_SOURCES = test_libmadam.cpp
-#test_libmadam_LDADD = libmadam.la $(AM_LIBS)
+test_libmadam_SOURCES = test_libmadam.c
+test_libmadam_LDADD = libmadam.la $(AM_LIBS)
 
-#test_libcmadam_SOURCES = test_libcmadam.c
-#test_libcmadam_LDADD = libmadam.la $(AM_LIBS)
-
-# force use of the C++ linker...
-#nodist_EXTRA_test_libcmadam_SOURCES = dummy.cpp
-
-
-#TESTS = test_libmadam test_libcmadam test_libmadam.py
+TESTS = test_libmadam test_libmadam.py
 
 clean-local:
 	rm -f *.mod
