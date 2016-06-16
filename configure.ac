@@ -67,12 +67,12 @@ dnl +------------------------------------------------
 dnl | ... that is OpenMP parallel
 dnl +------------------------------------------------
 AC_OPENMP
-AC_SUBST([FCFLAGS],["$FCFLAGS $OPENMP_FCFLAGS"])
-AC_SUBST([LDFLAGS],["$LDFLAGS $OPENMP_FCFLAGS"])
-
 AC_LANG_PUSH([C])
 AC_OPENMP
 AC_LANG_POP([C])
+
+AC_SUBST([FCFLAGS],["$FCFLAGS $OPENMP_FCFLAGS"])
+AC_SUBST([LDFLAGS],["$LDFLAGS $OPENMP_FCFLAGS"])
 AC_SUBST([CFLAGS],["$CFLAGS $OPENMP_CFLAGS"])
 
 dnl +------------------------------------------------
