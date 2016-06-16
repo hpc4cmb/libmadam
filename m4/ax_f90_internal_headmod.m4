@@ -28,7 +28,11 @@ AC_LANG_PUSH(Fortran)
 AS_VAR_SET(ax_include,"not found")
 if test "x$6" = x ; then
 ax_search="$prefix:$ac_default_prefix"
-for ax_base in "" `echo $LD_LIBRARY_PATH | tr ':' '\012'` ; do
+SEARCH="$LD_LIBRARY_PATH"
+if test "x${SEARCH}" = x; then
+  SEARCH="/usr/lib:/usr/local/lib"
+fi
+for ax_base in "" `echo $SEARCH | tr ':' '\012'` ; do
   if test "x$ax_base" != x ; then
     changequote(,)dnl
     ax_base=`echo $ax_base | sed 's,/[^/]*$,,'`

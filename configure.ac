@@ -98,10 +98,15 @@ ACX_FFTW([],[
   AC_MSG_FAILURE([FFTW is required.])
 ])
 AC_LANG_POP([C])
+
+FFTW_INC=""
+if test x"${with_fftw}" != x; then
+    FFTW_INC="$with_fftw/include"
+fi
 AX_F90_HEADER([fftw3.f03],[fftw3.f03],[
-	use, intrinsic :: iso_c_binding
-	include 'fftw3.f03'
-],[$with_fftw/include],[],[
+    use, intrinsic :: iso_c_binding
+    include 'fftw3.f03'
+],[${FFTW_INC}],[],[
   AC_MSG_FAILURE([fftw3.f03 is required.])
 ])
 AC_SUBST([FFTW_CPPFLAGS],["$FFTW_CPPFLAGS $F90_HEADER_fftw3_f03"])
