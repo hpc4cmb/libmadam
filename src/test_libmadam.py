@@ -1,20 +1,31 @@
 #!/usr/bin/env python
 
+from __future__ import division
+from __future__ import print_function
 import ctypes
 import os
 import sys
+import glob
 
 _libdir = os.path.dirname( __file__ )
+if not os.path.isdir( os.path.join( _libdir, '.libs' ) ):
+    _libdir = '.'
+if not os.path.isdir( os.path.join( _libdir, '.libs' ) ):
+    raise Exception('Cannot find the libtool .libs directory')
 
 path = os.path.join( _libdir, '.libs', 'libmadam.so' )
 try:
+    print('Trying to import libmadam from', path, flush=True, end='')
     _madam = ctypes.CDLL( path )
 except:
     try:
-        _madam = ctypes.CDLL( path.replace('.so','.dylib') )
+        path2 = path.replace('.so','.dylib')
+        print(' FAILED.\nTrying to import libmadam from', path2, flush=True, end='')
+        _madam = ctypes.CDLL( path2 )
     except:
-        print('Failed to load libmadam at ', path)
+        print(' FAILED', flush=True)
         raise
+print(' SUCCESS', flush=True)
 
 def dict2parstring( d ):
 
@@ -40,12 +51,16 @@ if __name__ == '__main__':
 
     from mpi4py import MPI
     import numpy as np
-    import healpy as hp
-    
     comm = MPI.COMM_WORLD
     itask = comm.Get_rank()
     ntask = comm.Get_size()
 
+    try:
+        import healpy as hp
+    except:
+        hp = None
+        if itask == 0: print('Warning: unable to import healpy. Output maps are not checked.')
+        
     fcomm = comm.py2f()
 
     if itask == 0: print('Running with ', ntask, ' MPI tasks')
@@ -68,10 +83,15 @@ if __name__ == '__main__':
     pars[ 'write_wcov' ] = True
     pars[ 'write_hits' ] = True
     pars[ 'kfilter' ] = True
+    pars[ 'file_root' ] = 'madam_pytest'
     pars[ 'path_output' ] = './maps/'
 
-    if not os.path.isdir('maps') and itask == 0:
-        os.mkdir('maps')
+    if itask == 0:
+        if not os.path.isdir('maps'):
+            os.mkdir('maps')
+        for fn in ['maps/madam_pytest_hmap.fits', 'maps/madam_pytest_bmap.fits']:
+            if os.path.isfile(fn):
+                os.remove(fn)
 
     parstring = dict2parstring( pars )
 
@@ -154,7 +174,7 @@ if __name__ == '__main__':
     comm.Reduce( hmap, hmap_tot, op=MPI.SUM, root=0 )
     comm.Reduce( bmap, bmap_tot, op=MPI.SUM, root=0 )
 
-    if itask == 0:
+    if itask == 0 and hp is not None:
         good = hmap_tot != 0
         bmap_tot[ good ] /= hmap_tot[ good ]
 
@@ -164,23 +184,29 @@ if __name__ == '__main__':
         hp.write_map( 'hits.fits', hmap, nest=True )
         hp.write_map( 'binned.fits', bmap, nest=True )
 
-        madam_hmap = hp.read_map( 'maps/madam_hmap.fits', nest=True )
-        madam_bmap= hp.read_map( 'maps/madam_bmap.fits', nest=True )
+        madam_hmap = hp.read_map( 'maps/madam_pytest_hmap.fits', nest=True )
+        madam_bmap = hp.read_map( 'maps/madam_pytest_bmap.fits', nest=True )
 
-        good = madam_bmap != hp.UNSEEN
+        good = hmap != 0
 
         hitdiff = np.std( (madam_hmap - hmap)[good] )
         bindiff = np.std( (madam_bmap - bmap)[good] )
 
         if hitdiff != 0:
             print('Hit map check FAILED: hit map difference RMS ', hitdiff)
+            sys.exit(-1)
         else:
             print('Hit map check PASSED')
 
         if bindiff != 0:
             print('Binned map check FAILED: Binned map difference RMS ', bindiff)
+            sys.exit(-1)
         else:
             print('Binned map check PASSED')
+
+    if itask == 0:
+        for fn in glob.glob( 'maps/madam_pytest*fits'):
+            os.remove(fn)
 
     print('Done')
 

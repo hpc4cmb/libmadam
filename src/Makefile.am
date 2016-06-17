@@ -57,6 +57,9 @@ noinst_PROGRAMS = test_libmadam
 test_libmadam_SOURCES = test_libmadam.c
 test_libmadam_LDADD = libmadam.la $(AM_LIBS)
 
+AM_TESTS_ENVIRONMENT = \
+	mkdir -p maps;
+
 TESTS = test_libmadam test_libmadam.py
 
 clean-local:
