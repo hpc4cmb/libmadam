@@ -50,6 +50,72 @@ libmadam_la_SOURCES = \
         covmat.f90 \
         smadam.f90
 
+# Automake does not recognize Fortran dependencies so we list them
+# here explicitly
+
+planck_config.lo : planck_config.F90
+
+planck_types.lo : planck_types.f90 planck_config.lo
+
+ls_misc_utils.lo : ls_misc_utils.f90 planck_config.lo
+
+fitsmod2.lo : fitsmod2.f90 planck_config.lo planck_types.lo ls_misc_utils.lo \
+	linebufmod.lo
+
+satellite.lo : satellite.f90 healpix_routines.lo planck_config.lo fitsmod2.lo \
+	coordinate_conversion.lo
+
+commonparam.lo : commonparam.f90 planck_config.lo simulation.lo mpi_wrappers.lo
+
+inputparam.lo : inputparam.f90 commonparam.lo simulation.lo mpi_wrappers.lo
+
+map_routines.lo : map_routines.f90 commonparam.lo matrix.lo mpi_wrappers.lo \
+	timing.lo
+
+submap_transfer.lo : submap_transfer.f90 commonparam.lo mpi_wrappers.lo
+
+parameter_control.lo : parameter_control.f90 simulation.lo commonparam.lo \
+	noise_routines.lo mpi_wrappers.lo
+
+pointing.lo : pointing.f90 commonparam.lo mpi_wrappers.lo
+
+maps_and_baselines.lo : maps_and_baselines.f90 commonparam.lo mpi_wrappers.lo
+
+tod_storage.lo : tod_storage.f90 commonparam.lo mpi_wrappers.lo
+
+noise_routines.lo : noise_routines.f90 commonparam.lo fourier_fftw_2003.lo \
+	mpi_wrappers.lo timing.lo tod_storage.lo
+
+memory_and_time.lo : memory_and_time.f90 commonparam.lo mpi_wrappers.lo
+
+output.lo : output.f90 simulation.lo commonparam.lo submap_transfer.lo \
+	mpi_wrappers.lo timing.lo maps_and_baselines.lo tod_storage.lo fitsmod2.lo
+
+maptod_transfer.lo : maptod_transfer.f90 commonparam.lo mpi_wrappers.lo
+
+smadam_routines.lo : smadam_routines.f90 commonparam.lo mpi_wrappers.lo \
+	maptod_transfer.lo noise_routines.lo map_routines.lo \
+	pointing.lo timing.lo
+
+read_data.lo : read_data.f90 simulation.lo commonparam.lo submap_transfer.lo \
+	fitsmod2.lo pointing.lo maps_and_baselines.lo coordinate_conversion.lo \
+	healpix_routines.lo satellite.lo tod_storage.lo timing.lo \
+	mpi_wrappers.lo maptod_transfer.lo
+
+covmat_util.lo : covmat_util.F90 planck_config.lo mpi_wrappers.lo
+
+covmat.lo : covmat.F90 commonparam.lo fourier_fftw_2003.lo pointing.lo covmat_util.lo \
+	noise_routines.lo simulation.lo mpi_wrappers.lo
+
+smadam.lo : smadam.f90 commonparam.lo inputparam.lo simulation.lo \
+	parameter_control.lo pointing.lo maptod_transfer.lo submap_transfer.lo \
+	fourier_fftw_2003.lo noise_routines.lo smadam_routines.lo \
+	map_routines.lo read_data.lo output.lo mpi_wrappers.lo \
+	maps_and_baselines.lo tod_storage.lo memory_and_time.lo timing.lo \
+	covmat.lo covmat_util.lo
+
+
+
 libmadam_la_LIBADD = $(AM_LIBS)
 
 noinst_PROGRAMS = test_libmadam
