@@ -48,7 +48,7 @@ libmadam_la_SOURCES = \
         smadam_routines.f90 \
         covmat_util.f90 \
         covmat.f90 \
-        smadam.f90
+        smadam.F90
 
 # Automake does not recognize Fortran dependencies so we list them
 # here explicitly
@@ -107,7 +107,7 @@ covmat_util.lo : covmat_util.F90 planck_config.lo mpi_wrappers.lo
 covmat.lo : covmat.F90 commonparam.lo fourier_fftw_2003.lo pointing.lo covmat_util.lo \
 	noise_routines.lo simulation.lo mpi_wrappers.lo
 
-smadam.lo : smadam.f90 commonparam.lo inputparam.lo simulation.lo \
+smadam.lo : smadam.F90 commonparam.lo inputparam.lo simulation.lo \
 	parameter_control.lo pointing.lo maptod_transfer.lo submap_transfer.lo \
 	fourier_fftw_2003.lo noise_routines.lo smadam_routines.lo \
 	map_routines.lo read_data.lo output.lo mpi_wrappers.lo \
