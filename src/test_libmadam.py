@@ -15,17 +15,21 @@ if not os.path.isdir( os.path.join( _libdir, '.libs' ) ):
 
 path = os.path.join( _libdir, '.libs', 'libmadam.so' )
 try:
-    print('Trying to import libmadam from', path, flush=True, end='')
+    print('Trying to import libmadam from', path, end='')
+    sys.stdout.flush()
     _madam = ctypes.CDLL( path )
 except:
     try:
         path2 = path.replace('.so','.dylib')
-        print(' FAILED.\nTrying to import libmadam from', path2, flush=True, end='')
+        print(' FAILED.\nTrying to import libmadam from', path2, end='')
+        sys.stdout.flush()
         _madam = ctypes.CDLL( path2 )
     except:
-        print(' FAILED', flush=True)
+        print(' FAILED')
+        sys.stdout.flush()
         raise
-print(' SUCCESS', flush=True)
+print(' SUCCESS')
+sys.stdout.flush()
 
 def dict2parstring( d ):
 
