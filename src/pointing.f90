@@ -33,8 +33,8 @@ MODULE pointing
 
   real(sp),public :: memory_pointing = 0.0
 
-  logical,allocatable,public :: ksubmap(:)
-  integer,allocatable, public :: subtable1(:), subtable2(:)
+  logical, allocatable, public :: ksubmap(:)
+  integer, allocatable, public :: subtable1(:), subtable2(:)
 
   integer, public :: dummy_pixel = -1
 

@@ -18,13 +18,13 @@ MODULE maptod_transfer
   integer, allocatable, public :: sendcounts(:), sendoffs(:), recvcounts(:), recvoffs(:)
   integer :: nsend_submap, nrecv_submap
 
-  integer, allocatable,public :: locmask(:)
-  integer, allocatable,public :: lochits(:)
+  integer, allocatable, public :: locmask(:)
+  integer, allocatable, public :: lochits(:)
 
   ! Flag ksubmap_table(i,k) tells if the TOD handled by process k
   !  contributes to submap i
-  logical,allocatable :: ksubmap_table(:,:)
-  integer,save, public :: nsize_locmap = -1
+  logical, allocatable, public :: ksubmap_table(:,:)
+  integer, save, public :: nsize_locmap = -1
 
   public  update_maptod_transfer,  &
        collect_map,             &
@@ -34,7 +34,7 @@ MODULE maptod_transfer
        scatter_mask, &
        free_locmaps, initialize_alltoallv, assign_submaps ! -RK
 
-  real(sp),save,public :: memory_locmap = 0.0, memory_all2all = 0.0
+  real(sp), save, public :: memory_locmap = 0.0, memory_all2all = 0.0
 
 CONTAINS
 
@@ -47,8 +47,8 @@ CONTAINS
     !   which control the MPI communication.
     ! Ksubmap tells which submaps are hit by the TOD handled by this process.
     !
-    logical,intent(in) :: ksubmap(0:nosubmaps_tot-1)
-    logical :: kbuffer(0:nosubmaps_tot-1)
+    logical, allocatable, intent(in) :: ksubmap(:)
+    logical, allocatable :: kbuffer(:)
     integer :: id_send
     integer :: ierr
 
@@ -56,19 +56,22 @@ CONTAINS
 
     nolocpix = nolocmaps*nosubpix_max
 
-    if (.not. allocated(ksubmap_table))   &
-         allocate(ksubmap_table(0:nosubmaps_tot-1,0:ntasks-1))
+    if (.not. allocated(ksubmap_table)) then
+       allocate(ksubmap_table(0:nosubmaps_tot-1,0:ntasks-1), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for ksubmap_table')
+       ksubmap_table = .false.
+    end if
 
-    do id_send = 0,ntasks-1
-       if (id == id_send) kbuffer = ksubmap
+    call mpi_allgather( ksubmap, nosubmaps_tot, MPI_LOGICAL, &
+         ksubmap_table, nosubmaps_tot, MPI_LOGICAL, comm, ierr )
 
-       call broadcast_mpi(kbuffer, nosubmaps_tot, id_send)
-
-       ksubmap_table(:,id_send) = kbuffer
-    end do
+    if (ierr /= 0) call abort_mpi('Gathering ksubmaps failed.')
 
     if (nsize_locmap < nolocpix) then
-       if (nsize_locmap >= 0) deallocate(locmap, loccc, locmask, lochits)
+       if (allocated(locmap))  deallocate(locmap)
+       if (allocated(loccc))   deallocate(loccc)
+       if (allocated(locmask)) deallocate(locmask)
+       if (allocated(lochits)) deallocate(lochits)
 
        nsize_locmap = nolocpix !+ 100 This margin was not used anywhere. Disabled on 2014-05-09 -RK
        allocate(locmap(nmap,0:nsize_locmap), loccc(nmap,nmap,0:nsize_locmap), &
@@ -76,6 +79,7 @@ CONTAINS
        if (ierr /= 0) call abort_mpi('Failed to allocate locmap')
 
        memory_locmap = (nsize_locmap+1)*(nmap*8.+nmap**2*8.+8)
+
     endif
 
     locmap = 0.0
@@ -228,7 +232,7 @@ CONTAINS
 
   SUBROUTINE assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, nosubmaps_max )
     !
-    ! Assign the submaps to minize communication
+    ! Assign the submaps to minimize communication
     !
     ! Updates the id_submap vector based on ksubmap_table
     ! Should be called before initialize_alltoallv
@@ -240,10 +244,15 @@ CONTAINS
     integer :: ierr, itask, ind, i, nosubmap_target, isubmap
     integer, allocatable :: nosubmaps_task(:)
 
+    if (.not. allocated(ksubmap_table)) call abort_mpi('assign_submaps: ksubmap_table not allocated')
+
     allocate( ksubmap(0:nosubmaps_tot-1,0:ntasks-1), nosubmaps_task(0:ntasks-1), stat=ierr )
-    if ( ierr /= 0 ) STOP 'No room to assign submaps'
-    ksubmap = ksubmap_table
+    if ( ierr /= 0 ) call abort_mpi('No room to assign submaps')
+
+    ksubmap = .false.
     nosubmaps_task = 0
+
+    ksubmap = ksubmap_table
 
     nosubmap_target = ceiling( dble(nosubmaps_tot) / ntasks )
 
