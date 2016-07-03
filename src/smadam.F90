@@ -178,6 +178,8 @@ contains
        subchunk_file_base = file_base; subchunk_file_hit = file_hit; subchunk_file_mask = file_mask
        subchunk_file_matrix = file_matrix; subchunk_file_wcov = file_wcov
 
+       tod_is_clean = .false.
+
        detflags = .true.
 
         if (nsubchunk > 1) then
@@ -407,6 +409,14 @@ contains
 
         call run_subsets()
         
+        if ( isubchunk == nsubchunk .and. kfirst ) then
+           ! subtract the baselines to return the destriped TOD.
+           ! If the baselines were already subtracted, the call has no effect.
+           call tic
+           call clean_tod(tod_stored, aa)
+           if (id == 0) call toc('clean_tod')
+        end if
+
         call restore_pixels_a
 
         call free_baselines

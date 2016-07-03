@@ -54,6 +54,7 @@ MODULE commonparam
   logical :: sync_output=.true., skip_existing=.false., dist_by_obs=.false.
   logical :: write_cut=.false., initialize_by_regression=.false.
   logical :: filter_mean=.false.
+  logical :: tod_is_clean = .false.
   logical :: binary_output=.false., concatenate_binary=.false.
   integer :: record_number=1 ! Used for concatenate_binary when storing multiple MC maps
   integer(i4b) :: nwrite_binary = 10 ! Number of independent groups of processes writing binary maps

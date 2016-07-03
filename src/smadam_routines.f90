@@ -1476,6 +1476,8 @@ CONTAINS
 
     if (.not. write_tod .and. ndetset == 0 .and. nsurvey == 0) return
 
+    if ( tod_is_clean ) return
+
     if (info == 3 .and. id == 0) write(*,*) 'Subtracting baselines from TOD...'
     if (info > 4) write(*,idf) ID,'Subtracting baselines from TOD...'
 
@@ -1493,6 +1495,8 @@ CONTAINS
           end do
        end do
     end do
+
+    tod_is_clean = .true.
 
     cputime_clean_tod = cputime_clean_tod  + get_time(10)
 
@@ -1515,6 +1519,8 @@ CONTAINS
 
     if (.not. write_tod .and. ndetset == 0 .and. nsurvey == 0) return
 
+    if ( .not. tod_is_clean ) return
+
     if (info == 3 .and. id == 0) write(*,*) 'Adding baselines to TOD...'
     if (info > 4) write(*,idf) ID,'Adding baselines to TOD...'
 
@@ -1532,6 +1538,8 @@ CONTAINS
           end do
        end do
     end do
+
+    tod_is_clean = .false.
 
     cputime_clean_tod = cputime_clean_tod + get_time(10)
 
