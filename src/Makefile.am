@@ -118,7 +118,7 @@ smadam.lo : smadam.F90 commonparam.lo inputparam.lo simulation.lo \
 
 libmadam_la_LIBADD = $(AM_LIBS)
 
-libmadam_la_LDFLAGS = -Wl,--no-undefined
+#libmadam_la_LDFLAGS = -Wl,--no-undefined
 
 noinst_PROGRAMS = test_libmadam
 
