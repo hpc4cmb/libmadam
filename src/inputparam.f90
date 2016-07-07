@@ -364,6 +364,8 @@ CONTAINS
        call parse_survey(value)
     case('bin_subsets')
        read(value,*,iostat=ierr) bin_subsets
+    case('mcmode')
+       read(value,*,iostat=ierr) mcmode
 
     case default
        call abort_mpi('Unknown parameter: ' // trim(key))

@@ -5,7 +5,7 @@ module smadam
   !
 
   use iso_c_binding
-  
+
   use commonparam
   use inputparam
   use simulation
@@ -100,7 +100,7 @@ contains
     integer :: ierr, idet, i, pixmin, pixmax
 
     ! set up MPI
-    
+
     call init_mpi( comm, ntasks, id )
 
     ! set up OpenMP
@@ -151,7 +151,7 @@ contains
        print *,'ERROR: largest provided pixel number is ',pixmax, '>', 12*nside_max**2, ', nside = ',nside_max
        call abort_mpi('Too large pixel number')
     end if
- 
+
     call check_files( nperiod, periods, nsamp )
 
     ! set output level for timing based on info level
@@ -173,7 +173,7 @@ contains
     subchunk_start = isubchunk
 
     loop_subchunk : do isubchunk = subchunk_start, nsubchunk
-       
+
        subchunk_file_map = file_map; subchunk_file_binmap = file_binmap
        subchunk_file_base = file_base; subchunk_file_hit = file_hit; subchunk_file_mask = file_mask
        subchunk_file_matrix = file_matrix; subchunk_file_wcov = file_wcov
@@ -182,360 +182,674 @@ contains
 
        detflags = .true.
 
-        if (nsubchunk > 1) then
-           baseline_open = .false. ! from output.f90
-           if (id == 0) then
-              write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
-           endif
-           call add_subchunk_id(file_map, isubchunk, nsubchunk)
-           call add_subchunk_id(file_hit, isubchunk, nsubchunk)
-           call add_subchunk_id(file_mask, isubchunk, nsubchunk)
-           call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
-           call add_subchunk_id(file_wcov, isubchunk, nsubchunk)
-           call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
-           call add_subchunk_id(file_base, isubchunk, nsubchunk)
-        end if
-        
-        if (skip_existing) then
-           if ( file_exists(file_map) ) then
-              file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
-              file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
-              file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
-              call reset_timers
-              cycle loop_subchunk
-           end if
-        end if
-
-        call init_output
-        
-        call write_parameters
-        call wait_mpi
-
-        call allocate_tod
-
-        call allocate_baselines
-
-        call tic
-        call init_pointing
-        where ( pixels < 0 ) pixels = dummy_pixel
-        if (id == 0) call toc('init_pointing')
-
-        call wait_mpi
-
-        cputime_init = cputime_init + get_time(1)
-
-        call tic
-        call build_filter          
-        if (id == 0) call toc('build_filter')
-
-        call reset_time(1)
-
-        !call wait_mpi; call close_mpi; stop 'SUCCESS'
-
-        call start_timeloop
-        call time_stamp
-
-        call baseline_times(baselines_short_time, sampletime)
-
-        subchunkpp => subchunk(1:nosamples_proc)
-
-        call tic
-        call reduce_pixels_buff
-        if (id == 0) call toc('reduce_pixels_buff')
-
-        call tic
-        call update_maptod_transfer(ksubmap)
-        if (id == 0) call toc('update_maptod_transfer')
-
-        if ( reassign_submaps ) then
-           call tic
-           call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, nosubmaps_max )
-           if (id == 0) call toc('assign_submaps')
-        end if
-           
-        call allocate_maps
-
-        if (kfirst) then
-           wamap = 0.0
-           cca = 0.0
-        endif
-
-        dummy_pixel = 12*nside_max**2
-
-        call tic
-        call initialize_alltoallv()
-        if (id == 0) call toc('initialize_alltoallv')
-
-        if (use_inmask) then
-           call tic
-           call read_inmask(inmask)
-           if (id == 0) call toc('read_inmask')
-           call tic
-           call scatter_mask(inmask, nosubpix_cross)
-           if (id == 0) call toc('scatter_mask')
-        endif
-
-        if (kfirst) then
-           call tic
-           call flag_bad_baselines
-           if (id == 0) call toc('flag_bad_baselines')
-        end if
-
-        call tic
-        call pixel_matrix(cca, cc)
-        if (id == 0) call toc('pixel_matrix')
-
-        call tic
-        call count_hits(nohits)
-        if (id == 0) call toc('count_hits')
-
-        call tic
-        call bin_tod(map, binmap, wamap, tod_stored)
-        if (id == 0) call toc('bin_tod')
-
-        call time_stamp
-
-        call tic
-        call restore_pixels_buff
-        if (id == 0) call toc('restore_pixels_buff')
-
-        !  First destriping
-
-        if (kfirst) then
-           
-           if (id == 0) then
-              write(*,*)
-              write(*,*) 'First destriping phase'
-           endif
-           call time_stamp
-
-           call tic
-           call reduce_pixels_a
-           if (id == 0) call toc('reduce_pixels_a')
-
-           call tic
-           call update_maptod_transfer(ksubmap)
-           if (id == 0) call toc('update_maptod_transfer')
-
-           if (use_inmask) then
-              call tic
-              call scatter_mask(inmask, nosubpix_cross)
-              if (id == 0) call toc('scatter_mask')
-           endif
-
-           call tic
-           call invert_pixelmatrix_cross(cca,inmask)
-           if (id == 0) call toc('invert_pixelmatrix_cross')
-
-           call tic
-           call initialize_a(yba, nna, wamap, cca, tod_stored)
-           if (id == 0) call toc('initialize_a')
-
-           if (basis_order == 0) then
-              call tic
-              call construct_preconditioner(nna(0,0,:,:))
-              if (id == 0) call toc('construct_preconditioner')
-           end if
-
-           if (kwrite_covmat) then
-
-              call write_covmat(file_covmat) ! pixels must be reduced
-
-           else
-
-              call tic
-              call iterate_a(aa, yba, nna, wamap, cca, tod_stored)
-              if (id == 0) call toc('iterate_a')
-
-              call tic
-              call subtract_baselines_a(map, aa)
-              if (id == 0) call toc('subtract_baselines_a')
-
-              call tic
-              call write_baselines_a(aa)
-              if (id == 0) call toc('write_baselines_a')
-
-              ! TOD can be cleaned only once the binned subset maps have been written
-              !call tic
-              !call clean_tod(tod_stored, aa)
-              !if (id == 0) call toc('clean_tod')
-           end if
-
-        endif
-
-        call wait_mpi
-        if (id == 0) then
-           write(*,*)
-           write(*,*) 'Finalization begins'
-           if (info.ge.2) write(*,*)
-        endif
-        call time_stamp
-        call reset_time(1)
-
-        !call write_destriped_tod ! Cannot write the destriped TOD here because it is not cleaned yet
-
-        !call tic
-        call write_matrix(cc)
-        if (id == 0) call toc('Write matrix')
-        !
-        !  Binning of the final map
-        !
-        call tic
-        call invert_pixelmatrix_map(cc, outmask, crit)
-        if (id == 0) call toc('Invert pixelmatrix_map')
-        
-        if (do_binmap) call makemaps(binmap, cc, outmask)
-        call makemaps(map, cc, outmask)
-        call map_analysis(map, outmask)
-        !
-        ! output files
-        !
-        call tic
-        call write_matrix(cc, outmask)
-        if (id == 0) call toc('Write matrix')
-        call tic
-        call write_map(map, outmask)
-        if (id == 0) call toc('Write map')
-        call tic
-        call write_binmap(binmap, outmask)
-        if (id == 0) call toc('Write binmap')
-        call tic
-        call write_mask(outmask, crit)
-        if (id == 0) call toc('Write mask')
-        call tic
-        call write_hits(nohits)
-        if (id == 0) call toc('Write hits')
-        call tic
-
-        call run_subsets()
-        
-        if ( isubchunk == nsubchunk .and. kfirst ) then
-           ! subtract the baselines to return the destriped TOD.
-           ! If the baselines were already subtracted, the call has no effect.
-           call tic
-           call clean_tod(tod_stored, aa)
-           if (id == 0) call toc('clean_tod')
-        end if
-
-        call restore_pixels_a
-
-        call free_baselines
-        call free_maps
-        call free_locmaps
-
-        call wait_mpi
-        call time_stamp
-
-        cputime_final = cputime_final + get_time(1)
-        cputime_total = get_time(0)
-
-        ! Memory
-
-        if (info > 0) then
-           if (id == 0) write(*,*)
-           if (id == 0) write(*,*) 'MEMORY (MB):'
-
-           call write_memory('Detector pointing',  memory_pointing)
-           call write_memory('TOD buffer',         memory_tod)
-           call write_memory('Maps',               memory_maps)
-           call write_memory('Baselines',          memory_baselines)
-           call write_memory('Basis functions',    memory_basis_functions)
-           call write_memory('Noise filter',       memory_filter)
-           call write_memory('Preconditioner',     memory_precond)
-           call write_memory('Temporary maps',     memory_locmap)
-           call write_memory('All2All buffers',    memory_all2all)
-           call write_memory('CG work space',      memory_cg)
-           call write_memory('NCM', memory_ncm)
-           call write_memory('Total')
-        endif
-
-        ! Timing
-
-        if (info > 0) then
-           if (id == 0) write(*,*) 'WALL-CLOCK TIME (s):'
-
-           call write_time('Initialization',     cputime_init)
-
-           cputime_read = cputime_read_pointing_periods + cputime_read_detpointing + cputime_read_tod + cputime_read_timestamps
-
-           call write_time('I/O', cputime_read)
-           call write_time('- Pointing Period boundaries', cputime_read_pointing_periods)
-           call write_time('- Pointing I/O',  cputime_read_detpointing)
-           call write_time('- Time stamp I/O', cputime_read_timestamps)
-           call write_time('- TOD I/O', cputime_read_tod)
-           call write_time('- Other')
-
-           call write_time('Waiting',                cputime_wait)
-           call write_time('Building pixel matrices',cputime_build_matrix)
-           call write_time('Sending pixel matrices',cputime_send_matrix)
-           call write_time('Inverting pixel matrices',cputime_inv)
-           call write_time('Binning TOD',            cputime_bin_maps)
-           call write_time('Sending binned TOD',     cputime_send_maps)
-           call write_time('Counting hits',          cputime_count_hits)
-           call write_time('Building preconditioner',cputime_prec_construct)
-           call write_time('Subtract/add baselines', cputime_clean_tod+cputime_unclean_tod)
-
-           call write_time('Initialization (1. phase)', cputime_cga_init)
-           call write_time('CG iteration',          cputime_cga)
-           call write_time('- TOD - map',           cputime_cga_1)
-           call write_time('- CG MPI',  cputime_cga_mpi)
-           call write_time('- CG ccmultiply',  cputime_cga_cc)
-           call write_time('- Map - TOD',           cputime_cga_2)
-           call write_time('- Filtering',           cputime_filter)
-           call write_time('- Preconditioning',     cputime_precond)
-           call write_time('- Other')
-
-           call write_time('NCM', cputime_ncm)
-           call write_time('- P^T F', cputime_ptf)
-           call write_time('- middlematrix', cputime_middlematrix)
-           call write_time('- invert middlematrix', cputime_invert_middlematrix)
-           call write_time('- symmetrize middlematrix', cputime_symmetrize_middlematrix)
-           call write_time('- accumulate', cputime_accumulate)
-           call write_time('- add white', cputime_white)
-           call write_time('- symmetrize', cputime_symmetrize)
-           call write_time('- save', cputime_save_matrix)
-           call write_time('- Other')
-
-           call write_time('Subset maps', cputime_subset )
-           call write_time('- Flag subset', cputime_flag_subset )
-           call write_time('- Write subset', cputime_write_subset )
-
-           call write_time('Finalization and output',cputime_final)
-           call write_time('Other',cputime_total-time_cum)
-        endif
-
-        call write_time('Total',cputime_total)
-        if (id == 0) write(*,*)
-
-        if (isubchunk == nsubchunk) exit loop_subchunk
-
-        file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
-        file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
-        file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
-
-        call reset_timers
-
-     end do loop_subchunk
-
-     call reset_timers
-
-     if (allocated(pntperiods)) deallocate( pntperiods, pntperiod_id, noba_short_pp )
-     !if (allocated(sampletime)) deallocate( sampletime, pixels, weights, tod_stored )
-     if (allocated(baselines_short)) deallocate( baselines_short, base_pntid_short, basis_functions )     
-     if (allocated(baselines_short_start)) deallocate( baselines_short_start, baselines_short_stop )
-     if (allocated(prec_diag)) deallocate( prec_diag )
-     if (allocated(bandprec)) deallocate( bandprec )
-
-     call close_filter()
-     call close_output()
-     call close_pointing()
-     call free_mask()
-     call free_tod()
-     call close_mpi()
-
-     return
-
-   end subroutine destripe
+       if (nsubchunk > 1) then
+          baseline_open = .false. ! from output.f90
+          if (id == 0) then
+             write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
+          endif
+          call add_subchunk_id(file_map, isubchunk, nsubchunk)
+          call add_subchunk_id(file_hit, isubchunk, nsubchunk)
+          call add_subchunk_id(file_mask, isubchunk, nsubchunk)
+          call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
+          call add_subchunk_id(file_wcov, isubchunk, nsubchunk)
+          call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
+          call add_subchunk_id(file_base, isubchunk, nsubchunk)
+       end if
+
+       if (skip_existing) then
+          if ( file_exists(file_map) ) then
+             file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
+             file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
+             file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
+             call reset_timers
+             cycle loop_subchunk
+          end if
+       end if
+
+       call init_output
+
+       call write_parameters
+       call wait_mpi
+
+       call allocate_tod
+
+       call allocate_baselines
+
+       call tic
+       call init_pointing
+       where ( pixels < 0 ) pixels = dummy_pixel
+       if (id == 0) call toc('init_pointing')
+
+       call wait_mpi
+
+       cputime_init = cputime_init + get_time(1)
+
+       call tic
+       call build_filter
+       if (id == 0) call toc('build_filter')
+
+       call reset_time(1)
+
+       !call wait_mpi; call close_mpi; stop 'SUCCESS'
+
+       call start_timeloop
+       call time_stamp
+
+       call baseline_times(baselines_short_time, sampletime)
+
+       subchunkpp => subchunk(1:nosamples_proc)
+
+       call tic
+       call reduce_pixels_buff
+       if (id == 0) call toc('reduce_pixels_buff')
+
+       call tic
+       call update_maptod_transfer(ksubmap)
+       if (id == 0) call toc('update_maptod_transfer')
+
+       if ( reassign_submaps ) then
+          call tic
+          call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, nosubmaps_max )
+          if (id == 0) call toc('assign_submaps')
+       end if
+
+       call allocate_maps
+
+       if (kfirst) then
+          wamap = 0.0
+          cca = 0.0
+       endif
+
+       dummy_pixel = 12*nside_max**2
+
+       call tic
+       call initialize_alltoallv()
+       if (id == 0) call toc('initialize_alltoallv')
+
+       if (use_inmask) then
+          call tic
+          call read_inmask(inmask)
+          if (id == 0) call toc('read_inmask')
+          call tic
+          call scatter_mask(inmask, nosubpix_cross)
+          if (id == 0) call toc('scatter_mask')
+       endif
+
+       if (kfirst) then
+          call tic
+          call flag_bad_baselines
+          if (id == 0) call toc('flag_bad_baselines')
+       end if
+
+       call tic
+       call pixel_matrix(cca, cc)
+       if (id == 0) call toc('pixel_matrix')
+
+       call tic
+       call count_hits(nohits)
+       if (id == 0) call toc('count_hits')
+
+       call tic
+       call bin_tod(map, binmap, wamap, tod_stored)
+       if (id == 0) call toc('bin_tod')
+
+       call time_stamp
+
+       call tic
+       call restore_pixels_buff
+       if (id == 0) call toc('restore_pixels_buff')
+
+       !  First destriping
+
+       if (kfirst) then
+
+          if (id == 0) then
+             write(*,*)
+             write(*,*) 'First destriping phase'
+          endif
+          call time_stamp
+
+          call tic
+          call reduce_pixels_a
+          if (id == 0) call toc('reduce_pixels_a')
+
+          call tic
+          call update_maptod_transfer(ksubmap)
+          if (id == 0) call toc('update_maptod_transfer')
+
+          if (use_inmask) then
+             call tic
+             call scatter_mask(inmask, nosubpix_cross)
+             if (id == 0) call toc('scatter_mask')
+          endif
+
+          call tic
+          call invert_pixelmatrix_cross(cca,inmask)
+          if (id == 0) call toc('invert_pixelmatrix_cross')
+
+          call tic
+          call initialize_a(yba, nna, wamap, cca, tod_stored)
+          if (id == 0) call toc('initialize_a')
+
+          if (basis_order == 0) then
+             call tic
+             call construct_preconditioner(nna(0,0,:,:))
+             if (id == 0) call toc('construct_preconditioner')
+          end if
+
+          if (kwrite_covmat) then
+
+             call write_covmat(file_covmat) ! pixels must be reduced
+
+          else
+
+             call tic
+             call iterate_a(aa, yba, nna, wamap, cca, tod_stored)
+             if (id == 0) call toc('iterate_a')
+
+             call tic
+             call subtract_baselines_a(map, aa)
+             if (id == 0) call toc('subtract_baselines_a')
+
+             call tic
+             call write_baselines_a(aa)
+             if (id == 0) call toc('write_baselines_a')
+             
+          end if
+
+       endif
+
+       call wait_mpi
+       if (id == 0) then
+          write(*,*)
+          write(*,*) 'Finalization begins'
+          if (info.ge.2) write(*,*)
+       endif
+       call time_stamp
+       call reset_time(1)
+
+       call tic
+       call write_matrix(cc)
+       if (id == 0) call toc('Write matrix')
+       !
+       !  Binning of the final map
+       !
+       call tic
+       call invert_pixelmatrix_map(cc, outmask, crit)
+       if (id == 0) call toc('Invert pixelmatrix_map')
+
+       if (do_binmap) call makemaps(binmap, cc, outmask)
+       call makemaps(map, cc, outmask)
+       call map_analysis(map, outmask)
+       !
+       ! output files
+       !
+       call tic
+       call write_matrix(cc, outmask)
+       if (id == 0) call toc('Write matrix')
+       call tic
+       call write_map(map, outmask)
+       if (id == 0) call toc('Write map')
+       call tic
+       call write_binmap(binmap, outmask)
+       if (id == 0) call toc('Write binmap')
+       call tic
+       call write_mask(outmask, crit)
+       if (id == 0) call toc('Write mask')
+       call tic
+       call write_hits(nohits)
+       if (id == 0) call toc('Write hits')
+       call tic
+
+       call run_subsets()
+
+       if ( isubchunk == nsubchunk .and. kfirst ) then
+          ! subtract the baselines to return the destriped TOD.
+          ! If the baselines were already subtracted, the call has no effect.
+          call tic
+          call clean_tod(tod_stored, aa)
+          if (id == 0) call toc('clean_tod')
+       end if
+
+       call restore_pixels_a
+
+       if (.not. mcmode) then
+          call free_baselines
+          call free_maps
+          call free_locmaps
+       end if
+
+       call wait_mpi
+       call time_stamp
+
+       cputime_final = cputime_final + get_time(1)
+       cputime_total = get_time(0)
+
+       ! Memory
+
+       if (info > 0) then
+          if (id == 0) write(*,*)
+          if (id == 0) write(*,*) 'MEMORY (MB):'
+
+          call write_memory('Detector pointing',  memory_pointing)
+          call write_memory('TOD buffer',         memory_tod)
+          call write_memory('Maps',               memory_maps)
+          call write_memory('Baselines',          memory_baselines)
+          call write_memory('Basis functions',    memory_basis_functions)
+          call write_memory('Noise filter',       memory_filter)
+          call write_memory('Preconditioner',     memory_precond)
+          call write_memory('Temporary maps',     memory_locmap)
+          call write_memory('All2All buffers',    memory_all2all)
+          call write_memory('CG work space',      memory_cg)
+          call write_memory('NCM', memory_ncm)
+          call write_memory('Total')
+       endif
+
+       ! Timing
+
+       if (info > 0) then
+          if (id == 0) write(*,*) 'WALL-CLOCK TIME (s):'
+
+          call write_time('Initialization',     cputime_init)
+
+          cputime_read = cputime_read_pointing_periods + cputime_read_detpointing + cputime_read_tod + cputime_read_timestamps
+
+          call write_time('I/O', cputime_read)
+          call write_time('- Pointing Period boundaries', cputime_read_pointing_periods)
+          call write_time('- Pointing I/O',  cputime_read_detpointing)
+          call write_time('- Time stamp I/O', cputime_read_timestamps)
+          call write_time('- TOD I/O', cputime_read_tod)
+          call write_time('- Other')
+
+          call write_time('Waiting',                cputime_wait)
+          call write_time('Building pixel matrices',cputime_build_matrix)
+          call write_time('Sending pixel matrices',cputime_send_matrix)
+          call write_time('Inverting pixel matrices',cputime_inv)
+          call write_time('Binning TOD',            cputime_bin_maps)
+          call write_time('Sending binned TOD',     cputime_send_maps)
+          call write_time('Counting hits',          cputime_count_hits)
+          call write_time('Building preconditioner',cputime_prec_construct)
+          call write_time('Subtract/add baselines', cputime_clean_tod+cputime_unclean_tod)
+
+          call write_time('Initialization (1. phase)', cputime_cga_init)
+          call write_time('CG iteration',          cputime_cga)
+          call write_time('- TOD - map',           cputime_cga_1)
+          call write_time('- CG MPI',  cputime_cga_mpi)
+          call write_time('- CG ccmultiply',  cputime_cga_cc)
+          call write_time('- Map - TOD',           cputime_cga_2)
+          call write_time('- Filtering',           cputime_filter)
+          call write_time('- Preconditioning',     cputime_precond)
+          call write_time('- Other')
+
+          call write_time('NCM', cputime_ncm)
+          call write_time('- P^T F', cputime_ptf)
+          call write_time('- middlematrix', cputime_middlematrix)
+          call write_time('- invert middlematrix', cputime_invert_middlematrix)
+          call write_time('- symmetrize middlematrix', cputime_symmetrize_middlematrix)
+          call write_time('- accumulate', cputime_accumulate)
+          call write_time('- add white', cputime_white)
+          call write_time('- symmetrize', cputime_symmetrize)
+          call write_time('- save', cputime_save_matrix)
+          call write_time('- Other')
+
+          call write_time('Subset maps', cputime_subset )
+          call write_time('- Flag subset', cputime_flag_subset )
+          call write_time('- Write subset', cputime_write_subset )
+
+          call write_time('Finalization and output',cputime_final)
+          call write_time('Other',cputime_total-time_cum)
+       endif
+
+       call write_time('Total',cputime_total)
+       if (id == 0) write(*,*)
+
+       file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
+       file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
+       file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
+
+       if (isubchunk == nsubchunk) exit loop_subchunk
+
+       call reset_timers
+
+    end do loop_subchunk
+
+    call reset_timers
+
+    if (.not. mcmode) then
+
+       if (allocated(pntperiods)) deallocate( pntperiods, pntperiod_id, noba_short_pp )
+       if (allocated(baselines_short)) deallocate( baselines_short, base_pntid_short, basis_functions )
+       if (allocated(baselines_short_start)) deallocate( baselines_short_start, baselines_short_stop )
+       if (allocated(prec_diag)) deallocate( prec_diag )
+       if (allocated(bandprec)) deallocate( bandprec )
+
+       call close_filter()
+       call close_output()
+       call close_pointing()
+       call free_mask()
+       call free_tod()
+    end if
+
+    call close_mpi()
+    
+    return
+
+  end subroutine destripe
+
+
+  subroutine destripe_with_cache( comm, ndet, nsamp, nnz, &
+       timestamps, pix, pixweights, signal ) bind( c, name='destripe_with_cache' )
+
+    integer(c_int), intent(in), value :: comm ! MPI communicator
+
+    integer(c_long), intent(in), value :: ndet
+    integer(c_long), intent(in), value :: nsamp
+    integer(c_long), intent(in), value :: nnz
+
+    ! TOD
+
+    type(c_ptr), intent(in), value :: timestamps
+    type(c_ptr), intent(in), value :: pix
+    type(c_ptr), intent(in), value :: pixweights
+    type(c_ptr), intent(in), value :: signal
+
+    integer :: ierr, idet, i, pixmin, pixmax
+
+    ! set up MPI
+
+    call init_mpi( comm, ntasks, id )
+
+    ! set up OpenMP
+
+    nprocs = omp_get_num_procs()
+    nthreads_max = omp_get_max_threads()
+    nthreads = nthreads_max
+    if (id == 0) then
+       write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
+            " threads per task.")') ntasks, nprocs, nthreads
+    end if
+
+    call reset_time()
+
+    if (id == 0) then
+       write (*,*)
+       write (*,*) 'Program MADAM (with cache)'
+       write (*,*) 'Destriping of CMB data with a noise filter'
+       write (*,*) 'Version ',version
+       write (*,*)
+    endif
+
+    nmap = nnz
+
+    call c_f_pointer(timestamps, sampletime, (/nsamp/) )
+    call c_f_pointer(pix, pixels, (/nsamp, ndet/) )
+    call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/) )
+    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/) )
+
+    subchunk_file_map = file_map; subchunk_file_binmap = file_binmap
+    subchunk_file_base = file_base; subchunk_file_hit = file_hit; subchunk_file_mask = file_mask
+    subchunk_file_matrix = file_matrix; subchunk_file_wcov = file_wcov
+
+    tod_is_clean = .false.
+
+    detflags = .true.
+
+    if (nsubchunk > 1) then
+       baseline_open = .false. ! from output.f90
+       if (id == 0) then
+          write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
+       endif
+       call add_subchunk_id(file_map, isubchunk, nsubchunk)
+       call add_subchunk_id(file_hit, isubchunk, nsubchunk)
+       call add_subchunk_id(file_mask, isubchunk, nsubchunk)
+       call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
+       call add_subchunk_id(file_wcov, isubchunk, nsubchunk)
+       call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
+       call add_subchunk_id(file_base, isubchunk, nsubchunk)
+    end if
+
+    if (skip_existing) then
+       if ( file_exists(file_map) ) then
+          return
+       end if
+    end if
+
+    call init_output
+
+    call write_parameters
+    call wait_mpi
+
+    if (kfirst) then
+       aa = 0.0
+       yba = 0.0
+       nna = 0
+       nna_inv = 0
+    end if
+
+    call tic
+    where ( pixels < 0 ) pixels = dummy_pixel
+    if (id == 0) call toc('init_pointing')
+
+    call wait_mpi
+
+    cputime_init = cputime_init + get_time(1)
+
+    call reset_time(1)
+
+    call time_stamp
+
+    subchunkpp => subchunk(1:nosamples_proc)
+
+    call tic
+    call reduce_pixels_buff
+    if (id == 0) call toc('reduce_pixels_buff')
+
+    call tic
+    call update_maptod_transfer(ksubmap)
+    if (id == 0) call toc('update_maptod_transfer')
+
+    if ( reassign_submaps ) then
+       call tic
+       call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, nosubmaps_max )
+       if (id == 0) call toc('assign_submaps')
+    end if
+
+    map = 0
+    binmap = 0
+
+    dummy_pixel = 12*nside_max**2
+
+    if (kfirst) then
+       call tic
+       call flag_bad_baselines
+       if (id == 0) call toc('flag_bad_baselines')
+    end if
+
+    call tic
+    call bin_tod(map, binmap, wamap, tod_stored)
+    if (id == 0) call toc('bin_tod')
+
+    call time_stamp
+
+    call tic
+    call restore_pixels_buff
+    if (id == 0) call toc('restore_pixels_buff')
+
+    !  First destriping
+
+    if (kfirst) then
+
+       if (id == 0) then
+          write(*,*)
+          write(*,*) 'First destriping phase'
+       endif
+       call time_stamp
+
+       call tic
+       call reduce_pixels_a
+       if (id == 0) call toc('reduce_pixels_a')
+
+       call tic
+       call initialize_a(yba, nna, wamap, cca, tod_stored)
+       if (id == 0) call toc('initialize_a')
+
+       call tic
+       call iterate_a(aa, yba, nna, wamap, cca, tod_stored)
+       if (id == 0) call toc('iterate_a')
+
+       call tic
+       call subtract_baselines_a(map, aa)
+       if (id == 0) call toc('subtract_baselines_a')
+
+       call tic
+       call write_baselines_a(aa)
+       if (id == 0) call toc('write_baselines_a')
+
+    endif
+
+    call wait_mpi
+    if (id == 0) then
+       write(*,*)
+       write(*,*) 'Finalization begins'
+       if (info.ge.2) write(*,*)
+    endif
+    call time_stamp
+    call reset_time(1)
+
+    !
+    !  Binning of the final map
+    !
+    if (do_binmap) call makemaps(binmap, cc, outmask)
+    call makemaps(map, cc, outmask)
+    call map_analysis(map, outmask)
+    !
+    ! output files
+    !
+    call tic
+    call write_map(map, outmask)
+    if (id == 0) call toc('Write map')
+    call tic
+    call write_binmap(binmap, outmask)
+    if (id == 0) call toc('Write binmap')
+    call tic
+
+    call run_subsets()
+
+    if ( isubchunk == nsubchunk .and. kfirst ) then
+       ! subtract the baselines to return the destriped TOD.
+       ! If the baselines were already subtracted, the call has no effect.
+       call tic
+       call clean_tod(tod_stored, aa)
+       if (id == 0) call toc('clean_tod')
+    end if
+
+    call restore_pixels_a
+
+    call wait_mpi
+    call time_stamp
+
+    cputime_final = cputime_final + get_time(1)
+    cputime_total = get_time(0)
+
+    ! Memory
+
+    if (info > 0) then
+       if (id == 0) write(*,*)
+       if (id == 0) write(*,*) 'MEMORY (MB):'
+
+       call write_memory('Detector pointing',  memory_pointing)
+       call write_memory('TOD buffer',         memory_tod)
+       call write_memory('Maps',               memory_maps)
+       call write_memory('Baselines',          memory_baselines)
+       call write_memory('Basis functions',    memory_basis_functions)
+       call write_memory('Noise filter',       memory_filter)
+       call write_memory('Preconditioner',     memory_precond)
+       call write_memory('Temporary maps',     memory_locmap)
+       call write_memory('All2All buffers',    memory_all2all)
+       call write_memory('CG work space',      memory_cg)
+       call write_memory('NCM', memory_ncm)
+       call write_memory('Total')
+    endif
+
+    ! Timing
+
+    if (info > 0) then
+       if (id == 0) write(*,*) 'WALL-CLOCK TIME (s):'
+
+       call write_time('Initialization',     cputime_init)
+
+       cputime_read = cputime_read_pointing_periods + cputime_read_detpointing + cputime_read_tod + cputime_read_timestamps
+
+       call write_time('I/O', cputime_read)
+       call write_time('- Pointing Period boundaries', cputime_read_pointing_periods)
+       call write_time('- Pointing I/O',  cputime_read_detpointing)
+       call write_time('- Time stamp I/O', cputime_read_timestamps)
+       call write_time('- TOD I/O', cputime_read_tod)
+       call write_time('- Other')
+
+       call write_time('Waiting',                cputime_wait)
+       call write_time('Building pixel matrices',cputime_build_matrix)
+       call write_time('Sending pixel matrices',cputime_send_matrix)
+       call write_time('Inverting pixel matrices',cputime_inv)
+       call write_time('Binning TOD',            cputime_bin_maps)
+       call write_time('Sending binned TOD',     cputime_send_maps)
+       call write_time('Counting hits',          cputime_count_hits)
+       call write_time('Building preconditioner',cputime_prec_construct)
+       call write_time('Subtract/add baselines', cputime_clean_tod+cputime_unclean_tod)
+
+       call write_time('Initialization (1. phase)', cputime_cga_init)
+       call write_time('CG iteration',          cputime_cga)
+       call write_time('- TOD - map',           cputime_cga_1)
+       call write_time('- CG MPI',  cputime_cga_mpi)
+       call write_time('- CG ccmultiply',  cputime_cga_cc)
+       call write_time('- Map - TOD',           cputime_cga_2)
+       call write_time('- Filtering',           cputime_filter)
+       call write_time('- Preconditioning',     cputime_precond)
+       call write_time('- Other')
+
+       call write_time('Subset maps', cputime_subset )
+       call write_time('- Flag subset', cputime_flag_subset )
+       call write_time('- Write subset', cputime_write_subset )
+
+       call write_time('Finalization and output',cputime_final)
+       call write_time('Other',cputime_total-time_cum)
+    endif
+
+    call write_time('Total',cputime_total)
+    if (id == 0) write(*,*)
+
+    file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
+    file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
+    file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
+
+    call reset_timers
+
+    call close_mpi()
+
+    return
+
+  end subroutine destripe_with_cache
+
+
+  subroutine clear_caches() bind( c, name='clear_caches' )
+    
+    call free_baselines
+    call free_maps
+    call free_locmaps
+    
+    if (allocated(pntperiods)) deallocate( pntperiods, pntperiod_id, noba_short_pp )
+    if (allocated(baselines_short)) deallocate( baselines_short, base_pntid_short, basis_functions )
+    if (allocated(baselines_short_start)) deallocate( baselines_short_start, baselines_short_stop )
+    if (allocated(prec_diag)) deallocate( prec_diag )
+    if (allocated(bandprec)) deallocate( bandprec )
+
+    call close_filter()
+    call close_output()
+    call close_pointing()
+    call free_mask()
+    call free_tod()
+    
+  end subroutine clear_caches
 
 
   subroutine run_subsets()
@@ -553,7 +867,7 @@ contains
     cputime_final = cputime_final + get_time_and_reset(1)
 
     ! bin and write all requested subset maps with full data destriping.
-    
+
     kfirst_save = kfirst
     do_binmap_save = do_binmap
     file_binmap_save = file_binmap
@@ -589,11 +903,11 @@ contains
 
           !cputime_final = cputime_final + get_time_and_reset(1)
           call reset_time( 10 )
-          
+
           if ( isurvey /= 0 ) then
              survey = surveys(isurvey)
              surveyname = survey%name
-             
+
              nhit_survey = 0
              surveyflags = .false.
              do i = 1, nosamples_proc
@@ -607,24 +921,24 @@ contains
              surveyflags = .true.
              surveyname = surveys(0)%name
           end if
-             
+
           nhit_survey = count(surveyflags)
           call sum_mpi(nhit_survey)
-             
+
           cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
-          
+
           if ( nhit_survey == 0 ) cycle
-             
+
           loop_detset : do idetset = 0,ndetset
-       
+
              if ( idetset == 0 .and. isurvey == 0 ) cycle ! This case is already processed
-             
+
              call reset_time( 10 )
 
              if ( idetset /= 0 ) then
                 detset = detsets(idetset)
                 detsetname = detset%name
-                
+
                 detflags = .false.
                 do idet = 1,nodetectors
                    do jdet = 1,detset%ndet
@@ -633,22 +947,22 @@ contains
                       end if
                    end do
                 end do
-                 temperature_only = ( detset%nopol .and. .not. force_pol)
+                temperature_only = ( detset%nopol .and. .not. force_pol)
              else
                 detflags = .true.
                 detsetname = detsets(0)%name
                 temperature_only = temperature_only_save
              end if
-             
+
              nhit_det = count(detflags)
              call sum_mpi(nhit_det)
-             
+
              ! FIXME: we could easily remove all detsets and surveys that do not overlap with present data.
-             
+
              cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
-       
+
              if ( nhit_det == 0 ) cycle loop_detset
-             
+
              if ( temperature_only ) then
                 nmap = 1
                 ncc = 1
@@ -658,7 +972,7 @@ contains
                 ncc = ncc_save
                 concatenate_messages = concatenate_messages_save
              end if
-             
+
              if ( id == 0 ) then
                 print *,''
                 print *,' *** Processing detset=',trim(detsetname),', survey=',trim(surveyname)
@@ -666,7 +980,7 @@ contains
              end if
 
              ! construct file names
-             
+
              subsetname = trim(path_output) // trim(file_root)
              if ( len_trim(detsetname) /= 0 ) subsetname = trim(subsetname) // '_' // trim( detsetname )
              if ( len_trim(surveyname) /= 0 ) subsetname = trim(subsetname) // '_' // trim( surveyname )
@@ -706,14 +1020,14 @@ contains
              if ( len_trim(file_binmap) == 0 .and. len_trim(file_hit) == 0 &
                   .and. len_trim(file_matrix) == 0 .and. len_trim(file_wcov) == 0 &
                   .and. len_trim(file_mask) == 0 ) cycle
-             
+
              cca = 0
              cc = 0
              binmap = 0
              nohits = 0
              outmask = 0
              crit = 0
-             
+
              call tic
 
              ! This is where we actually build the observation matrices and bin the subset data
@@ -755,9 +1069,9 @@ contains
              call write_binmap(binmap(1:nmap,:), outmask)
              if ( pass == 1 ) call write_mask(outmask, crit)                
              cputime_write_subset = cputime_write_subset + get_time(10)
-             
+
              if (id == 0) call toc('subset map')
-             
+
           end do loop_detset
        end do loop_survey
 
@@ -775,7 +1089,7 @@ contains
     file_matrix = file_matrix_save
     file_wcov = file_wcov_save
     file_mask = file_mask_save
-    
+
     kfirst = kfirst_save
     do_binmap = do_binmap_save
     temperature_only = temperature_only_save
@@ -792,7 +1106,7 @@ contains
   function file_exists( filename )
     character(len=*) :: filename
     logical :: file_exists
-    
+
     if (len_trim(filename) == 0) then
        file_exists = .false.
     else

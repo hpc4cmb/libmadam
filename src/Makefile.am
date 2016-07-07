@@ -128,7 +128,7 @@ test_libmadam_LDADD = libmadam.la $(AM_LIBS)
 AM_TESTS_ENVIRONMENT = \
 	mkdir -p maps;
 
-TESTS = test_libmadam test_libmadam.py
+TESTS = test_libmadam test_libmadam.py test_libmadam_mc.py
 
 clean-local:
 	rm -rf *.mod maps/*

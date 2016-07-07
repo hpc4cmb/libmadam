@@ -16,7 +16,7 @@ MODULE fourier
   complex(C_DOUBLE_COMPLEX), pointer :: out(:) => NULL()
   complex(C_DOUBLE_COMPLEX), allocatable :: fyy_backup(:)
 
-  type(C_PTR) :: plan, plan_inv
+  type(C_PTR) :: plan = C_NULL_PTR, plan_inv = C_NULL_PTR
   integer ::  ierr
 
   ! integer               :: fftw_planning_strategy = FFTW_MEASURE
@@ -74,8 +74,14 @@ CONTAINS
 
   SUBROUTINE close_fourier
 
-    call fftw_destroy_plan( plan )
-    call fftw_destroy_plan( plan_inv )
+    if (c_associated(plan)) then
+       call fftw_destroy_plan( plan )
+       plan = C_NULL_PTR
+    end if
+    if (c_associated(plan_inv)) then
+       call fftw_destroy_plan( plan_inv )
+       plan_inv = C_NULL_PTR
+    end if
 
     if (allocated(fyy_backup)) deallocate( fyy_backup )
 
