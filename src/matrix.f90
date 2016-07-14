@@ -2,6 +2,9 @@ MODULE matrix
   !
   ! Routines for handling of symmetric matrices
   !
+
+  use commonparam, only : incomplete_matrices
+
   implicit none
   private
 
@@ -20,11 +23,44 @@ CONTAINS
     double precision,intent(out) :: cdet
     double precision,intent(out) :: rcond
     logical,         intent(out) :: sing
-    double precision :: eigenvalues(n), eigenvectors(n,n), eigenvectorsT(n,n), workspace(10*n)
-    integer :: info, i
+    double precision, allocatable :: eigenvalues(:), eigenvectors(:,:), &
+         eigenvectorsT(:,:), workspace(:)
+    logical :: found(n)
+    integer :: info, i, j, nfound, ierr
+    integer, allocatable :: good(:)
 
-    eigenvectors = cc
-    call dsyev( 'V', 'U', n, eigenvectors, n, eigenvalues, workspace, 10*n, info )
+    if ( incomplete_matrices ) then
+       found = .false.
+       do i = 1,n
+          if ( abs(cc(i,i)) > 1e-30 ) then
+             found(i) = .true.
+          end if
+       end do
+       nfound = count( found )
+       if (nfound == 0) then ! DEBUG
+          print *,'WARNING: nfound == 0: cc = ',cc ! DEBUG
+          nfound = 1 ! DEBUG
+       end if ! DEBUG
+    else
+       found = .true.
+       nfound = n
+    end if
+
+    allocate( eigenvalues(nfound), eigenvectors(nfound,nfound), eigenvectorsT(nfound,nfound), &
+         workspace(10*nfound), good(nfound), stat=ierr )
+    if ( ierr /= 0 ) stop 'No room to invert matrices'
+
+    j = 1
+    do i = 1,n
+       if (found(i)) then
+          good(j) = i
+          j = j + 1
+       end if
+    end do
+
+    eigenvectors = cc(good,good)
+
+    call dsyev( 'V', 'U', nfound, eigenvectors, nfound, eigenvalues, workspace, 10*nfound, info )
 
     cdet = product( eigenvalues )
     rcond = minval( eigenvalues ) / maxval( eigenvalues )
@@ -34,17 +70,18 @@ CONTAINS
        cc = 0
        cdet = 0
        rcond = 0
-       return
     else
        sing = .false.
+       eigenvectorsT = transpose(eigenvectors)
+       do i = 1,nfound
+          eigenvectors(:,i) = eigenvectors(:,i) / eigenvalues(i)
+       end do
+       cc(good,good) = matmul( eigenvectors, eigenvectorsT )
     end if
 
-    eigenvectorsT = transpose(eigenvectors)
-    do i = 1,n
-       eigenvectors(:,i) = eigenvectors(:,i) / eigenvalues(i)
-    end do
+    deallocate( eigenvalues, eigenvectors, eigenvectorsT, workspace, good )
 
-    cc = matmul( eigenvectors, eigenvectorsT )
+    return
 
   END SUBROUTINE invert_eig
 

@@ -79,6 +79,8 @@ parameter_control.lo : parameter_control.f90 simulation.lo commonparam.lo \
 
 pointing.lo : pointing.f90 commonparam.lo mpi_wrappers.lo
 
+matrix.lo : matrix.f90 commonparam.lo
+
 maps_and_baselines.lo : maps_and_baselines.f90 commonparam.lo mpi_wrappers.lo
 
 tod_storage.lo : tod_storage.f90 commonparam.lo mpi_wrappers.lo

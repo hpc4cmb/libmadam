@@ -366,6 +366,8 @@ CONTAINS
        read(value,*,iostat=ierr) bin_subsets
     case('mcmode')
        read(value,*,iostat=ierr) mcmode
+    case('incomplete_matrices')
+       read(value,*,iostat=ierr) incomplete_matrices
 
     case default
        call abort_mpi('Unknown parameter: ' // trim(key))

@@ -102,6 +102,7 @@ MODULE commonparam
   ! monte Carlo mode
   integer(idp) :: mc_increment=1e7, mc_loops=1, mc_id=0, rng_base=0
   logical :: run_submap_test=.true.
+  logical :: incomplete_matrices = .false.
   ! other additions end -RK
 
   TYPE compressed_pointing  ! compressed pointing data for one baseline
