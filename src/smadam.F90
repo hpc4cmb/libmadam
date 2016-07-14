@@ -211,31 +211,38 @@ contains
        call write_parameters
        call wait_mpi
 
-       call allocate_tod
+       if ( isubchunk == subchunk_start ) then
+          call allocate_tod
 
-       call allocate_baselines
+          call allocate_baselines
 
-       call tic
-       call init_pointing
-       where ( pixels < 0 ) pixels = dummy_pixel
-       if (id == 0) call toc('init_pointing')
+          call tic
+          call init_pointing
+          where ( pixels < 0 ) pixels = dummy_pixel
+          if (id == 0) call toc('init_pointing')
 
-       call wait_mpi
+          call wait_mpi
 
-       cputime_init = cputime_init + get_time(1)
+          cputime_init = cputime_init + get_time(1)
 
-       call tic
-       call build_filter
-       if (id == 0) call toc('build_filter')
+          call tic
+          call build_filter
+          if (id == 0) call toc('build_filter')
 
-       call reset_time(1)
+          call reset_time(1)
 
-       !call wait_mpi; call close_mpi; stop 'SUCCESS'
+          call start_timeloop
+          call time_stamp
 
-       call start_timeloop
-       call time_stamp
-
-       call baseline_times(baselines_short_time, sampletime)
+          call baseline_times(baselines_short_time, sampletime)
+       else
+          if ( kfirst ) then
+             aa = 0
+             yba = 0
+             nna = 0
+             nna_inv = 0
+          end if
+       end if
 
        subchunkpp => subchunk(1:nosamples_proc)
 
@@ -255,25 +262,11 @@ contains
 
        call allocate_maps
 
-       if (kfirst) then
-          wamap = 0.0
-          cca = 0.0
-       endif
-
-       dummy_pixel = 12*nside_max**2
-
        call tic
        call initialize_alltoallv()
        if (id == 0) call toc('initialize_alltoallv')
 
-       if (use_inmask) then
-          call tic
-          call read_inmask(inmask)
-          if (id == 0) call toc('read_inmask')
-          call tic
-          call scatter_mask(inmask, nosubpix_cross)
-          if (id == 0) call toc('scatter_mask')
-       endif
+       dummy_pixel = 12*nside_max**2
 
        if (kfirst) then
           call tic
@@ -313,15 +306,20 @@ contains
           call reduce_pixels_a
           if (id == 0) call toc('reduce_pixels_a')
 
-          call tic
-          call update_maptod_transfer(ksubmap)
-          if (id == 0) call toc('update_maptod_transfer')
+          !call tic
+          !call update_maptod_transfer(ksubmap)
+          !if (id == 0) call toc('update_maptod_transfer')
 
           if (use_inmask) then
+             if ( isubchunk == subchunk_start ) then
+                call tic
+                call read_inmask(inmask)
+                if (id == 0) call toc('read_inmask')
+             end if
              call tic
              call scatter_mask(inmask, nosubpix_cross)
              if (id == 0) call toc('scatter_mask')
-          endif
+          end if
 
           call tic
           call invert_pixelmatrix_cross(cca,inmask)
@@ -411,10 +409,14 @@ contains
           if (id == 0) call toc('clean_tod')
        end if
 
-       call restore_pixels_a
+       if ( kfirst ) then
+          call restore_pixels_a
+       end if
 
-       if (.not. mcmode) then
-          call free_baselines
+       if ( .not. mcmode ) then
+          if (isubchunk == nsubchunk) then
+             call free_baselines
+          end if
           call free_maps
           call free_locmaps
        end if
@@ -512,6 +514,8 @@ contains
        call reset_timers
 
     end do loop_subchunk
+
+    isubchunk = subchunk_start
 
     call reset_timers
 

@@ -89,6 +89,8 @@ if __name__ == '__main__':
     pars[ 'kfilter' ] = True
     pars[ 'file_root' ] = 'madam_pytest'
     pars[ 'path_output' ] = './maps/'
+    pars[ 'iter_max' ] = 100
+    pars[ 'nsubchunk' ] = 2
 
     if itask == 0:
         if not os.path.isdir('maps'):

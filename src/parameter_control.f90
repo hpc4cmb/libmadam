@@ -6,6 +6,7 @@ MODULE parameter_control
   use commonparam
   use mpi_wrappers
   use noise_routines, only : interpolate_psd
+  use pointing, only : subchunk
 
   implicit none
   private
@@ -824,7 +825,7 @@ CONTAINS
     ! Find the TOD chunk handled in this step. In standard mode = all TOD.
     ! Also initialize parameters defining the division of TOD to processes.
     integer :: i, j, k, m, n0, n, ierr
-    integer(i8b) :: nsamp, order
+    integer(i8b) :: nsamp, order, my_offset, sublen, suboffset, sub_start, sub_end, isub
     real(dp) :: dn, dn0, ninv, r
     real(dp), pointer :: basis_function(:,:)
     real(sp) :: memsum, mem_min, mem_max
@@ -889,6 +890,23 @@ CONTAINS
           end if
        end if
     end do
+
+    ! Split the pointing period into subchunks
+    if (nsubchunk > 0) then
+       my_offset = 0
+       do i = first_chunk, last_chunk
+          n = pntperiods(i)
+          sublen = n / nsubchunk
+          do isub = 1, nsubchunk
+             suboffset = sublen * (isub - 1)
+             sub_start = my_offset + 1 + suboffset
+             sub_end = sub_start + sublen - 1
+             if (isub == nsubchunk) sub_end = my_offset + n
+             subchunk(sub_start:sub_end) = isub
+          end do
+          my_offset = my_offset + n
+       end do
+    end if
     
     ! Auxiliary arrays for OpenMP threading and output
     
