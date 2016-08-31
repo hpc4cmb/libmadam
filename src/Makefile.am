@@ -46,8 +46,8 @@ libmadam_la_SOURCES = \
         read_data.f90 \
         output.f90 \
         smadam_routines.f90 \
-        covmat_util.f90 \
-        covmat.f90 \
+        covmat_util.F90 \
+        covmat.F90 \
         smadam.F90
 
 # Automake does not recognize Fortran dependencies so we list them
