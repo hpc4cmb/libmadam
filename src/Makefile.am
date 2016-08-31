@@ -16,6 +16,8 @@ AM_LIBS += -lm
 
 AM_CPPFLAGS += -DMPIWRITECOVMAT
 
+include_HEADERS = madam.h
+
 lib_LTLIBRARIES = libmadam.la
 
 libmadam_la_SOURCES = \
