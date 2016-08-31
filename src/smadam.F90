@@ -127,6 +127,9 @@ contains
 
     call read_parameters( parstring )
 
+    if (mcmode .and. cached) call abort_mpi('Destripe called while caches are not empty.')
+    if (mcmode .and. nsubchunk > 1) call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
+    
     nmap = nnz
 
     call read_detectors( detstring, ndet, detweights, npsd, npsdtot, psdstarts, npsdbin, psdfreqs, npsdval, psdvals )
@@ -419,6 +422,8 @@ contains
           end if
           call free_maps
           call free_locmaps
+       else
+          cached = .true.
        end if
 
        call wait_mpi
@@ -582,6 +587,8 @@ contains
        write (*,*) 'Version ',version
        write (*,*)
     endif
+
+    if (.not. cached) call abort_mpi('destripe_with_cache called with empty caches.')
 
     nmap = nnz
 
@@ -836,6 +843,8 @@ contains
 
 
   subroutine clear_caches() bind( c, name='clear_caches' )
+
+    if (.not. cached .and. id == 0) write (*,*) 'WARNING: Madam caches are already empty.'
     
     call free_baselines
     call free_maps
@@ -852,7 +861,9 @@ contains
     call close_pointing()
     call free_mask()
     call free_tod()
-    
+
+    cached = .false.
+
   end subroutine clear_caches
 
 

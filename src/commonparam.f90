@@ -92,7 +92,7 @@ MODULE commonparam
   logical, allocatable :: surveyflags(:)
 
   logical :: bin_subsets = .true.
-  logical :: mcmode = .false.
+  logical :: mcmode = .false., cached = .false.
 
   ! TOAST additions end -RK
 
