@@ -670,8 +670,10 @@ CONTAINS
     end do
     !$OMP END DO
 
+    !$OMP CRITICAL
     call fftw_free(pfx(id_thread))
     call fftw_free(pxx(id_thread))
+    !$OMP END CRITICAL
 
     !$OMP END PARALLEL
 
@@ -995,8 +997,10 @@ CONTAINS
                 x0 = sum(z(kstart+1:kstart+noba, idet)) / noba
                 z(kstart+1:kstart+noba, idet) = z(kstart+1:kstart+noba, idet) - x0
 
+                !$OMP CRITICAL
                 call fftw_free(pfx(id_thread))
                 call fftw_free(pxx(id_thread))
+                !$OMP END CRITICAL
 
              end if
              
