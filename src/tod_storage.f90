@@ -6,6 +6,7 @@ MODULE  tod_storage
 
   use commonparam
   use mpi_wrappers
+  use memory_and_time, only : check_stat
 
   implicit none
   private
@@ -47,7 +48,7 @@ CONTAINS
     memory_tod = memory_tod + nosamples_proc*8.
 
     allocate(surveyflags(nosamples_proc), stat=allocstat)
-    call check_stat(allocstat)
+    call check_stat(allocstat, 'surveyflags')
 
     memory_tod = memory_tod + nosamples_proc
     surveyflags = .true.
@@ -93,20 +94,5 @@ CONTAINS
 
 
   !---------------------------------------------------------------------------
-
-
-  SUBROUTINE check_stat(allocstat)
-
-    integer :: allocstat
-
-    if (allocstat /= 0) then
-       write(*,*) 'ERROR: out of memory.'
-       call exit_with_status(1)
-    endif
-
-  END SUBROUTINE check_stat
-
-
-  !----------------------------------------------------------------------------
 
 END MODULE tod_storage

@@ -585,6 +585,7 @@ CONTAINS
     if (ntasks > 1 .and. id /= 0) return
     if (info == 0) return
 
+    write (*,fk) 'MCMode', mcmode
     write (*,fk) 'dist_by_obs', dist_by_obs
     write (*,fk) 'write_cut', write_cut
     select case (basis_func)

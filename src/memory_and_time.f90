@@ -11,9 +11,25 @@ MODULE memory_and_time
   real(sp), public :: time_cum =0.0
   real(sp), public :: time2_sum =0.0
 
-  public write_memory, write_time
+  public write_memory, write_time, check_stat
 
 CONTAINS
+
+  !------------------------------------------------------------------------------
+
+
+  SUBROUTINE check_stat(allocstat, name)
+
+    integer :: allocstat
+    character(len=*) :: name
+
+    if (allocstat.ne.0) then
+       write(*,*) 'ERROR: out of memory allocating ',name
+       call exit_with_status(1)
+    endif
+
+  END SUBROUTINE check_stat
+
 
   !------------------------------------------------------------------------------
 

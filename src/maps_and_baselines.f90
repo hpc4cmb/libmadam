@@ -5,6 +5,7 @@ MODULE maps_and_baselines
 
   use commonparam
   use mpi_wrappers
+  use memory_and_time, only : check_stat
 
   implicit none
   private
@@ -44,7 +45,7 @@ CONTAINS
     allocate(map(nmap,0:nopix_map-1),   &
          cc(nmap,nmap,0:nopix_map-1),         &
          outmask(0:nopix_map-1),stat=allocstat)
-    call check_stat(allocstat)
+    call check_stat(allocstat, 'map, cc and outmask')
 
     map = 0.0
     cc = 0.0
@@ -53,7 +54,7 @@ CONTAINS
 
     if (do_binmap .or. nsurvey > 0 .or. ndetset > 0) then
        allocate(binmap(nmap,0:nopix_map-1),stat=allocstat)
-       call check_stat(allocstat)
+       call check_stat(allocstat, 'binmap')
        binmap = 0.0
        memory_maps = memory_maps +nmap*nopix_map*8
     else ! -RK
@@ -62,7 +63,7 @@ CONTAINS
 
     if (do_wnmap) then
        allocate(wnmap(nmap,0:nopix_map-1),stat=allocstat)
-       call check_stat(allocstat)
+       call check_stat(allocstat, 'wnmap')
        wnmap = 0.0
        memory_maps = memory_maps +nmap*nopix_map*8
     else ! -RK
@@ -77,7 +78,7 @@ CONTAINS
           allocate(nohits(0:nopix_map-1,1),stat=allocstat)
           memory_maps = memory_maps +nopix_map*4
        end if
-       call check_stat(allocstat)
+       call check_stat(allocstat, 'nohits')
        nohits = 0
     else ! -RK
        allocate(nohits(0:0,1)) ! -RK       
@@ -85,7 +86,7 @@ CONTAINS
 
     if (do_mask) then
        allocate(crit(0:nopix_map-1),stat=allocstat)
-       call check_stat(allocstat)
+       call check_stat(allocstat, 'crit')
        crit = 0.0
        memory_maps = memory_maps +nopix_map*4
     else ! -RK
@@ -95,7 +96,7 @@ CONTAINS
     if (use_inmask) then
        if (.not. allocated(inmask)) then
           allocate(inmask(0:nopix_cross-1),stat=allocstat)
-          call check_stat(allocstat)
+          call check_stat(allocstat, 'inmask')
           inmask = 0
           memory_maps = memory_maps +nopix_cross*4
        end if
@@ -106,7 +107,7 @@ CONTAINS
     if (kfirst) then
        allocate(cca(nmap,nmap,0:nopix_cross-1),  &
             wamap(nmap,0:nopix_cross-1),stat=allocstat)
-       call check_stat(allocstat)
+       call check_stat(allocstat, 'cca and wamap')
        cca = 0.0
        wamap = 0.0
        memory_maps = memory_maps +(nmap**2*8+nmap*8)*nopix_cross
@@ -169,7 +170,7 @@ CONTAINS
             nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors), &
             nna_inv(0:basis_order, 0:basis_order, noba_short_max, nodetectors), &
             stat=allocstat)
-       call check_stat(allocstat)
+       call check_stat(allocstat, 'aa, yba, nna and nna_niv')
 
        aa = 0.0
        yba = 0.0
@@ -207,21 +208,6 @@ CONTAINS
     if (allocated(nna_inv)) deallocate(nna_inv)
 
   END SUBROUTINE free_baselines
-
-
-  !------------------------------------------------------------------------------
-
-
-  SUBROUTINE check_stat(allocstat)
-
-    integer :: allocstat
-
-    if (allocstat.ne.0) then
-       write(*,*) 'ERROR: out of memory.'
-       call exit_with_status(1)
-    endif
-
-  END SUBROUTINE check_stat
 
 
   !------------------------------------------------------------------------------

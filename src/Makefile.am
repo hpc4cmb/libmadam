@@ -79,13 +79,14 @@ submap_transfer.lo : submap_transfer.f90 commonparam.lo mpi_wrappers.lo
 parameter_control.lo : parameter_control.f90 simulation.lo commonparam.lo \
 	noise_routines.lo pointing.lo mpi_wrappers.lo
 
-pointing.lo : pointing.f90 commonparam.lo mpi_wrappers.lo
+pointing.lo : pointing.f90 commonparam.lo mpi_wrappers.lo memory_and_time.lo
 
 matrix.lo : matrix.f90 commonparam.lo
 
-maps_and_baselines.lo : maps_and_baselines.f90 commonparam.lo mpi_wrappers.lo
+maps_and_baselines.lo : maps_and_baselines.f90 commonparam.lo mpi_wrappers.lo \
+	memory_and_time.lo
 
-tod_storage.lo : tod_storage.f90 commonparam.lo mpi_wrappers.lo
+tod_storage.lo : tod_storage.f90 commonparam.lo mpi_wrappers.lo memory_and_time.lo
 
 noise_routines.lo : noise_routines.f90 commonparam.lo fourier_fftw_2003.lo \
 	mpi_wrappers.lo timing.lo tod_storage.lo

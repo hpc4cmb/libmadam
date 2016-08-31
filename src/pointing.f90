@@ -5,6 +5,7 @@ MODULE pointing
 
   use commonparam
   use mpi_wrappers
+  use memory_and_time, only : check_stat
 
   implicit none
   private
@@ -64,7 +65,7 @@ CONTAINS
 
     allocate(cospsi(nodetectors), sinpsi(nodetectors), &
          kpolarized(nodetectors), detbits(nodetectors), stat=allocstat)
-    call check_stat(allocstat)
+    call check_stat(allocstat, 'cospsi, sinpsi, kpolarized and detbits')
 
     if (temperature_only) detectors%kpolar = .false.
 
@@ -75,7 +76,7 @@ CONTAINS
     enddo
 
     allocate(subchunk(nosamples_proc), stat=allocstat)
-    call check_stat(allocstat)
+    call check_stat(allocstat, 'subchunk')
     subchunk = 0 ! initialize
 
     !allocate(pixels(nosamples_proc, nodetectors), stat=allocstat)
@@ -335,21 +336,6 @@ CONTAINS
     if (info > 4) write(*,idf) ID,'Done'
 
   END SUBROUTINE restore_pixels_a
-
-
-  !--------------------------------------------------------------------------
-
-
-  SUBROUTINE check_stat(allocstat)
-
-    integer :: allocstat
-
-    if (allocstat.ne.0) then
-       write(*,*) 'ERROR: out of memory.'
-       call exit_with_status(1)
-    endif
-
-  END SUBROUTINE check_stat
 
 
   !---------------------------------------------------------------------------
