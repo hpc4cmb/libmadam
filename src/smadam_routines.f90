@@ -553,7 +553,7 @@ CONTAINS
     call sum_mpi(nbad)
     call sum_mpi(ngood)
     call sum_mpi(ntot)
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        print *,'Succesfully inverted ',100.0*ngood/dble(ntot),' % of the baseline matrices'
        print *,' Inverse rejected on ',100.0*nbad/dble(ntot),' % of the baseline matrices'
        print *,'                     ',100.0*(ntot-nbad-ngood)/dble(ntot),' % were empty'
@@ -949,7 +949,7 @@ CONTAINS
     deallocate(r, p, ap, z, proj)
 
     noiter = istep
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write(*,*) 'Iteration done'
        write(*,'(i6,a)') noiter,' iteration steps'
     endif

@@ -58,6 +58,14 @@ CONTAINS
     if ( len_trim( detsets(0)%name ) /= 0 ) subsetname = trim(subsetname) // '_' // trim( detsets(0)%name )
     if ( len_trim( surveys(0)%name ) /= 0 ) subsetname = trim(subsetname) // '_' // trim( surveys(0)%name )
 
+    file_map    = ''
+    file_binmap = ''
+    file_hit    = ''
+    file_matrix = ''
+    file_wcov   = ''
+    file_base   = ''
+    file_mask   = ''
+
     if ( do_map )    file_map    = trim(subsetname) // '_map.fits'
     if ( do_binmap ) file_binmap = trim(subsetname) // '_bmap.fits'
     if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
@@ -158,9 +166,11 @@ CONTAINS
 
     if (nread_concurrent < 1 .or. nread_concurrent > ntasks) &
          nread_concurrent = ntasks
-    if (id == 0) write (*,'(" nread_concurrent == ",i0)') nread_concurrent
-
-    if (id == 0) write (*,'(" read_buffer_len == ",i0)') read_buffer_len
+    
+    if (info > 0) then
+       if (id == 0) write (*,'(" nread_concurrent == ",i0)') nread_concurrent
+       if (id == 0) write (*,'(" read_buffer_len == ",i0)') read_buffer_len
+    end if
 
     if (len_trim(file_covmat) > 0) kwrite_covmat = .true.
     if (kwrite_covmat) then
@@ -206,10 +216,13 @@ CONTAINS
     if (nodet_pol == 0 .or. nmap == 1) then
 
        if (id == 0 .and. info >= 1) then
-          write(*,*) 'Only unpolarized detectors:' // &
-               ' Will produce only temperature map'
-          if (.not.temperature_only)  &
-               write(*,*) 'Setting temperature_only = T'
+          if (nodet_pol == 0) &
+               write(*,*) 'Only unpolarized detectors.'
+          if (nmap == 1) &
+               write(*,*) 'Only unpolarized detector weights.'
+          write(*,*) '  Will produce only temperature map'
+          if (.not. temperature_only) &
+               write(*,*) '  Setting temperature_only = T'
        end if
 
        temperature_only = .true.
@@ -231,9 +244,11 @@ CONTAINS
 
     ! Detector weighting
 
-    if (id == 0) print *,'noise_weights_from_psd = ', noise_weights_from_psd
-    if (id == 0) print *,'radiometers = ', radiometers
-    if (id == 0) print *,'mode_detweight = ', mode_detweight
+    if (info > 0) then
+       if (id == 0) print *,'noise_weights_from_psd = ', noise_weights_from_psd
+       if (id == 0) print *,'radiometers = ', radiometers
+       if (id == 0) print *,'mode_detweight = ', mode_detweight
+    end if
 
     if (mode_detweight == 0) then ! Detector weights from RMS
 

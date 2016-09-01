@@ -393,7 +393,7 @@ CONTAINS
     if ( ndetset > NDETSETMAX ) call abort_mpi('Number of detector sets exceeds NDETSETMAX')
     detsets( ndetset )%name = trim( adjustl( line(:i-1) ) )
     if ( len(trim(detsets( ndetset )%name)) == 0 ) call abort_mpi('Empty detset name')
-    if ( id == 0 ) print *,'Adding detset = ',trim(detsets(ndetset)%name) ! debug
+
     line = trim(adjustl(line(i+1:)))
 
     ndet = 0
@@ -410,10 +410,9 @@ CONTAINS
           ! allow user to name the full detector set
           detsets(0)%name = detsets( ndetset )%name
           ndetset = ndetset - 1
-          if ( id == 0 ) print *,'  Adding detector ALL' ! debug
           return
        end if
-       if ( id == 0 ) print *,'  Adding detector ' // trim(detname) ! debug
+
        detsets(ndetset)%detectors(ndet) = detname
        if ( i == 0 ) exit
     end do
@@ -441,7 +440,7 @@ CONTAINS
     if ( nsurvey > NSURVEYMAX ) call abort_mpi('Number of detector sets exceeds NSURVEYMAX')
     surveys( nsurvey )%name = trim( adjustl( line(:i-1) ) )
     if ( len(trim(surveys( nsurvey )%name)) == 0 ) call abort_mpi('Empty survey name')
-    if ( id == 0 ) print *,'Adding survey = ',trim(surveys(nsurvey)%name) ! debug
+
     line = trim(adjustl(line(i+1:)))
 
     nspan = 0
@@ -453,7 +452,6 @@ CONTAINS
              ! allow user to name the full data span
              surveys(0)%name = surveys( nsurvey )%name
              nsurvey = nsurvey - 1
-             if ( id == 0 ) print *,'  Adding span ALL' ! debug
              return
           end if
           call abort_mpi('Failed to parse: ' // trim(line) // ' for valid survey span marker (-)' )
@@ -466,7 +464,7 @@ CONTAINS
        
        surveys(nsurvey)%starts(nspan) = sstart
        surveys(nsurvey)%stops(nspan) = sstop
-       if ( id == 0 ) print *,'  Adding span ',sstart,' - ',sstop ! debug
+
        i = index( line, ',' )
        if ( i /= 0 ) then
           line = trim(adjustl(line(i+1:)))

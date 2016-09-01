@@ -213,11 +213,13 @@ CONTAINS
        call fits_get_key(infile, 'NSIDE', nside_inmask)
 
        ! de/upgrade to resolution nside_cross
-       if (nside_cross > nside_inmask) then
-          write(*,'(a,i8)') ' Mask upgraded to resolution nside =', nside_cross
-       elseif (nside_cross < nside_inmask) then
-          write(*,'(a,i8)') ' Mask downgraded to resolution nside =', &
-               nside_cross
+       if (info > 0) then
+          if (nside_cross > nside_inmask) then
+             write(*,'(a,i8)') ' Mask upgraded to resolution nside =', nside_cross
+          elseif (nside_cross < nside_inmask) then
+             write(*,'(a,i8)') ' Mask downgraded to resolution nside =', &
+                  nside_cross
+          end if
        endif
 
     endif
@@ -312,7 +314,7 @@ CONTAINS
     real(dp) :: seconds
     real(c_double) :: overlap
 
-    if (id == 0) write (*,'(/,a,/)') 'Examining periods'
+    if (id == 0 .and. info > 1) write (*,'(/,a,/)') 'Examining periods'
 
     call reset_time(12)
 
@@ -393,7 +395,7 @@ CONTAINS
     call sum_mpi(nosamples_tot)
     nosamples_simulation = nosamples_tot
 
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write (*,'(a,i0)') 'Total number of samples: ', nosamples_tot
        write (*,'(a,i0)') 'Total number of pointing periods: ', nopntperiods
        write (*,'(a,i0)') 'Max number of samples per task: ', nosamples_proc_max

@@ -108,14 +108,14 @@ contains
     nprocs = omp_get_num_procs()
     nthreads_max = omp_get_max_threads()
     nthreads = nthreads_max
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
             " threads per task.")') ntasks, nprocs, nthreads
     end if
 
     call reset_time()
 
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write (*,*)
        write (*,*) 'Program MADAM'
        write (*,*) 'Destriping of CMB data with a noise filter'
@@ -129,6 +129,7 @@ contains
 
     if (mcmode .and. cached) call abort_mpi('Destripe called while caches are not empty.')
     if (mcmode .and. nsubchunk > 1) call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
+    if (temperature_only .and. nnz /= 1) call abort_mpi('temperature_only=T but the pointing weights are polarized')
     
     nmap = nnz
 
@@ -187,7 +188,7 @@ contains
 
        if (nsubchunk > 1) then
           baseline_open = .false. ! from output.f90
-          if (id == 0) then
+          if (id == 0 .and. info > 0) then
              write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
           endif
           call add_subchunk_id(file_map, isubchunk, nsubchunk)
@@ -299,7 +300,7 @@ contains
 
        if (kfirst) then
 
-          if (id == 0) then
+          if (id == 0 .and. info > 0) then
              write(*,*)
              write(*,*) 'First destriping phase'
           endif
@@ -361,10 +362,10 @@ contains
        endif
 
        call wait_mpi
-       if (id == 0) then
+       if (id == 0 .and. info > 0) then
           write(*,*)
           write(*,*) 'Finalization begins'
-          if (info.ge.2) write(*,*)
+          if (info > 1) write(*,*)
        endif
        call time_stamp
        call reset_time(1)
@@ -505,10 +506,10 @@ contains
 
           call write_time('Finalization and output',cputime_final)
           call write_time('Other',cputime_total-time_cum)
-       endif
 
-       call write_time('Total',cputime_total)
-       if (id == 0) write(*,*)
+          call write_time('Total',cputime_total)
+          if (id == 0 .and. info > 0) write(*,*)
+       endif
 
        file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
        file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
@@ -573,14 +574,14 @@ contains
     nprocs = omp_get_num_procs()
     nthreads_max = omp_get_max_threads()
     nthreads = nthreads_max
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
             " threads per task.")') ntasks, nprocs, nthreads
     end if
 
     call reset_time()
 
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write (*,*)
        write (*,*) 'Program MADAM (with cache)'
        write (*,*) 'Destriping of CMB data with a noise filter'
@@ -589,6 +590,7 @@ contains
     endif
 
     if (.not. cached) call abort_mpi('destripe_with_cache called with empty caches.')
+    if (temperature_only .and. nnz /= 1) call abort_mpi('temperature_only=T but the pointing weights are polarized')
 
     nmap = nnz
 
@@ -607,7 +609,7 @@ contains
 
     if (nsubchunk > 1) then
        baseline_open = .false. ! from output.f90
-       if (id == 0) then
+       if (id == 0 .and. info > 0) then
           write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
        endif
        call add_subchunk_id(file_map, isubchunk, nsubchunk)
@@ -690,7 +692,7 @@ contains
 
     if (kfirst) then
 
-       if (id == 0) then
+       if (id == 0 .and. info > 0) then
           write(*,*)
           write(*,*) 'First destriping phase'
        endif
@@ -719,10 +721,10 @@ contains
     endif
 
     call wait_mpi
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write(*,*)
        write(*,*) 'Finalization begins'
-       if (info.ge.2) write(*,*)
+       if (info > 1) write(*,*)
     endif
     call time_stamp
     call reset_time(1)
@@ -824,10 +826,11 @@ contains
 
        call write_time('Finalization and output',cputime_final)
        call write_time('Other',cputime_total-time_cum)
-    endif
 
-    call write_time('Total',cputime_total)
-    if (id == 0) write(*,*)
+       call write_time('Total',cputime_total)
+       if (id == 0) write(*,*)
+
+    endif
 
     file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
     file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
@@ -988,7 +991,7 @@ contains
                 concatenate_messages = concatenate_messages_save
              end if
 
-             if ( id == 0 ) then
+             if ( id == 0 .and. info > 0 ) then
                 print *,''
                 print *,' *** Processing detset=',trim(detsetname),', survey=',trim(surveyname)
                 print *,''
@@ -1129,9 +1132,11 @@ contains
        if ( .not. file_exists ) inquire( file=filename, exist=file_exists)
     end if
 
-    if (file_exists .and. id == 0) write (*,*) trim(filename) // ' exists!'
-    if (.not. file_exists .and. id == 0) write (*,*) trim(path_output) // trim(filename) // ' does not exist!'
-    if (.not. file_exists .and. id == 0) write (*,*) trim(filename) // ' does not exist!'
+    if ( info > 0 ) then
+       if (file_exists .and. id == 0) write (*,*) trim(filename) // ' exists!'
+       if (.not. file_exists .and. id == 0) write (*,*) trim(path_output) // trim(filename) // ' does not exist!'
+       if (.not. file_exists .and. id == 0) write (*,*) trim(filename) // ' does not exist!'
+    end if
 
   end function file_exists
 
@@ -1182,11 +1187,11 @@ contains
     real(dp) :: time1, time2, time
     real(dp), save :: best_time=1e9
 
-    if (id == 0) write (*,*) ' Running nside_submap test ...'
+    if (id == 0 .and. info > 0) write (*,*) ' Running nside_submap test ...'
 
     ! initialize submap parameters for nside_submap_test
     nosubmaps_tot_test = 12*nside_submap_test**2
-    if (id == 0) write (*,'(a,"==",i0)') 'nosubmaps_tot_test', nosubmaps_tot_test
+    if (id == 0 .and. info > 0) write (*,'(a,"==",i0)') 'nosubmaps_tot_test', nosubmaps_tot_test
     nosubmaps_max_test = (nosubmaps_tot_test-1)/ntasks+1
     nosubpix_test = nside_cross**2/nside_submap_test**2
     nosubpix_max_test = nside_max**2/nside_submap_test**2
@@ -1301,7 +1306,7 @@ contains
 
     call wait_mpi
 
-    if (id == 0) write(*,'(" Clock =",f10.3," s")') get_time(0)
+    if (id == 0 .and. info > 0) write(*,'(" Clock =",f10.3," s")') get_time(0)
 
   END SUBROUTINE time_stamp
 

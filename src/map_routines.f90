@@ -347,7 +347,7 @@ CONTAINS
 
     stdstr = ''
 
-    if (id == 0) then
+    if (id == 0 .and. info > 0) then
        write (*,*)
        write (*,*) 'Destriped map:'
     end if
@@ -407,7 +407,7 @@ CONTAINS
          enddo
       endif
 
-      if (ID==0) then
+      if (ID==0 .and. info > 0) then
          write(*,'(a9,6x,99(2x,a))') 'Map     ',(stokes(k),k=1,nmap)
 
          call tempstr(stdstr,std)
