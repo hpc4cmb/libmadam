@@ -1012,10 +1012,10 @@ CONTAINS
     end do
 
     memsum = memory_basis_functions / 1024. / 1024.
-    mem_min = memsum; mem_max = memsum ! -RK
-    call min_mpi(mem_min); call max_mpi(mem_max) ! -RK
+    mem_min = memsum; mem_max = memsum
+    call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
-    if (ID==0.and.info.ge.1) write(*,mstr3) 'Allocated memory for basis_functions:',memsum, mem_min, mem_max ! -RK
+    if (ID==0.and.info.ge.1) write(*,mstr3) 'Allocated memory for basis_functions:',memsum, mem_min, mem_max
     
     !end if
 

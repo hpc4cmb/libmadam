@@ -12,8 +12,6 @@ MODULE maptod_transfer
   real(dp), pointer, public :: submaps_send_cross(:,:,:), submaps_recv_cross(:,:,:)
   integer, allocatable, target, public :: submaps_send_int_map(:,:), submaps_recv_int_map(:,:)
   integer, pointer, public :: submaps_send_int_cross(:,:), submaps_recv_int_cross(:,:)
-  real(dp), allocatable, target, public :: subcc_send_map(:,:,:,:), subcc_recv_map(:,:,:,:)
-  real(dp), pointer, public :: subcc_send_cross(:,:,:,:), subcc_recv_cross(:,:,:,:)
   integer, allocatable, public :: submaps_send_ind(:), submaps_recv_ind(:)
   integer, allocatable, public :: sendcounts(:), sendoffs(:), recvcounts(:), recvoffs(:)
   integer :: nsend_submap, nrecv_submap
@@ -104,6 +102,7 @@ CONTAINS
     !
     integer :: ierr
     integer :: nsend, nrecv, itask, offset, ioffset, i
+    real(sp) :: memsum, mem_min, mem_max
 
     if ( .not. concatenate_messages ) return
 
@@ -122,52 +121,42 @@ CONTAINS
              deallocate( submaps_send_int_cross, submaps_recv_int_cross )
           end if
        end if
-       deallocate( subcc_send_map, subcc_recv_map )
        if ( nosubpix_cross /= nosubpix_map ) then
           deallocate( submaps_send_cross, submaps_recv_cross )
-          deallocate( subcc_send_cross, subcc_recv_cross )
        end if
        deallocate( submaps_send_ind, submaps_recv_ind )
        deallocate( sendcounts, sendoffs, recvcounts, recvoffs )
     end if
 
     allocate( submaps_send_ind(nsend_submap), submaps_recv_ind(nrecv_submap), stat=ierr )
-    if ( ierr /= 0 ) stop 'No room to catenate messages'
+    if ( ierr /= 0 ) stop 'No room to concatenate messages'
     memory_all2all = nmap*nosubpix_cross*(nsend_submap + nrecv_submap)*4.
 
     allocate( submaps_send_map(nmap,nosubpix_map,nsend_submap), &
          submaps_recv_map(nmap,nosubpix_map,nrecv_submap), stat=ierr )
-    if ( ierr /= 0 ) stop 'No room to catenate messages'
+    if ( ierr /= 0 ) stop 'No room to concatenate messages'
     memory_all2all = memory_all2all + nmap*nosubpix_map*(nsend_submap + nrecv_submap)*8.
 
     if ( use_inmask .or. do_hits ) then
        allocate( submaps_send_int_map(nosubpix_map,nsend_submap), &
             submaps_recv_int_map(nosubpix_map,nrecv_submap), stat=ierr )
-       if ( ierr /= 0 ) stop 'No room to catenate messages'
+       if ( ierr /= 0 ) stop 'No room to concatenate messages'
        memory_all2all = memory_all2all + nosubpix_map*(nsend_submap + nrecv_submap)*4.
     end if
-
-    allocate( subcc_send_map(nmap,nmap,nosubpix_map,nsend_submap), &
-         subcc_recv_map(nmap,nmap,nosubpix_map,nrecv_submap), stat=ierr )
-    if ( ierr /= 0 ) stop 'No room to catenate messages'
-    memory_all2all = memory_all2all + nmap*nmap*nosubpix_map*(nsend_submap + nrecv_submap)*8.
 
     if ( nosubpix_cross /= nosubpix_map ) then
        allocate( submaps_send_cross(nmap,nosubpix_cross,nsend_submap), &
             submaps_recv_cross(nmap,nosubpix_cross,nrecv_submap), stat=ierr )
-       if ( ierr /= 0 ) stop 'No room to catenate messages'
+       if ( ierr /= 0 ) stop 'No room to concatenate messages'
        memory_all2all = memory_all2all + nmap*nosubpix_cross*(nsend_submap + nrecv_submap)*8.
        if ( use_inmask .or. do_hits) then
           allocate( submaps_send_int_cross(nosubpix_cross,nsend_submap), &
                submaps_recv_int_cross(nosubpix_cross,nrecv_submap), stat=ierr )
-          if ( ierr /= 0 ) stop 'No room to catenate messages'
+          if ( ierr /= 0 ) stop 'No room to concatenate messages'
           memory_all2all = memory_all2all + nosubpix_cross*(nsend_submap + nrecv_submap)*4.
        end if
 
-
-       allocate( subcc_send_cross(nmap,nmap,nosubpix_cross,nsend_submap), &
-            subcc_recv_cross(nmap,nmap,nosubpix_cross,nrecv_submap), stat=ierr )
-       if ( ierr /= 0 ) stop 'No room to catenate messages'
+       if ( ierr /= 0 ) stop 'No room to concatenate messages'
        memory_all2all = memory_all2all + nmap*nmap*nosubpix_cross*(nsend_submap + nrecv_submap)*8.       
     else
        submaps_send_cross => submaps_send_map
@@ -176,12 +165,10 @@ CONTAINS
           submaps_send_int_cross => submaps_send_int_map
           submaps_recv_int_cross => submaps_recv_int_map
        end if
-       subcc_send_cross => subcc_send_map
-       subcc_recv_cross => subcc_recv_map
     end if
     
     allocate( sendcounts(0:ntasks-1), sendoffs(0:ntasks-1), recvcounts(0:ntasks-1), recvoffs(0:ntasks-1), stat=ierr )         
-    if ( ierr /= 0 ) stop 'No room to catenate messages (2)'
+    if ( ierr /= 0 ) stop 'No room to concatenate messages (2)'
     memory_all2all = memory_all2all + ntasks*4*4.0
        
     offset = 0
@@ -223,6 +210,12 @@ CONTAINS
        recvoffs(itask) = offset
        offset = offset + nrecv
     end do
+
+    memsum = memory_all2all / 1024. / 1024.
+    mem_min = memsum; mem_max = memsum
+    call min_mpi(mem_min); call max_mpi(mem_max)
+    call sum_mpi(memsum)
+    if (ID==0.and.info.ge.1) write(*,'(x,a,t32,3(f9.1," MB"))') 'Allocated memory for all2allv:', memsum, mem_min, mem_max
 
   END SUBROUTINE initialize_alltoallv
 
@@ -336,8 +329,6 @@ CONTAINS
           if (associated(submaps_send_int_cross)) deallocate(submaps_send_int_cross)
           if (associated(submaps_recv_int_cross)) deallocate(submaps_recv_int_cross)
        end if
-       if (associated(subcc_send_cross)) deallocate(subcc_send_cross)
-       if (associated(subcc_recv_cross)) deallocate(subcc_recv_cross)
     end if
 
     if (allocated(submaps_send_map)) deallocate(submaps_send_map)
@@ -346,8 +337,6 @@ CONTAINS
        if (allocated(submaps_send_int_map)) deallocate(submaps_send_int_map)
        if (allocated(submaps_recv_int_map)) deallocate(submaps_recv_int_map)
     end if
-    if (allocated(subcc_send_map)) deallocate(subcc_send_map)
-    if (allocated(subcc_recv_map)) deallocate(subcc_recv_map)
 
     if (allocated(submaps_send_ind)) deallocate(submaps_send_ind)
     if (allocated(submaps_recv_ind)) deallocate(submaps_recv_ind)
@@ -416,6 +405,8 @@ CONTAINS
        call mpi_alltoallv( submaps_send, sendcounts*nmap0*nosubpix, sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
             submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
 
+       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect map with alltoallv')
+
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m)
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
@@ -468,10 +459,10 @@ CONTAINS
 
     integer, intent(in)    :: nosubpix
     real(dp),intent(inout) :: cc(nmap,nmap,nosubpix,nosubmaps)
-    integer :: i, j, k, m, mrecv, id_tod, id_map, ndegrade, nmap0
+    integer :: i, j, k, m, mrecv, id_tod, id_map, ndegrade, nmap0, col
     real(dp) :: buffer(nmap,nmap,nosubpix)
     integer :: ierr, ind, id_thread, num_threads
-    real(dp), pointer :: subcc_send(:,:,:,:), subcc_recv(:,:,:,:)
+    real(dp), pointer :: submaps_send(:,:,:), submaps_recv(:,:,:)
 
     ndegrade = nosubpix_max/nosubpix
     mrecv = 0
@@ -481,64 +472,68 @@ CONTAINS
        ! use alltoallv to reduce the local maps into global
 
        if ( nosubpix == nosubpix_map ) then
-          subcc_send => subcc_send_map
-          subcc_recv => subcc_recv_map
+          submaps_send => submaps_send_map
+          submaps_recv => submaps_recv_map
        else
-          subcc_send => subcc_send_cross
-          subcc_recv => subcc_recv_cross
+          submaps_send => submaps_send_cross
+          submaps_recv => submaps_recv_cross
        end if
 
-       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,m,k)
-       if ( ndegrade == 1 ) then
-          !$OMP DO
-          do i = 1, nsend_submap
-             m = submaps_send_ind(i) * nosubpix
-             subcc_send(:,:,:,i) = loccc(:,:,m:m+nosubpix-1)
-          end do
-          !$OMP END DO
-       else
-          !$OMP DO
-          do i = 1, nsend_submap
-             m = submaps_send_ind(i) * nosubpix * ndegrade
-             do k = 1,nosubpix
-                subcc_send(:,:,k,i) = sum( loccc(:,:,m:m+ndegrade-1), 3 )
-                m = m + ndegrade
+       nmap0 = size(submaps_send,1) ! Workaround for unpolarized subsets
+
+       do col = 1,nmap0
+
+          !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,m,k)
+          if ( ndegrade == 1 ) then
+             !$OMP DO
+             do i = 1, nsend_submap
+                m = submaps_send_ind(i) * nosubpix
+                submaps_send(:,:,i) = loccc(:,col,m:m+nosubpix-1)
              end do
-          end do
-          !$OMP END DO
-       end if
-       !$OMP END PARALLEL
-
-       nmap0 = size(subcc_send,1) ! Workaround for unpolarized subsets
-
-       call mpi_alltoallv( subcc_send, sendcounts*nmap0*nmap0*nosubpix, sendoffs*nmap0*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-            subcc_recv, recvcounts*nmap0*nmap0*nosubpix, recvoffs*nmap0*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
-
-       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m)
-       id_thread = omp_get_thread_num()
-       num_threads = omp_get_num_threads()
-
-       do i = 1, nrecv_submap
-          m = submaps_recv_ind(i)
-          if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
-             if ( modulo(m,num_threads) /= id_thread ) cycle
+             !$OMP END DO
+          else
+             !$OMP DO
+             do i = 1, nsend_submap
+                m = submaps_send_ind(i) * nosubpix * ndegrade
+                do k = 1,nosubpix
+                   submaps_send(:,k,i) = sum( loccc(:,col,m:m+ndegrade-1), 2 )
+                   m = m + ndegrade
+                end do
+             end do
+             !$OMP END DO
           end if
-          cc(1:nmap,1:nmap,:,m) = cc(1:nmap,1:nmap,:,m) + subcc_recv(1:nmap,1:nmap,:,i)
+          !$OMP END PARALLEL
+
+          call mpi_alltoallv( submaps_send, sendcounts*nmap0*nosubpix, sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
+               submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
+
+          if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect cc')
+
+          !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m)
+          id_thread = omp_get_thread_num()
+          num_threads = omp_get_num_threads()
+
+          do i = 1, nrecv_submap
+             m = submaps_recv_ind(i)
+             if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
+                if ( modulo(m,num_threads) /= id_thread ) cycle
+             end if
+             cc(1:nmap,col,:,m) = cc(1:nmap,col,:,m) + submaps_recv(1:nmap,:,i)
+          end do
+          !$OMP END PARALLEL
        end do
-       !$OMP END PARALLEL
-       
     else
        do i = 0,nosubmaps_tot-1
-          
+
           id_map = id_submap(i)
           if (ID==id_map) mrecv = mrecv + 1
-          
+
           do id_tod = 0,ntasks-1
-             
+
              if (.not.ksubmap_table(i,id_tod)) cycle
-             
+
              if (ID==id_tod) then  ! prepare send buffer
-                
+
                 buffer = 0.0
                 do k = 1,nosubpix
                    do j = 1,ndegrade
@@ -547,11 +542,11 @@ CONTAINS
                    end do
                 end do
              end if
-             
+
              call send_mpi_vec_dp(buffer, nmap**2*nosubpix, id_tod, id_map)
-             
+
              if (ID==id_map) cc(:,:,:,mrecv) = cc(:,:,:,mrecv)+buffer
-             
+
           end do
        end do
     end if
@@ -608,6 +603,8 @@ CONTAINS
 
        call mpi_alltoallv( submaps_send, sendcounts*nosubpix, sendoffs*nosubpix, MPI_INTEGER, &
             submaps_recv, recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, comm, ierr )
+
+       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect hits with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m)
        id_thread = omp_get_thread_num()
@@ -707,6 +704,8 @@ CONTAINS
 
        call mpi_alltoallv( submaps_recv, recvcounts*nmap*nosubpix, recvoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, &
             submaps_send, sendcounts*nmap*nosubpix, sendoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
+
+       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to scatter map with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,m,k)
        if ( ndegrade == 1 ) then
@@ -816,6 +815,8 @@ CONTAINS
 
        call mpi_alltoallv( submaps_recv, recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, &
             submaps_send, sendcounts*nosubpix, sendoffs*nosubpix, MPI_INTEGER, comm, ierr )
+
+       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to scatter mask with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,m,k)
        if ( ndegrade == 1 ) then

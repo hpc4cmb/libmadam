@@ -150,7 +150,7 @@ CONTAINS
 
     call collect_cc(cc, nosubpix_map)
 
-    if (kfirst)  call collect_cc(cca, nosubpix_cross)
+    if (kfirst) call collect_cc(cca, nosubpix_cross)
 
     cputime_send_matrix = cputime_send_matrix + get_time(10)
 
