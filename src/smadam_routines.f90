@@ -598,11 +598,13 @@ CONTAINS
 
     call reset_time(10)
 
-    allocate(r(0:basis_order, noba_short, nodetectors))
-    allocate(p(0:basis_order, noba_short, nodetectors))
-    allocate(ap(0:basis_order, noba_short, nodetectors))
-    allocate(z(0:basis_order, noba_short, nodetectors))
-    allocate(proj(0:basis_order))
+    allocate( &
+         r(0:basis_order, noba_short, nodetectors), &
+         p(0:basis_order, noba_short, nodetectors), &
+         ap(0:basis_order, noba_short, nodetectors), &
+         z(0:basis_order, noba_short, nodetectors), &
+         proj(0:basis_order), stat=ierr)
+    if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
     memory_cg = max(noba_short*nodetectors*32.,memory_cg)
 
