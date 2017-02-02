@@ -242,6 +242,12 @@ CONTAINS
     allocate( ksubmap(0:nosubmaps_tot-1,0:ntasks-1), nosubmaps_task(0:ntasks-1), stat=ierr )
     if ( ierr /= 0 ) call abort_mpi('No room to assign submaps')
 
+    if (id == 0 .and. nosubmaps_tot > 100000) then
+       write(*,'(a,i0,a,i0,a)') 'WARNING: You have a LOT of submaps (', nosubmaps_tot, &
+            '). Reassigning submaps will take time. Reduce nside_submap (', &
+            nside_submap, ') to divide the map in larger chunks'
+    end if
+
     ksubmap = .false.
     nosubmaps_task = 0
 
