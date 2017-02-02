@@ -1478,6 +1478,8 @@ CONTAINS
 
     if (.not. write_tod .and. ndetset == 0 .and. nsurvey == 0) return
 
+    if (.not. kfirst) return
+
     if ( tod_is_clean ) return
 
     if (info == 3 .and. id == 0) write(*,*) 'Subtracting baselines from TOD...'
