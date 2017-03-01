@@ -115,6 +115,10 @@ contains
 
     call reset_time()
 
+    ! Then parse the parameter string
+
+    call read_parameters( parstring )
+
     if (id == 0 .and. info > 0) then
        write (*,*)
        write (*,*) 'Program MADAM'
@@ -122,10 +126,6 @@ contains
        write (*,*) 'Version ',version
        write (*,*)
     endif
-
-    ! Then parse the parameter string
-
-    call read_parameters( parstring )
 
     if (mcmode .and. cached) call abort_mpi('Destripe called while caches are not empty.')
     if (mcmode .and. nsubchunk > 1) call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
