@@ -492,7 +492,7 @@ CONTAINS
       !
       integer :: idet, ipsd
 
-      integer  :: i, ierr, n
+      integer  :: i, j, ierr, n
       real(dp) :: plateau
       real(dp), allocatable :: freqs(:), data(:)
 
@@ -542,14 +542,33 @@ CONTAINS
 
       spectrum = spectrum - plateau * .999999 ! subtract with a small margin
 
-      if ( any( spectrum <= 0 ) ) then ! Omit the first bin
-         where ( spectrum <= 0 ) spectrum = 1e-30
+      if ( any( spectrum <= 0 ) ) then
+         loop_bins : do i = 1, nof
+            if ( spectrum(i) <= 0 ) then
+               ! First look for valid value in higher frequency
+               loop_next_bins: do j = i+1, nof
+                  if (spectrum(j) > 0) then
+                     spectrum(i) = spectrum(j)
+                     cycle loop_bins
+                  end if
+               end do loop_next_bins
+            end if
+            if ( spectrum(i) <= 0 ) then
+               ! If needed, get the value from lower frequency
+               loop_previous_bins: do j = i-1, 1, -1
+                  if (spectrum(j) > 0) then
+                     spectrum(i) = spectrum(j)
+                     cycle loop_bins
+                  end if
+               end do loop_previous_bins
+            end if
+         end do loop_bins
       end if
 
       if ( f(1) == 0 ) spectrum(1) = 0 ! leave the mean unconstrained
 
       !do i = 1, nof
-      !   write (2000+idet,*) f(i), spectrum(i) ! DEBUG
+      !   write (1000+id*100+idet*10+ipsd,*) f(i), spectrum(i) ! DEBUG
       !end do
 
     END SUBROUTINE get_spectrum_interp
@@ -692,7 +711,6 @@ CONTAINS
     integer              :: i, j, k, kstart, n, noba, pid, idet, ichunk, ipsd, ierr, nbandmin
     real(dp),allocatable :: invcov(:,:), blockm(:,:)
     logical              :: neg 
-    real(dp) :: offset
 
     if (precond_width.le.0) return
 
@@ -757,23 +775,23 @@ CONTAINS
 
     do ipsd = 1,npsdtot
        !do i = 1, nof/2+1
-       !   write (3000+ipsd,*) fcov(i,ipsd) ! DEBUG
+       !   write (3000+id*100+ipsd,*) i, fcov(i,ipsd) ! DEBUG
        !end do
-       call dfftinv(xx,fcov(:,ipsd)) ! C_a inverse into real domain
+       call dfftinv(xx, fcov(:,ipsd)) ! C_a inverse into real domain
        invcov(:,ipsd) = xx
        !do i = 1, nof
-       !   write (4000+ipsd,*) invcov(i,ipsd) ! DEBUG
+       !   write (4000+id*100+ipsd,*) i, invcov(i,ipsd) ! DEBUG
        !end do
     end do
 
     !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
     !$OMP   DEFAULT(SHARED) PRIVATE(idet,ichunk,noba,kstart,ipsd,pid,blockm,&
-    !$OMP                           i,j,k,n,neg,ierr,offset,nbandmin)
+    !$OMP                           i,j,k,n,neg,ierr,nbandmin)
     do idet = 1,nodetectors
 
        !$OMP PARALLEL DO IF (nodetectors < nthreads) &
        !$OMP   DEFAULT(SHARED) PRIVATE(ichunk,noba,kstart,ipsd,pid,blockm,&
-       !$OMP                           i,j,k,n,neg,ierr,offset,nbandmin)
+       !$OMP                           i,j,k,n,neg,ierr,nbandmin)
        do ichunk = first_chunk, last_chunk
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(first_chunk:ichunk-1))
@@ -809,7 +827,7 @@ CONTAINS
           !end do
 
           blockm = spread( invcov(1:nbandmin+1,ipsd), 2, noba )
-          blockm(1,:) = blockm(1,:) + nna(kstart+1:kstart+noba,idet) + offset
+          blockm(1,:) = blockm(1,:) + nna(kstart+1:kstart+noba,idet)
 
           !Cholesky decompose
 
@@ -842,42 +860,6 @@ CONTAINS
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 
     if (info.ge.6) write(*,idf) ID,'Done'
-
-  CONTAINS
-
-
-    RECURSIVE SUBROUTINE cholesky(aa,neg,noba)
-      !Cholesky factorize one block of the preconditioner, corresponding to one pointing period.
-      !The block is a band diagonal matrix of rank NOBA and with NBAND subdiagonals.
-      !A column of array AA holds a row of the actual matrix A:
-      !Element AA(i,j) holds A[j,j+1-i]. This allows a faster memory access.
-      !A(i,j) is stored in AA(i-j+1,i)  (i>=j)
-
-      integer,intent(in) :: noba
-      real(dp), intent(inout) :: aa(nband+1,noba)
-      logical,intent(out) :: neg
-      integer :: i, k, j
-
-      neg = .false.
-      do j = 1,noba
-         do i = 0,min(nband,noba-j)
-            do k = 1,min(nband-i,j-1)
-               aa(i+1,j+i) = aa(i+1,j+i)-aa(i+1+k,j+i)*aa(k+1,j)
-            enddo
-            if (i==0) then
-               if (aa(1,j).gt.0) then
-                  aa(1,j) = sqrt(aa(1,j))
-               else
-                  neg = .true.
-                  exit
-               endif
-            else
-               aa(i+1,j+i) = aa(i+1,j+i)/aa(1,j)
-            endif
-         enddo
-      enddo
-
-    END SUBROUTINE cholesky
 
   END SUBROUTINE construct_preconditioner
 
@@ -1011,33 +993,6 @@ CONTAINS
     end if
 
     cputime_precond = cputime_precond + get_time(16)
-
-  CONTAINS
-
-    RECURSIVE SUBROUTINE cholesky_solve(x,b,aa,ad,noba) ! recursive attribute will help ensure thread safety
-
-      integer,intent(in) :: noba
-      real(dp),intent(out) :: x(noba)
-      real(sp),intent(in)  :: aa(nband,noba)
-      real(dp),intent(in)  :: ad(noba),b(noba)
-      integer              :: k, j
-
-      do j = 1,noba
-         x(j) = b(j)
-         do k = 1,min(nband,j-1)
-            x(j) = x(j) - aa(k,j)*x(j-k)
-         end do
-         x(j) = x(j) * ad(j)
-      end do
-
-      do j = noba,1,-1
-         do k = 1,min(nband,noba-j)
-            x(j) = x(j) - aa(k,j+k)*x(j+k)
-         end do
-         x(j) = x(j) * ad(j)
-      end do
-
-    END SUBROUTINE cholesky_solve
 
   END SUBROUTINE preconditioning_band
 
