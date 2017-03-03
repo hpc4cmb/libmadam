@@ -270,8 +270,6 @@ CONTAINS
        read(value,*,iostat=ierr) mode_detweight    
     case ('flag_by_horn')
        read(value,*,iostat=ierr) flag_by_horn
-    case ('dist_by_obs')
-       read(value,*,iostat=ierr) dist_by_obs
     case ('write_cut')
        read(value,*,iostat=ierr) write_cut
     case ('checknan')
