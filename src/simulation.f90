@@ -87,7 +87,6 @@ MODULE simulation
   ! They are defined here, but filled by the read_data module
 
   ! File/object sizes as a number of samples
-  integer(idp)             :: nosamples_simulation = -1  ! Total
   integer(idp),allocatable :: nosamples_file(:)          ! Samples/file
 
 END MODULE simulation

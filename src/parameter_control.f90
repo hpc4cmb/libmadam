@@ -309,15 +309,12 @@ CONTAINS
     use_all_data = .true.
 
     istart_mission = 0
-    nosamples_tot = nosamples_simulation
     use_all_data = .true.
 
     if (id == 0 .and. info > 2) then
        write(*,*)
        write(*,'(x,a,t24,"= ",i12)') 'istart_mission',istart_mission
        write(*,'(x,a,t24,"= ",i12)') 'nosamples_tot', nosamples_tot
-       write(*,'(x,a,t24,"= ",i12)') &
-            'nosamples_simulation',nosamples_simulation
     end if
 
     ! Non-integer baseline length allowed in standard mode + use_pntperiods=T

@@ -308,9 +308,9 @@ CONTAINS
     integer(i8b) :: my_n_samp, n, len
     character(len=256) :: name
 
-    integer :: iperiod
+    integer :: iperiod, idet
     integer, parameter :: N_PERIOD_MAX=1e6
-    integer(i8b) :: my_lengths(N_PERIOD_MAX), i, days, hours, minutes
+    integer(i8b) :: my_lengths(N_PERIOD_MAX), i, days, hours, minutes, ngood, nflag
     real(dp) :: seconds
     real(c_double) :: overlap
 
@@ -320,7 +320,6 @@ CONTAINS
 
     ! count the number of samples and intervals
 
-    nosamples_simulation = 0
     n_chunk = nperiod
     my_n_samp = nsamp
     overlap = 0
@@ -382,6 +381,21 @@ CONTAINS
        end do
     end if
 
+    ! Count the flagged and unflagged samples
+    ngood = 0
+    nflag = 0
+    do idet = 1,nodetectors
+       do i = 1, nsamp
+          if (pixels(i,idet) < 0) then
+             nflag = nflag + 1
+          else
+             ngood = ngood + 1
+          end if
+       end do
+    end do
+    call sum_mpi(ngood)
+    call sum_mpi(nflag)
+
     ! longest data span per task
 
     nosamples_proc = my_n_samp
@@ -393,10 +407,10 @@ CONTAINS
 
     nosamples_tot = nosamples_proc
     call sum_mpi(nosamples_tot)
-    nosamples_simulation = nosamples_tot
 
     if (id == 0 .and. info > 0) then
-       write (*,'(a,i0)') 'Total number of samples: ', nosamples_tot
+       write (*,'(a,i0)') 'Total number of samples (single detector): ', nosamples_tot
+       write (*,'(a,f7.3," %")') 'Flagged fraction (all detectors): ', nflag*100. / (ngood+nflag)
        write (*,'(a,i0)') 'Total number of pointing periods: ', nopntperiods
        write (*,'(a,i0)') 'Max number of samples per task: ', nosamples_proc_max
     end if
