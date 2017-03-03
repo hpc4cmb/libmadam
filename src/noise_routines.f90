@@ -540,7 +540,13 @@ CONTAINS
 
       end if
 
-      spectrum = spectrum - plateau * .999999 ! subtract with a small margin
+      if ( radiometers ) then
+         ! subtract with a small margin
+         spectrum = spectrum - plateau * .999999
+      else
+         ! subtract with a larger margin
+         spectrum = spectrum - plateau * .99
+      end if
 
       if ( any( spectrum <= 0 ) ) then
          loop_bins : do i = 1, nof
