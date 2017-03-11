@@ -172,6 +172,7 @@ contains
     end select
 
     call init_parameters
+
     call init_parallelization
 
     subchunk_start = isubchunk

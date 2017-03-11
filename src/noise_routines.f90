@@ -99,7 +99,7 @@ CONTAINS
     deallocate( x, y )
 
   end subroutine interpolate_psd
-  
+
 
   function psd_index( idet, starttime ) result( ipsd )
     !
@@ -107,7 +107,7 @@ CONTAINS
     !
     integer :: idet, ipsd
     real(dp) :: starttime
-    
+
     do ipsd = 1,npsdtot
        if ( psddet(ipsd) == idet .and. psdstart(ipsd) <= starttime &
             .and. psdstop(ipsd) >= starttime ) return
@@ -117,7 +117,6 @@ CONTAINS
     return
 
   end function psd_index
-    
 
 
   function psd_index_det( idet, starttime ) result( ipsd )
@@ -143,23 +142,8 @@ CONTAINS
        ipsd = ipsd + 1
     end do
 
-    !do ipsd = 1, detectors(idet)%npsd
-       !if ( toast_psd_start( detectors(idet)%psds(ipsd) ) <= starttime .and. &
-       !     toast_psd_stop( detectors(idet)%psds(ipsd) ) >= starttime ) return
-    !end do
-
-    ! This does not work unless the filter is built...
-    !ipsd = 0
-    !do ipsdtot = 1,npsdtot
-    !   if ( psddet(ipsdtot) == idet ) then
-    !      ipsd = ipsd + 1             
-    !      if ( psdstart(ipsdtot) <= starttime .and. psdstop(ipsdtot) >= starttime ) return
-    !   end if
-    !end do
-
-    ipsd = -1
     return
-       
+
   end function psd_index_det
 
 

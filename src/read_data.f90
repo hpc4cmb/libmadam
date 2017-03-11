@@ -310,7 +310,8 @@ CONTAINS
 
     integer :: iperiod, idet
     integer, parameter :: N_PERIOD_MAX=1e6
-    integer(i8b) :: my_lengths(N_PERIOD_MAX), i, days, hours, minutes, ngood, nflag
+    integer(i8b) :: my_lengths(N_PERIOD_MAX), i, days, hours, minutes
+    integer(i8b) :: ngood, nflag, nzeroweight
     real(dp) :: seconds
     real(c_double) :: overlap
 
@@ -382,6 +383,17 @@ CONTAINS
     end if
 
     ! Count the flagged and unflagged samples
+    nzeroweight = 0
+    do idet = 1,nodetectors
+       do i = 1, nsamp
+          if (all(weights(:,i,idet) == 0) .and. .not. pixels(i,idet) < 0) then
+             nzeroweight = nzeroweight + 1
+             pixels(i,idet) = -1
+          end if
+       end do
+    end do
+    call sum_mpi(nzeroweight)
+
     ngood = 0
     nflag = 0
     do idet = 1,nodetectors
@@ -410,6 +422,7 @@ CONTAINS
 
     if (id == 0 .and. info > 0) then
        write (*,'(a,i0)') 'Total number of samples (single detector): ', nosamples_tot
+       write (*,'(a,f7.3," %")') 'Zero-weight fraction (all detectors): ', nzeroweight*100. / (ngood+nflag)
        write (*,'(a,f7.3," %")') 'Flagged fraction (all detectors): ', nflag*100. / (ngood+nflag)
        write (*,'(a,i0)') 'Total number of pointing periods: ', nopntperiods
        write (*,'(a,i0)') 'Max number of samples per task: ', nosamples_proc_max

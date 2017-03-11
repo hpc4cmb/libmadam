@@ -83,7 +83,12 @@ CONTAINS
              noba = noba_short_pp(ichunk)
              kstart = sum(noba_short_pp(first_chunk:ichunk-1))
              ipsd = psd_index_det( idet, baselines_short_time(kstart+1) )
-             if ( ipsd < 0 ) cycle
+             if ( ipsd < 0 ) then
+                print *, id,' : WARNING: there is no PSD for det # ', idet, ' at ', &
+                     baselines_short_time(kstart+1), '. npsd = ', detectors(idet)%npsd, &
+                     ', start times = ',detectors(idet)%psdstarts
+                cycle
+             end if
              detweight = detectors(idet)%weights(ipsd)
              if (detweight == 0) cycle       
              do k = kstart+1,kstart+noba
@@ -102,7 +107,12 @@ CONTAINS
              noba = noba_short_pp(ichunk)
              kstart = sum(noba_short_pp(first_chunk:ichunk-1))
              ipsd = psd_index_det( idet, baselines_short_time(kstart+1) )
-             if ( ipsd < 0 ) cycle
+             if ( ipsd < 0 ) then
+                print *, id,' : WARNING: there is no PSD for det # ', idet, ' at ', &
+                     baselines_short_time(kstart+1), '. npsd = ', detectors(idet)%npsd, &
+                     ', start times = ',detectors(idet)%psdstarts
+                cycle
+             end if
              detweight = detectors(idet)%weights(ipsd)
              if (detweight == 0) cycle
              sqrtweight = sqrt(detweight)
@@ -128,7 +138,12 @@ CONTAINS
              noba = noba_short_pp(ichunk)
              kstart = sum(noba_short_pp(first_chunk:ichunk-1))
              ipsd = psd_index_det( idet, baselines_short_time(kstart+1) )
-             if ( ipsd < 0 ) cycle
+             if ( ipsd < 0 ) then
+                print *, id,' : WARNING: there is no PSD for det # ', idet, ' at ', &
+                     baselines_short_time(kstart+1), '. npsd = ', detectors(idet)%npsd, &
+                     ', start times = ',detectors(idet)%psdstarts
+                cycle
+             end if
              detweight = detectors(idet)%weights(ipsd)
              if (detweight == 0) cycle       
              do k = kstart+1,kstart+noba
@@ -293,7 +308,12 @@ CONTAINS
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(first_chunk:ichunk-1))
           ipsd = psd_index_det( idet, baselines_short_time(kstart+1) )
-          if ( ipsd < 0 ) cycle
+          if ( ipsd < 0 ) then
+             print *, id,' : WARNING: there is no PSD for det # ', idet, ' at ', &
+                  baselines_short_time(kstart+1), '. npsd = ', detectors(idet)%npsd, &
+                  ', start times = ',detectors(idet)%psdstarts
+             cycle
+          end if
           detweight = detectors(idet)%weights(ipsd)
           if (detweight == 0) cycle
           do k = kstart+1,kstart+noba
@@ -359,7 +379,12 @@ CONTAINS
              noba = noba_short_pp(ichunk)
              kstart = sum(noba_short_pp(first_chunk:ichunk-1))
              ipsd = psd_index_det( idet, baselines_short_time(kstart+1) )
-             if ( ipsd < 0 ) cycle
+             if ( ipsd < 0 ) then
+                print *, id,' : WARNING: there is no PSD for det # ', idet, ' at ', &
+                     baselines_short_time(kstart+1), '. npsd = ', detectors(idet)%npsd, &
+                     ', start times = ',detectors(idet)%psdstarts
+                cycle
+             end if
              detweight = detectors(idet)%weights(ipsd)
              if (detweight == 0) cycle
              do k = kstart+1,kstart+noba
