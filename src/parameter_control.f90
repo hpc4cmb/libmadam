@@ -601,17 +601,17 @@ CONTAINS
     write (*,fk) 'write_cut', write_cut
     select case (basis_func)
     case (basis_poly)
-       write (*,fs) 'basis_func', 'Polynomial', 'Destriping funtion basis'
+       write (*,fs) 'basis_func', 'Polynomial', 'Destriping function basis'
     case (basis_fourier)
-       write (*,fs) 'basis_func', 'Fourier', 'Destriping funtion basis'
+       write (*,fs) 'basis_func', 'Fourier', 'Destriping function basis'
     case (basis_cheby)
-       write (*,fs) 'basis_func', 'Chebyshev', 'Destriping funtion basis'
+       write (*,fs) 'basis_func', 'Chebyshev', 'Destriping function basis'
     case (basis_legendre)
-       write (*,fs) 'basis_func', 'Legendre', 'Destriping funtion basis'
+       write (*,fs) 'basis_func', 'Legendre', 'Destriping function basis'
     case default
        call abort_mpi('Unknown function basis')
     end select
-    write (*,fi) 'basis_order', basis_order, 'Destriping funtion order'
+    write (*,fi) 'basis_order', basis_order, 'Destriping function order'
 
     write (*,*)
     write (*,fi) 'ntasks',ntasks,'Number of processes'
