@@ -549,13 +549,14 @@ contains
 
 
   subroutine destripe_with_cache( comm, ndet, nsamp, nnz, &
-       timestamps, pix, pixweights, signal ) bind( c, name='destripe_with_cache' )
+       timestamps, pix, pixweights, signal, outpath ) bind( c, name='destripe_with_cache' )
 
     integer(c_int), intent(in), value :: comm ! MPI communicator
 
     integer(c_long), intent(in), value :: ndet
     integer(c_long), intent(in), value :: nsamp
     integer(c_long), intent(in), value :: nnz
+    character(kind=c_char), intent(in) :: outpath(*)
 
     ! TOD
 
@@ -564,7 +565,7 @@ contains
     type(c_ptr), intent(in), value :: pixweights
     type(c_ptr), intent(in), value :: signal
 
-    integer :: ierr, idet, i, pixmin, pixmax
+    integer :: ierr, idet, i, pixmin, pixmax, n
 
     ! set up MPI
 
@@ -592,6 +593,21 @@ contains
 
     if (.not. cached) call abort_mpi('destripe_with_cache called with empty caches.')
     if (temperature_only .and. nnz /= 1) call abort_mpi('temperature_only=T but the pointing weights are polarized')
+
+    ! Parse the output path
+
+    n = 1
+    do while ( outpath(n) /= C_NULL_CHAR )
+       n = n + 1
+    end do
+
+    if ( n > 1 ) then
+       path_output = ''
+       do i = 1,n-1
+          path_output(i:i) = outpath(i)
+       end do
+       path_output = trim( adjustl( path_output ) )
+    end if
 
     nmap = nnz
 

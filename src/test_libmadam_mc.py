@@ -203,6 +203,15 @@ if __name__ == '__main__':
 
     # MC Madam call again with signal # 1, This should produce the same result as the first call.
 
+    outpath = './maps/2/'
+    if itask == 0:
+        if not os.path.isdir(outpath):
+            os.mkdir(outpath)
+            for fn in ['maps/2/madam_pytest_hmap.fits', 'maps/2/madam_pytest_bmap.fits']:
+                if os.path.isfile(fn):
+                    os.remove(fn)
+    outpath = outpath.encode('ascii')
+
     _madam.destripe_with_cache(
         fcomm,
         ctypes.c_long( ndet ),
@@ -212,6 +221,7 @@ if __name__ == '__main__':
         pixels.ctypes.data_as( ctypes.POINTER( ctypes.c_long ) ),
         pixweights.ctypes.data_as( ctypes.POINTER( ctypes.c_double ) ),
         signal.ctypes.data_as( ctypes.POINTER( ctypes.c_double ) ),
+        ctypes.c_char_p( outpath ),
     )
 
     # Test clearing the caches twice
