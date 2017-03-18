@@ -1132,6 +1132,9 @@ contains
     ncc = ncc_save
     concatenate_messages = concatenate_messages_save
 
+    surveyflags = .true.
+    detflags = .true.
+
     cputime_subset = cputime_subset + get_time_and_reset(1)
 
   end subroutine run_subsets
