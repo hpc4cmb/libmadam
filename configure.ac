@@ -4,7 +4,7 @@ dnl
 dnl +------------------------
 dnl | Initialize package info
 dnl +------------------------
-AC_INIT([libmadam], [0.2.1], [github:hpc4cmb/libmadam])
+AC_INIT([libmadam], [0.2.2], [github:hpc4cmb/libmadam])
 AC_CONFIG_SRCDIR([Makefile.am])
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config.h)
