@@ -6,6 +6,7 @@ import ctypes
 import os
 import sys
 import glob
+import shutil
 
 _libdir = os.path.dirname( __file__ )
 if not os.path.isdir( os.path.join( _libdir, '.libs' ) ):
@@ -88,13 +89,13 @@ if __name__ == '__main__':
     pars[ 'write_hits' ] = True
     pars[ 'kfilter' ] = True
     pars[ 'file_root' ] = 'madam_pytest'
-    pars[ 'path_output' ] = './maps/'
+    pars[ 'path_output' ] = './mc_maps/'
     pars[ 'mcmode' ] = False
 
     if itask == 0:
-        if not os.path.isdir('maps'):
-            os.mkdir('maps')
-        for fn in ['maps/madam_pytest_hmap.fits', 'maps/madam_pytest_bmap.fits']:
+        shutil.rmtree('mc_maps', ignore_errors=True)
+        os.mkdir('mc_maps')
+        for fn in ['mc_maps/madam_pytest_hmap.fits', 'mc_maps/madam_pytest_bmap.fits']:
             if os.path.isfile(fn):
                 os.remove(fn)
 
@@ -144,6 +145,21 @@ if __name__ == '__main__':
     psdvals = np.ones( npsdval )
 
     signal_copy = signal.copy()
+
+    # Reference maps for checking
+
+    hmap = np.zeros( npix, dtype=np.int64 )
+    bmap = np.zeros( npix, dtype=np.float64 )
+
+    for p, s in zip( pixels, signal ):
+        hmap[ p ] += 1
+        bmap[ p ] += s
+
+    hmap_tot = np.zeros( npix, dtype=np.int64 )
+    bmap_tot = np.zeros( npix, dtype=np.float64 )    
+
+    comm.Reduce( hmap, hmap_tot, op=MPI.SUM, root=0 )
+    comm.Reduce( bmap, bmap_tot, op=MPI.SUM, root=0 )
 
     # Basic Madam call with signal # 1
 
@@ -203,11 +219,11 @@ if __name__ == '__main__':
 
     # MC Madam call again with signal # 1, This should produce the same result as the first call.
 
-    outpath = './maps/2/'
+    outpath = './mc_maps/2/'
     if itask == 0:
         if not os.path.isdir(outpath):
             os.mkdir(outpath)
-            for fn in ['maps/2/madam_pytest_hmap.fits', 'maps/2/madam_pytest_bmap.fits']:
+            for fn in ['mc_maps/2/madam_pytest_hmap.fits', 'mc_maps/2/madam_pytest_bmap.fits']:
                 if os.path.isfile(fn):
                     os.remove(fn)
     outpath = outpath.encode('ascii')
@@ -230,19 +246,6 @@ if __name__ == '__main__':
     
     _madam.clear_caches()
         
-    hmap = np.zeros( npix, dtype=np.int64 )
-    bmap = np.zeros( npix, dtype=np.float64 )
-
-    for p, s in zip( pixels, signal ):
-        hmap[ p ] += 1
-        bmap[ p ] += s
-
-    hmap_tot = np.zeros( npix, dtype=np.int64 )
-    bmap_tot = np.zeros( npix, dtype=np.float64 )    
-
-    comm.Reduce( hmap, hmap_tot, op=MPI.SUM, root=0 )
-    comm.Reduce( bmap, bmap_tot, op=MPI.SUM, root=0 )
-
     if itask == 0 and hp is not None:
         good = hmap_tot != 0
         bmap_tot[ good ] /= hmap_tot[ good ]
@@ -253,8 +256,8 @@ if __name__ == '__main__':
         hp.write_map( 'hits.fits', hmap, nest=True )
         hp.write_map( 'binned.fits', bmap, nest=True )
 
-        madam_hmap = hp.read_map( 'maps/madam_pytest_hmap.fits', nest=True )
-        madam_bmap = hp.read_map( 'maps/madam_pytest_bmap.fits', nest=True )
+        madam_hmap = hp.read_map( 'mc_maps/madam_pytest_hmap.fits', nest=True )
+        madam_bmap = hp.read_map( 'mc_maps/madam_pytest_bmap.fits', nest=True )
 
         good = hmap != 0
 
@@ -274,8 +277,6 @@ if __name__ == '__main__':
             print('Binned map check PASSED')
 
     if itask == 0:
-        for fn in glob.glob( 'maps/madam_pytest*fits'):
-            os.remove(fn)
+        shutil.rmtree('mc_maps')
 
     print('Done')
-

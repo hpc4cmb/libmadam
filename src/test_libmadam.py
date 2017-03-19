@@ -6,6 +6,7 @@ import ctypes
 import os
 import sys
 import glob
+import shutil
 
 _libdir = os.path.dirname( __file__ )
 if not os.path.isdir( os.path.join( _libdir, '.libs' ) ):
@@ -35,7 +36,11 @@ def dict2parstring( d ):
 
     s = ''
     for key, value in d.items():
-        s += '{} = {};'.format( key, value )
+        if key in ['detset', 'detset_nopol', 'survey']:
+            for separate_value in value:
+                s += '{} = {};'.format( key, separate_value )
+        else:
+            s += '{} = {};'.format( key, value )
 
     return s.encode('ascii')
 
@@ -74,6 +79,8 @@ if __name__ == '__main__':
     nside = 8
     npix = 12*nside**2
     fsample = 32.5
+    nsamp = 1000 # number of time ordered data samples
+    nnz = 1 # number or non zero pointing weights, typically 3 for IQU
 
     pars = {}
     pars[ 'base_first' ] = 1.0
@@ -88,15 +95,25 @@ if __name__ == '__main__':
     pars[ 'write_hits' ] = True
     pars[ 'kfilter' ] = True
     pars[ 'file_root' ] = 'madam_pytest'
-    pars[ 'path_output' ] = './maps/'
+    pars[ 'path_output' ] = './pymaps/'
     pars[ 'iter_max' ] = 100
-    pars[ 'nsubchunk' ] = 2
+    pars[ 'nsubchunk' ] = 0
+
+    #pars[ 'detset' ] = ['LFI27 : LFI27M, LFI27S',
+    #                    'LFI28 : LFI28M, LFI28S']
+    pars[ 'survey' ] = ['hm1 : {} - {}'.format(0, nsamp/2),
+                        #'hm2 : {} - {}'.format(nsamp/2, nsamp),
+                        #'odd : {} - {}, {} - {}'.format(0, nsamp/4, nsamp/2, 3*nsamp/4),
+                        #'even : {} - {}, {} - {}'.format(nsamp/4, nsamp/2, 3*nsamp/4, nsamp)
+    ]
+    pars[ 'bin_subsets' ] = False
 
     if itask == 0:
-        if not os.path.isdir('maps'):
-            os.mkdir('maps')
-        for fn in ['maps/madam_pytest_hmap.fits', 'maps/madam_pytest_bmap.fits']:
+        shutil.rmtree('pymaps', ignore_errors=True)
+        os.mkdir('pymaps')
+        for fn in ['pymaps/madam_pytest_hmap.fits', 'pymaps/madam_pytest_bmap.fits']:
             if os.path.isfile(fn):
+                print('Removing old {}'.format(fn))
                 os.remove(fn)
 
     parstring = dict2parstring( pars )
@@ -107,10 +124,6 @@ if __name__ == '__main__':
     ndet = len(dets)
 
     weights = np.ones( ndet, dtype='double' )
-
-    nsamp = 1000 # number of time ordered data samples
-
-    nnz = 1 # number or non zero pointing weights, typically 3 for IQU
 
     timestamps = np.zeros( nsamp, dtype='double' )
     timestamps[:] = np.arange( nsamp ) + itask*nsamp
@@ -140,6 +153,21 @@ if __name__ == '__main__':
     npsdval = npsdbin * npsdtot
     psdvals = np.ones( npsdval )
 
+    # Reference maps for checking
+
+    hmap = np.zeros( npix, dtype=np.int64 )
+    bmap = np.zeros( npix, dtype=np.float64 )
+
+    for p, s in zip( pixels, signal ):
+        hmap[ p ] += 1
+        bmap[ p ] += s
+
+    hmap_tot = np.zeros( npix, dtype=np.int64 )
+    bmap_tot = np.zeros( npix, dtype=np.float64 )    
+
+    comm.Reduce( hmap, hmap_tot, op=MPI.SUM, root=0 )
+    comm.Reduce( bmap, bmap_tot, op=MPI.SUM, root=0 )
+
     for i in range(2): # Ensure we can successfully call Madam twice with different inputs
         _madam.destripe(
             fcomm,
@@ -167,19 +195,6 @@ if __name__ == '__main__':
         pars[ 'nside_map' ] = nside
         parstring = dict2parstring( pars )
 
-    hmap = np.zeros( npix, dtype=np.int64 )
-    bmap = np.zeros( npix, dtype=np.float64 )
-
-    for p, s in zip( pixels, signal ):
-        hmap[ p ] += 1
-        bmap[ p ] += s
-
-    hmap_tot = np.zeros( npix, dtype=np.int64 )
-    bmap_tot = np.zeros( npix, dtype=np.float64 )    
-
-    comm.Reduce( hmap, hmap_tot, op=MPI.SUM, root=0 )
-    comm.Reduce( bmap, bmap_tot, op=MPI.SUM, root=0 )
-
     if itask == 0 and hp is not None:
         good = hmap_tot != 0
         bmap_tot[ good ] /= hmap_tot[ good ]
@@ -190,8 +205,8 @@ if __name__ == '__main__':
         hp.write_map( 'hits.fits', hmap, nest=True )
         hp.write_map( 'binned.fits', bmap, nest=True )
 
-        madam_hmap = hp.read_map( 'maps/madam_pytest_hmap.fits', nest=True )
-        madam_bmap = hp.read_map( 'maps/madam_pytest_bmap.fits', nest=True )
+        madam_hmap = hp.read_map( 'pymaps/madam_pytest_hmap.fits', nest=True )
+        madam_bmap = hp.read_map( 'pymaps/madam_pytest_bmap.fits', nest=True )
 
         good = hmap != 0
 
@@ -211,8 +226,6 @@ if __name__ == '__main__':
             print('Binned map check PASSED')
 
     if itask == 0:
-        for fn in glob.glob( 'maps/madam_pytest*fits'):
-            os.remove(fn)
+        shutil.rmtree('pymaps')
 
     print('Done')
-
