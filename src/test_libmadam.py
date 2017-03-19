@@ -97,7 +97,7 @@ if __name__ == '__main__':
     pars[ 'file_root' ] = 'madam_pytest'
     pars[ 'path_output' ] = './pymaps/'
     pars[ 'iter_max' ] = 100
-    pars[ 'nsubchunk' ] = 0
+    pars[ 'nsubchunk' ] = 2
 
     #pars[ 'detset' ] = ['LFI27 : LFI27M, LFI27S',
     #                    'LFI28 : LFI28M, LFI28S']
@@ -106,7 +106,7 @@ if __name__ == '__main__':
                         #'odd : {} - {}, {} - {}'.format(0, nsamp/4, nsamp/2, 3*nsamp/4),
                         #'even : {} - {}, {} - {}'.format(nsamp/4, nsamp/2, 3*nsamp/4, nsamp)
     ]
-    pars[ 'bin_subsets' ] = False
+    pars[ 'bin_subsets' ] = True
 
     if itask == 0:
         shutil.rmtree('pymaps', ignore_errors=True)
