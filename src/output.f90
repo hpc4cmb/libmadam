@@ -1234,7 +1234,7 @@ CONTAINS
 
     if (len_trim(file_leakmatrix) <= 0) return
 
-    outfile = trim(file_leakmatrix) // trim(detector_name) // '.fits'
+    outfile = trim(file_leakmatrix) // '_' // trim(detector_name) // '.fits'
 
     call reset_time(10)
 
@@ -1316,7 +1316,7 @@ CONTAINS
           nhit = nosubpix_map
        end if
 
-       coloffset = coloffset - ncc
+       coloffset = coloffset - ncol
        do imap = 1,nmap
           do jmap = 1,nmap
 

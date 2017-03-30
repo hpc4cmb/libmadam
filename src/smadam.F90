@@ -498,6 +498,7 @@ contains
 
           call write_time('Waiting',                cputime_wait)
           call write_time('Building pixel matrices',cputime_build_matrix)
+          call write_time('Multiplying leakage matrices',cputime_leakmatrix)
           call write_time('Sending pixel matrices',cputime_send_matrix)
           call write_time('Inverting pixel matrices',cputime_inv)
           call write_time('Binning TOD',            cputime_bin_maps)
@@ -863,6 +864,7 @@ contains
 
        call write_time('Waiting',                cputime_wait)
        call write_time('Building pixel matrices',cputime_build_matrix)
+       call write_time('Multiplying leakage matrices',cputime_leakmatrix)
        call write_time('Sending pixel matrices',cputime_send_matrix)
        call write_time('Inverting pixel matrices',cputime_inv)
        call write_time('Binning TOD',            cputime_bin_maps)
@@ -1458,6 +1460,7 @@ contains
     cputime_read = 0
     cputime_wait = 0
     cputime_build_matrix = 0
+    cputime_leakmatrix = 0
     cputime_send_matrix = 0
     cputime_inv = 0
     cputime_bin_maps = 0

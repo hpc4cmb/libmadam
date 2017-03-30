@@ -515,8 +515,10 @@ CONTAINS
           end if
           !$OMP END PARALLEL
 
-          call mpi_alltoallv( submaps_send, sendcounts*nmap0*nosubpix, sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-               submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
+          call mpi_alltoallv(submaps_send, sendcounts*nmap0*nosubpix, &
+               sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
+               submaps_recv, recvcounts*nmap0*nosubpix, &
+               recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr)
 
           if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect cc')
 

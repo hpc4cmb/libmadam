@@ -51,12 +51,12 @@ CONTAINS
     ! Build and write the detector-specific leakage matrix
     !
     integer, intent(in) :: idet
-    real(dp),intent(in) :: cc(nmap,nmap,0:nopix_map-1)
-    integer, intent(in), optional :: mask(nosubpix_map,nosubmaps)
+    real(dp),intent(inout) :: cc(nmap,nmap,0:nopix_map-1)
+    integer, intent(in) :: mask(nosubpix_map,nosubmaps)
     real(dp) :: cca_dummy(1,1,1)
     logical :: detflags_save(NDETMAX), kfirst_save
     real(dp), allocatable :: cc_det(:,:,:), loccc_save(:,:,:)
-    integer :: ierr, ip
+    integer :: ierr, ip, i, j
 
     if (info == 3 .and. id == 0) &
          write(*,*) 'Building leakage matrices...'
@@ -70,6 +70,7 @@ CONTAINS
 
     allocate(cc_det(nmap,nmap,0:nopix_map-1), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for cc_det')
+    cc_det = 0
     allocate(loccc_save(nmap,nmap,0:nsize_locmap), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for loccc_save')
     loccc_save = loccc
@@ -78,9 +79,22 @@ CONTAINS
 
     call reset_time(10)
 
+    !$OMP PARALLEL DO DEFAULT(NONE) NUM_THREADS(nthreads) &
+    !$OMP   SHARED(nopix_map,nmap,cc_det,cc) &
+    !$OMP   PRIVATE(ip,i,j)
     do ip = 0,nopix_map-1
+       ! Symmetrize the matrices, pixel_matrix only populates
+       ! the upper triangle
+       do i = 1,nmap
+          do j = 1, i-1
+             cc_det(i,j,ip) = cc_det(j,i,ip)
+             cc(i,j,ip) = cc(j,i,ip)
+          end do
+       end do
+       ! multiply the symmetrized matrices
        cc_det(:,:,ip) = matmul(cc(:,:,ip), cc_det(:,:,ip))
     end do
+    !$OMP END PARALLEL DO
     
     cputime_leakmatrix = cputime_leakmatrix + get_time_and_reset(10)
 

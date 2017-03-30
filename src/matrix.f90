@@ -46,7 +46,8 @@ CONTAINS
        nfound = n
     end if
 
-    allocate( eigenvalues(nfound), eigenvectors(nfound,nfound), eigenvectorsT(nfound,nfound), &
+    allocate(eigenvalues(nfound), eigenvectors(nfound,nfound), &
+         eigenvectorsT(nfound,nfound), &
          workspace(10*nfound), good(nfound), stat=ierr )
     if ( ierr /= 0 ) stop 'No room to invert matrices'
 
@@ -60,7 +61,8 @@ CONTAINS
 
     eigenvectors = cc(good,good)
 
-    call dsyev( 'V', 'U', nfound, eigenvectors, nfound, eigenvalues, workspace, 10*nfound, info )
+    call dsyev( 'V', 'U', nfound, eigenvectors, nfound, eigenvalues, workspace, &
+         10*nfound, info )
 
     cdet = product( eigenvalues )
     rcond = minval( eigenvalues ) / maxval( eigenvalues )

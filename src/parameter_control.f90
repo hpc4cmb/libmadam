@@ -15,7 +15,8 @@ MODULE parameter_control
        write_parameters, baseline_times       
 
   real(sp), save, public :: memory_basis_functions = 0
-  character(len=40),parameter :: mstr='(x,a,t32,f9.1," MB")', mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
 
 CONTAINS
 
@@ -73,7 +74,7 @@ CONTAINS
     if ( do_binmap ) file_binmap = trim(subsetname) // '_bmap.fits'
     if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
     if ( do_matrix ) file_matrix = trim(subsetname) // '_wcov_inv.fits'
-    if ( do_leakmatrix ) file_leakmatrix = trim(subsetname) // '_leakmatrix_'
+    if ( do_leakmatrix ) file_leakmatrix = trim(subsetname) // '_leakmatrix'
     if ( do_wcov )   file_wcov   = trim(subsetname) // '_wcov.fits'
     if ( do_base )   file_base   = trim(subsetname) // '_base.fits'
     if ( do_mask )   file_mask   = trim(subsetname) // '_mask.fits'
