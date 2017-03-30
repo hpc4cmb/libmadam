@@ -319,6 +319,8 @@ CONTAINS
        read(value,*,iostat=ierr) do_base
     case ('write_mask')
        read(value,*,iostat=ierr) do_mask
+    case ('write_leakmatrix')
+       read(value,*,iostat=ierr) do_leakmatrix
     case ('unit_tod')
        unit_tod = trim(value)
 

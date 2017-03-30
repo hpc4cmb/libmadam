@@ -52,8 +52,11 @@ module smadam
   integer :: nprocs
 
   integer(i4b) :: subchunk_start, i
-  character(len=SLEN) :: subchunk_file_map, subchunk_file_base, subchunk_file_binmap
-  character(len=SLEN) :: subchunk_file_hit, subchunk_file_mask, subchunk_file_matrix, subchunk_file_wcov
+  character(len=SLEN) :: subchunk_file_map, subchunk_file_base
+  character(len=SLEN) :: subchunk_file_binmap
+  character(len=SLEN) :: subchunk_file_hit, subchunk_file_mask
+  character(len=SLEN) :: subchunk_file_matrix, subchunk_file_leakmatrix
+  character(len=SLEN) :: subchunk_file_wcov
   ! subset mapping
   real(sp) :: cputime_flag_subset=.0, cputime_subset=.0, cputime_write_subset=.0
 
@@ -62,7 +65,8 @@ contains
   subroutine destripe( comm, parstring, ndet, detstring, detweights, &
        nsamp, nnz, timestamps, pix, pixweights, signal, &
        nperiod, periods, &
-       npsd, npsdtot, psdstarts, npsdbin, psdfreqs, npsdval, psdvals ) bind( c, name='destripe' )
+       npsd, npsdtot, psdstarts, npsdbin, psdfreqs, &
+       npsdval, psdvals ) bind( c, name='destripe' )
 
     integer(c_int), intent(in), value :: comm ! MPI communicator
 
@@ -127,13 +131,17 @@ contains
        write (*,*)
     endif
 
-    if (mcmode .and. cached) call abort_mpi('Destripe called while caches are not empty.')
-    if (mcmode .and. nsubchunk > 1) call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
-    if (temperature_only .and. nnz /= 1) call abort_mpi('temperature_only=T but the pointing weights are polarized')
+    if (mcmode .and. cached) &
+         call abort_mpi('Destripe called while caches are not empty.')
+    if (mcmode .and. nsubchunk > 1) &
+         call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
+    if (temperature_only .and. nnz /= 1) &
+         call abort_mpi('temperature_only=T but pointing weights are polarized')
     
     nmap = nnz
 
-    call read_detectors( detstring, ndet, detweights, npsd, npsdtot, psdstarts, npsdbin, psdfreqs, npsdval, psdvals )
+    call read_detectors( detstring, ndet, detweights, npsd, npsdtot, &
+         psdstarts, npsdbin, psdfreqs, npsdval, psdvals )
 
     call c_f_pointer(timestamps, sampletime, (/nsamp/) )
     call c_f_pointer(pix, pixels, (/nsamp, ndet/) )
@@ -152,7 +160,8 @@ contains
        call abort_mpi('Too small pixel number')
     end if
     if (pixmax > 12*nside_max**2-1 ) then
-       print *,'ERROR: largest provided pixel number is ',pixmax, '>', 12*nside_max**2, ', nside = ',nside_max
+       print *,'ERROR: largest provided pixel number is ',pixmax, '>', &
+            12*nside_max**2, ', nside = ',nside_max
        call abort_mpi('Too large pixel number')
     end if
 
@@ -179,9 +188,14 @@ contains
 
     loop_subchunk : do isubchunk = subchunk_start, nsubchunk
 
-       subchunk_file_map = file_map; subchunk_file_binmap = file_binmap
-       subchunk_file_base = file_base; subchunk_file_hit = file_hit; subchunk_file_mask = file_mask
-       subchunk_file_matrix = file_matrix; subchunk_file_wcov = file_wcov
+       subchunk_file_map = file_map
+       subchunk_file_binmap = file_binmap
+       subchunk_file_base = file_base
+       subchunk_file_hit = file_hit
+       subchunk_file_mask = file_mask
+       subchunk_file_matrix = file_matrix
+       subchunk_file_leakmatrix = file_leakmatrix
+       subchunk_file_wcov = file_wcov
 
        tod_is_clean = .false.
 
@@ -196,6 +210,7 @@ contains
           call add_subchunk_id(file_hit, isubchunk, nsubchunk)
           call add_subchunk_id(file_mask, isubchunk, nsubchunk)
           call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
+          call add_subchunk_id(file_leakmatrix, isubchunk, nsubchunk)
           call add_subchunk_id(file_wcov, isubchunk, nsubchunk)
           call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
           call add_subchunk_id(file_base, isubchunk, nsubchunk)
@@ -203,9 +218,14 @@ contains
 
        if (skip_existing) then
           if ( file_exists(file_map) ) then
-             file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
-             file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
-             file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
+             file_map = subchunk_file_map
+             file_binmap = subchunk_file_binmap
+             file_base = subchunk_file_base
+             file_hit = subchunk_file_hit
+             file_mask = subchunk_file_mask
+             file_matrix = subchunk_file_matrix
+             file_leakmatrix = subchunk_file_leakmatrix
+             file_wcov = subchunk_file_wcov
              call reset_timers
              cycle loop_subchunk
           end if
@@ -261,7 +281,8 @@ contains
 
        if ( reassign_submaps ) then
           call tic
-          call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, nosubmaps_max )
+          call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, &
+               nosubmaps_max )
           if (id == 0) call toc('assign_submaps')
        end if
 
@@ -310,10 +331,6 @@ contains
           call tic
           call reduce_pixels_a
           if (id == 0) call toc('reduce_pixels_a')
-
-          !call tic
-          !call update_maptod_transfer(ksubmap)
-          !if (id == 0) call toc('update_maptod_transfer')
 
           if (use_inmask) then
              if ( isubchunk == subchunk_start ) then
@@ -384,6 +401,12 @@ contains
        if (do_binmap) call makemaps(binmap, cc, outmask)
        call makemaps(map, cc, outmask)
        call map_analysis(map, outmask)
+
+       if (do_leakmatrix) then
+          do idet = 1,nodetectors
+             call leakmatrix(idet, cc, outmask)
+          end do
+       end if
        !
        ! output files
        !
@@ -461,10 +484,13 @@ contains
 
           call write_time('Initialization',     cputime_init)
 
-          cputime_read = cputime_read_pointing_periods + cputime_read_detpointing + cputime_read_tod + cputime_read_timestamps
+          cputime_read = cputime_read_pointing_periods &
+               + cputime_read_detpointing + cputime_read_tod &
+               + cputime_read_timestamps
 
           call write_time('I/O', cputime_read)
-          call write_time('- Pointing Period boundaries', cputime_read_pointing_periods)
+          call write_time('- Pointing Period boundaries', &
+               cputime_read_pointing_periods)
           call write_time('- Pointing I/O',  cputime_read_detpointing)
           call write_time('- Time stamp I/O', cputime_read_timestamps)
           call write_time('- TOD I/O', cputime_read_tod)
@@ -478,7 +504,8 @@ contains
           call write_time('Sending binned TOD',     cputime_send_maps)
           call write_time('Counting hits',          cputime_count_hits)
           call write_time('Building preconditioner',cputime_prec_construct)
-          call write_time('Subtract/add baselines', cputime_clean_tod+cputime_unclean_tod)
+          call write_time('Subtract/add baselines', &
+               cputime_clean_tod+cputime_unclean_tod)
 
           call write_time('Initialization (1. phase)', cputime_cga_init)
           call write_time('CG iteration',          cputime_cga)
@@ -494,7 +521,8 @@ contains
           call write_time('- P^T F', cputime_ptf)
           call write_time('- middlematrix', cputime_middlematrix)
           call write_time('- invert middlematrix', cputime_invert_middlematrix)
-          call write_time('- symmetrize middlematrix', cputime_symmetrize_middlematrix)
+          call write_time('- symmetrize middlematrix', &
+               cputime_symmetrize_middlematrix)
           call write_time('- accumulate', cputime_accumulate)
           call write_time('- add white', cputime_white)
           call write_time('- symmetrize', cputime_symmetrize)
@@ -512,9 +540,14 @@ contains
           if (id == 0 .and. info > 0) write(*,*)
        endif
 
-       file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
-       file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
-       file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
+       file_map = subchunk_file_map
+       file_binmap = subchunk_file_binmap
+       file_base = subchunk_file_base
+       file_hit = subchunk_file_hit
+       file_mask = subchunk_file_mask
+       file_matrix = subchunk_file_matrix
+       file_leakmatrix = subchunk_file_leakmatrix
+       file_wcov = subchunk_file_wcov
 
        if (isubchunk == nsubchunk) exit loop_subchunk
 
@@ -591,8 +624,10 @@ contains
        write (*,*)
     endif
 
-    if (.not. cached) call abort_mpi('destripe_with_cache called with empty caches.')
-    if (temperature_only .and. nnz /= 1) call abort_mpi('temperature_only=T but the pointing weights are polarized')
+    if (.not. cached) &
+         call abort_mpi('destripe_with_cache called with empty caches.')
+    if (temperature_only .and. nnz /= 1) &
+         call abort_mpi('temperature_only=T but pointing weights are polarized')
 
     ! Parse the output path
 
@@ -616,9 +651,14 @@ contains
     call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/) )
     call c_f_pointer(signal, tod_stored, (/nsamp, ndet/) )
 
-    subchunk_file_map = file_map; subchunk_file_binmap = file_binmap
-    subchunk_file_base = file_base; subchunk_file_hit = file_hit; subchunk_file_mask = file_mask
-    subchunk_file_matrix = file_matrix; subchunk_file_wcov = file_wcov
+    subchunk_file_map = file_map
+    subchunk_file_binmap = file_binmap
+    subchunk_file_base = file_base
+    subchunk_file_hit = file_hit
+    subchunk_file_mask = file_mask
+    subchunk_file_matrix = file_matrix
+    subchunk_file_leakmatrix = file_leakmatrix
+    subchunk_file_wcov = file_wcov
 
     tod_is_clean = .false.
 
@@ -633,6 +673,7 @@ contains
        call add_subchunk_id(file_hit, isubchunk, nsubchunk)
        call add_subchunk_id(file_mask, isubchunk, nsubchunk)
        call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
+       call add_subchunk_id(file_leakmatrix, isubchunk, nsubchunk)
        call add_subchunk_id(file_wcov, isubchunk, nsubchunk)
        call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
        call add_subchunk_id(file_base, isubchunk, nsubchunk)
@@ -808,10 +849,13 @@ contains
 
        call write_time('Initialization',     cputime_init)
 
-       cputime_read = cputime_read_pointing_periods + cputime_read_detpointing + cputime_read_tod + cputime_read_timestamps
+       cputime_read = cputime_read_pointing_periods &
+            + cputime_read_detpointing + cputime_read_tod &
+            + cputime_read_timestamps
 
        call write_time('I/O', cputime_read)
-       call write_time('- Pointing Period boundaries', cputime_read_pointing_periods)
+       call write_time('- Pointing Period boundaries', &
+            cputime_read_pointing_periods)
        call write_time('- Pointing I/O',  cputime_read_detpointing)
        call write_time('- Time stamp I/O', cputime_read_timestamps)
        call write_time('- TOD I/O', cputime_read_tod)
@@ -825,7 +869,8 @@ contains
        call write_time('Sending binned TOD',     cputime_send_maps)
        call write_time('Counting hits',          cputime_count_hits)
        call write_time('Building preconditioner',cputime_prec_construct)
-       call write_time('Subtract/add baselines', cputime_clean_tod+cputime_unclean_tod)
+       call write_time('Subtract/add baselines', &
+            cputime_clean_tod + cputime_unclean_tod)
 
        call write_time('Initialization (1. phase)', cputime_cga_init)
        call write_time('CG iteration',          cputime_cga)
@@ -849,9 +894,14 @@ contains
 
     endif
 
-    file_map = subchunk_file_map; file_binmap = subchunk_file_binmap
-    file_base = subchunk_file_base; file_hit = subchunk_file_hit; file_mask = subchunk_file_mask
-    file_matrix = subchunk_file_matrix; file_wcov = subchunk_file_wcov
+    file_map = subchunk_file_map
+    file_binmap = subchunk_file_binmap
+    file_base = subchunk_file_base
+    file_hit = subchunk_file_hit
+    file_mask = subchunk_file_mask
+    file_matrix = subchunk_file_matrix
+    file_leakmatrix = subchunk_file_leakmatrix
+    file_wcov = subchunk_file_wcov
 
     call reset_timers
 
@@ -864,15 +914,19 @@ contains
 
   subroutine clear_caches() bind( c, name='clear_caches' )
 
-    if (.not. cached .and. id == 0) write (*,*) 'WARNING: Madam caches are already empty.'
+    if (.not. cached .and. id == 0) &
+         write (*,*) 'WARNING: Madam caches are already empty.'
     
     call free_baselines
     call free_maps
     call free_locmaps
     
-    if (allocated(pntperiods)) deallocate( pntperiods, pntperiod_id, noba_short_pp )
-    if (allocated(baselines_short)) deallocate( baselines_short, base_pntid_short, basis_functions )
-    if (allocated(baselines_short_start)) deallocate( baselines_short_start, baselines_short_stop )
+    if (allocated(pntperiods)) &
+         deallocate( pntperiods, pntperiod_id, noba_short_pp )
+    if (allocated(baselines_short)) &
+         deallocate( baselines_short, base_pntid_short, basis_functions )
+    if (allocated(baselines_short_start)) &
+         deallocate( baselines_short_start, baselines_short_stop )
     if (allocated(prec_diag)) deallocate( prec_diag )
     if (allocated(bandprec)) deallocate( bandprec )
 
@@ -891,9 +945,14 @@ contains
 
     type(detset_type) :: detset
     type(survey_type) :: survey
-    integer(i8b) :: nhit_det, nhit_survey, idetset, idet, jdet, isurvey, i, j, nmap_save, ncc_save
-    logical :: do_binmap_save, kfirst_save, temperature_only_save, concatenate_messages_save
-    character(len=SLEN) :: file_binmap_save, file_hit_save, file_matrix_save, file_wcov_save, file_mask_save, subsetname
+    integer(i8b) :: nhit_det, nhit_survey
+    integer :: idetset, idet, jdet, isurvey
+    integer :: i, j, nmap_save, ncc_save
+    logical :: do_binmap_save, kfirst_save, temperature_only_save
+    logical :: concatenate_messages_save
+    character(len=SLEN) :: file_binmap_save, file_hit_save
+    character(len=SLEN) :: file_matrix_save, file_leakmatrix_save
+    character(len=SLEN) :: file_wcov_save, file_mask_save, subsetname
     character(len=SLEN) :: detsetname, surveyname
     integer(i4b) :: pass, npass
 
@@ -908,6 +967,7 @@ contains
     file_binmap_save = file_binmap
     file_hit_save = file_hit
     file_matrix_save = file_matrix
+    file_leakmatrix_save = file_leakmatrix
     file_wcov_save = file_wcov
     file_mask_save = file_mask
     temperature_only_save = temperature_only
@@ -923,9 +983,12 @@ contains
 
     loop_pass : do pass = 1,npass
 
-       ! First pass produces the binned map, hit map, mask and the noise matrices
-       ! then the baselines are subtracted and the second pass produces the destriped maps
-       ! only if both binned and destriped maps are required are two passes performed
+       ! First pass produces the binned map, hit map, mask and the
+       ! noise matrices then the baselines are subtracted and the
+       ! second pass produces the destriped maps
+       ! 
+       ! only if both binned and destriped maps are required are
+       ! two passes performed
 
        if ( pass == npass .and. do_map ) then
           ! subtract the baselines
@@ -947,7 +1010,8 @@ contains
              surveyflags = .false.
              do i = 1, nosamples_proc
                 do j = 1,survey%nspan
-                   if ( survey%starts(j) <= sampletime(i) .and. sampletime(i) <= survey%stops(j) ) then
+                   if ( survey%starts(j) <= sampletime(i) &
+                        .and. sampletime(i) <= survey%stops(j) ) then
                       surveyflags(i) = .true.
                    end if
                 end do
@@ -966,7 +1030,9 @@ contains
 
           loop_detset : do idetset = 0,ndetset
 
-             if ( idetset == 0 .and. isurvey == 0 ) cycle ! This case is already processed
+             if ( idetset == 0 .and. isurvey == 0 ) then
+                cycle ! This case is already processed
+             end if
 
              call reset_time( 10 )
 
@@ -977,7 +1043,8 @@ contains
                 detflags = .false.
                 do idet = 1,nodetectors
                    do jdet = 1,detset%ndet
-                      if ( trim(detectors(idet)%name) == trim(detset%detectors(jdet)) ) then
+                      if ( trim(detectors(idet)%name) &
+                           == trim(detset%detectors(jdet)) ) then
                          detflags(idet) = .true.
                       end if
                    end do
@@ -992,7 +1059,8 @@ contains
              nhit_det = count(detflags)
              call sum_mpi(nhit_det)
 
-             ! FIXME: we could easily remove all detsets and surveys that do not overlap with present data.
+             ! FIXME: we could easily remove all detsets and surveys that
+             ! do not overlap with present data.
 
              cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
 
@@ -1010,19 +1078,23 @@ contains
 
              if ( id == 0 .and. info > 0 ) then
                 print *,''
-                print *,' *** Processing detset=',trim(detsetname),', survey=',trim(surveyname)
+                print *,' *** Processing detset=', trim(detsetname), &
+                     ', survey=',trim(surveyname)
                 print *,''
              end if
 
              ! construct file names
 
              subsetname = trim(path_output) // trim(file_root)
-             if ( len_trim(detsetname) /= 0 ) subsetname = trim(subsetname) // '_' // trim( detsetname )
-             if ( len_trim(surveyname) /= 0 ) subsetname = trim(subsetname) // '_' // trim( surveyname )
+             if ( len_trim(detsetname) /= 0 ) &
+                  subsetname = trim(subsetname) // '_' // trim( detsetname )
+             if ( len_trim(surveyname) /= 0 ) &
+                  subsetname = trim(subsetname) // '_' // trim( surveyname )
 
              file_binmap = ''
              file_hit = ''
              file_matrix = ''
+             file_leakmatrix = ''
              file_wcov = ''
              file_mask = ''
 
@@ -1033,6 +1105,9 @@ contains
              end if
              if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
              if ( do_matrix ) file_matrix = trim(subsetname) // '_wcov_inv.fits'
+             if ( do_leakmatrix ) then
+                file_leakmatrix = trim(subsetname) // '_leakmatrix.fits'
+             end if
              if ( do_wcov )   file_wcov   = trim(subsetname) // '_wcov.fits'
              if ( do_mask )   file_mask   = trim(subsetname) // '_mask.fits'
 
@@ -1040,20 +1115,25 @@ contains
                 call add_subchunk_id(file_hit, isubchunk, nsubchunk)
                 call add_subchunk_id(file_mask, isubchunk, nsubchunk)
                 call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
+                call add_subchunk_id(file_leakmatrix, isubchunk, nsubchunk)
                 call add_subchunk_id(file_wcov, isubchunk, nsubchunk)
                 call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
              end if
 
              !if ( skip_existing ) then
-             if ( file_exists(file_binmap) .and. .not. concatenate_binary ) file_binmap = ''
+             if ( file_exists(file_binmap) .and. .not. concatenate_binary ) &
+                  file_binmap = ''
              if ( file_exists(file_hit) )    file_hit = ''
              if ( file_exists(file_matrix) ) file_matrix = ''
+             if ( file_exists(file_leakmatrix) ) file_leakmatrix = ''
              if ( file_exists(file_wcov) )   file_wcov = ''
              if ( file_exists(file_mask) )   file_mask = ''
              !end if
 
              if ( len_trim(file_binmap) == 0 .and. len_trim(file_hit) == 0 &
-                  .and. len_trim(file_matrix) == 0 .and. len_trim(file_wcov) == 0 &
+                  .and. len_trim(file_matrix) == 0 &
+                  .and. len_trim(file_leakmatrix) == 0 &
+                  .and. len_trim(file_wcov) == 0 &
                   .and. len_trim(file_mask) == 0 ) cycle
 
              cca = 0
@@ -1065,7 +1145,8 @@ contains
 
              call tic
 
-             ! This is where we actually build the observation matrices and bin the subset data
+             ! This is where we actually build the observation matrices
+             ! and bin the subset data
 
              ! These calls required some tricks to accomodate unpolarized subsets
 
@@ -1081,7 +1162,8 @@ contains
                 cputime_write_subset = cputime_write_subset + get_time(10)
              end if
 
-             call bin_tod(map(1:nmap,:), binmap(1:nmap,:), wamap(1:nmap,:), tod_stored)
+             call bin_tod(map(1:nmap,:), binmap(1:nmap,:), wamap(1:nmap,:), &
+                  tod_stored)
 
              if ( pass == 1 ) then
                 call reset_time(10)
@@ -1092,6 +1174,13 @@ contains
              call invert_pixelmatrix_map(cc(1:nmap,1:nmap,:), outmask, crit)
 
              if ( pass == 1 ) then
+                if (do_leakmatrix) then
+                   do idet = 1,nodetectors
+                      if (detflags(idet)) then
+                         call leakmatrix(idet, cc(1:nmap,1:nmap,:), outmask)
+                      end if
+                   end do
+                end if
                 call reset_time(10)
                 call write_matrix(cc(1:nmap,1:nmap,:), outmask)
                 cputime_write_subset = cputime_write_subset + get_time(10)
@@ -1122,6 +1211,7 @@ contains
     file_binmap = file_binmap_save
     file_hit = file_hit_save
     file_matrix = file_matrix_save
+    file_leakmatrix = file_leakmatrix_save
     file_wcov = file_wcov_save
     file_mask = file_mask_save
 
@@ -1154,8 +1244,10 @@ contains
 
     if ( info > 0 ) then
        if (file_exists .and. id == 0) write (*,*) trim(filename) // ' exists!'
-       if (.not. file_exists .and. id == 0) write (*,*) trim(path_output) // trim(filename) // ' does not exist!'
-       if (.not. file_exists .and. id == 0) write (*,*) trim(filename) // ' does not exist!'
+       if (.not. file_exists .and. id == 0) &
+            write (*,*) trim(path_output) // trim(filename) // ' does not exist!'
+       if (.not. file_exists .and. id == 0) &
+            write (*,*) trim(filename) // ' does not exist!'
     end if
 
   end function file_exists
@@ -1175,15 +1267,19 @@ contains
     i = index(stemp, '.', .true.)
     if (i > 0) then
        if (nsubchunk < 10) then
-          write (filename,'(a,"_sub",i1.1,"of",i1.1,a)') stemp(:i-1), subchunk_id, nsubchunk, trim(stemp(i:))
+          write (filename,'(a,"_sub",i1.1,"of",i1.1,a)') &
+               stemp(:i-1), subchunk_id, nsubchunk, trim(stemp(i:))
        else
-          write (filename,'(a,"_sub",i2.2,"of",i2.2,a)') stemp(:i-1), subchunk_id, nsubchunk, trim(stemp(i:))
+          write (filename,'(a,"_sub",i2.2,"of",i2.2,a)') &
+               stemp(:i-1), subchunk_id, nsubchunk, trim(stemp(i:))
        end if
     else
        if (nsubchunk < 10) then
-          write (filename,'(a,"_sub",i1.1,"of",i1.1)') trim(stemp), subchunk_id, nsubchunk
+          write (filename,'(a,"_sub",i1.1,"of",i1.1)') &
+               trim(stemp), subchunk_id, nsubchunk
        else
-          write (filename,'(a,"_sub",i2.2,"of",i2.2)') trim(stemp), subchunk_id, nsubchunk
+          write (filename,'(a,"_sub",i2.2,"of",i2.2)') &
+               trim(stemp), subchunk_id, nsubchunk
        end if
     end if
 
@@ -1211,7 +1307,8 @@ contains
 
     ! initialize submap parameters for nside_submap_test
     nosubmaps_tot_test = 12*nside_submap_test**2
-    if (id == 0 .and. info > 0) write (*,'(a,"==",i0)') 'nosubmaps_tot_test', nosubmaps_tot_test
+    if (id == 0 .and. info > 0) &
+         write (*,'(a,"==",i0)') 'nosubmaps_tot_test', nosubmaps_tot_test
     nosubmaps_max_test = (nosubmaps_tot_test-1)/ntasks+1
     nosubpix_test = nside_cross**2/nside_submap_test**2
     nosubpix_max_test = nside_max**2/nside_submap_test**2

@@ -29,7 +29,7 @@ int main( int argc, char **argv ) {
   int npix=12*nside*nside;
   double fsample=32.5;
 
-  char *parstring = "base_first=1.0;fsample=32.5;nside_map=8;nside_cross=8;nside_submap=8;write_map=T;write_binmap=T;write_matrix=T;write_wcov=T;write_hits=T;kfilter=T;path_output=./maps/";
+  char *parstring = "base_first=1.0;fsample=32.5;nside_map=8;nside_cross=8;nside_submap=8;write_map=T;write_binmap=T;write_matrix=T;write_wcov=T;write_hits=T;write_leakmatrix=T;kfilter=T;path_output=./maps/";
   char *detstring = "LFI27M;LFI27S;LFI28M;LFI28S";
   long ndet=NDET;
   double detweights[NDET] = {1, 1, 1, 1};

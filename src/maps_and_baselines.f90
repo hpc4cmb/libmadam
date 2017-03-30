@@ -25,7 +25,8 @@ MODULE maps_and_baselines
   real(sp),save, public :: memory_maps      = 0.0
   real(sp),save, public :: memory_baselines = 0.0
 
-  character(len=40),parameter :: mstr='(x,a,t32,f9.1," MB")', mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
 
   public allocate_maps, free_maps,            &
        allocate_baselines, free_baselines, free_mask
