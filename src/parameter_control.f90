@@ -15,7 +15,8 @@ MODULE parameter_control
        write_parameters, baseline_times       
 
   real(sp), save, public :: memory_basis_functions = 0
-  character(len=40),parameter :: mstr='(x,a,t32,f9.1," MB")', mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
 
 CONTAINS
 
@@ -55,13 +56,16 @@ CONTAINS
     ! expand the file names
 
     subsetname = trim(file_root)
-    if ( len_trim( detsets(0)%name ) /= 0 ) subsetname = trim(subsetname) // '_' // trim( detsets(0)%name )
-    if ( len_trim( surveys(0)%name ) /= 0 ) subsetname = trim(subsetname) // '_' // trim( surveys(0)%name )
+    if ( len_trim( detsets(0)%name ) /= 0 ) &
+         subsetname = trim(subsetname) // '_' // trim( detsets(0)%name )
+    if ( len_trim( surveys(0)%name ) /= 0 ) &
+         subsetname = trim(subsetname) // '_' // trim( surveys(0)%name )
 
     file_map    = ''
     file_binmap = ''
     file_hit    = ''
     file_matrix = ''
+    file_leakmatrix = ''
     file_wcov   = ''
     file_base   = ''
     file_mask   = ''
@@ -70,12 +74,13 @@ CONTAINS
     if ( do_binmap ) file_binmap = trim(subsetname) // '_bmap.fits'
     if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
     if ( do_matrix ) file_matrix = trim(subsetname) // '_wcov_inv.fits'
+    if ( do_leakmatrix ) file_leakmatrix = trim(subsetname) // '_leakmatrix'
     if ( do_wcov )   file_wcov   = trim(subsetname) // '_wcov.fits'
     if ( do_base )   file_base   = trim(subsetname) // '_base.fits'
     if ( do_mask )   file_mask   = trim(subsetname) // '_mask.fits'
 
-    ! in a Monte Carlo, the binary maps are appended into a single file rather than storing
-    ! each realization separately
+    ! in a Monte Carlo, the binary maps are appended into a single file
+    ! rather than storing each realization separately
 
     if ( binary_output .and. ( mc_loops > 1 .or. mc_id > 0 ) ) then
        concatenate_binary = .true.
@@ -106,26 +111,19 @@ CONTAINS
              
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd( detectors(idet)%psdfreqs, detectors(idet)%psds(:,ipsd), freqs, data )
+                call interpolate_psd( detectors(idet)%psdfreqs, &
+                     detectors(idet)%psds(:,ipsd), freqs, data )
                 rms = sqrt( data(1) * fsample )
-
-                !if (id == 0 .and. ipsd == 1) then
-                !   sigma = detectors(idet)%sigmas(ipsd)
-                !   write (*,'(2(a,e15.6))') '   ' // trim(detectors(idet)%name) // &
-                !        ' : TOAST rms = ', sigma, ', high freq rms = ', rms
-                !end if
                 detectors(idet)%sigmas(ipsd) = rms
-                !write (100+id,*) trim(detectors(idet)%name), rms ! DEBUG
              end do
           end do
 
           deallocate( freqs, data )
 
-          !call wait_mpi; call close_mpi; stop ! DEBUG
-
        else
 
-          ! Measure the plateau value, VERY Planck Specific but will work for white noise filters
+          ! Measure the plateau value, VERY Planck Specific but will work
+          ! for white noise filters
 
           nbin = 10
           allocate( freqs(nbin), data(nbin) )
@@ -133,14 +131,9 @@ CONTAINS
              
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd( detectors(idet)%psdfreqs, detectors(idet)%psds(:,ipsd), freqs, data )
+                call interpolate_psd( detectors(idet)%psdfreqs, &
+                     detectors(idet)%psds(:,ipsd), freqs, data )
                 rms = sqrt( minval(data) * fsample )
-                
-                !if (id == 0) then
-                !   sigma = detectors(idet)%sigma
-                !   write (*,'(2(a,e15.6))') '   ' // trim(detectors(idet)%name) // &
-                !        ' : TOAST rms = ', sigma, ', high freq rms = ', rms
-                !end if
                 detectors(idet)%sigmas(ipsd) = rms
              end do
           end do
@@ -156,6 +149,11 @@ CONTAINS
     if (len_trim(file_fpdb_supplement) > 0) call parse_fpdb_supplement()
 
     ! Checkings
+
+    if (bin_subsets .or. do_leakmatrix) then
+       ! These options assume that all processes have the same detectors
+       call detector_check()
+    end if
 
     if (nsubchunk < 2) then
        nsubchunk = 0
@@ -274,16 +272,19 @@ CONTAINS
           do idet2 = idet1+1,nodetectors
              horn2 = get_horn(detectors(idet2)%name)
              if (horn1 == horn2) then
+                if (detectors(idet1)%npsd /= detectors(idet2)%npsd) then
+                   call abort_mpi('Detectors in the same horn do not ' &
+                        // 'have the same number of PSDs')
+                end if
 
-                if ( detectors(idet1)%npsd /= detectors(idet2)%npsd ) &
-                     stop 'Detectors in the same horn do not have the same number of PSDs'
-
-                allocate( weights( detectors(idet1)%npsd ) )
+                allocate(weights(detectors(idet1)%npsd))
                 
-                where ( detectors(idet1)%sigmas == 0 .or. detectors(idet2)%sigmas == 0 )
+                where (detectors(idet1)%sigmas == 0 &
+                     .or. detectors(idet2)%sigmas == 0)
                    weights = 0
                 elsewhere
-                   weights = 2 / (detectors(idet1)%sigmas**2 + detectors(idet2)%sigmas**2)
+                   weights = 2 / (detectors(idet1)%sigmas**2 &
+                        + detectors(idet2)%sigmas**2)
                 end where
                 detectors(idet1)%weights = weights
                 detectors(idet2)%weights = weights
@@ -292,7 +293,7 @@ CONTAINS
                      trim(detectors(idet1)%name) // ' and ' // & 
                      trim(detectors(idet2)%name)  // ' for the FIRST period'
 
-                deallocate( weights )
+                deallocate(weights)
              end if
           end do
        end do
@@ -371,7 +372,9 @@ CONTAINS
        do idet = 1,nodetectors
           if (any(isnan(detectors(idet)%weights)) &
                .or. any(isnan(detectors(idet)%sigmas))) then
-             print *,id,' : Bad detector params (NaN in sigmas or weights) : ',detectors(idet)%name
+             print *, id, &
+                  ' : Bad detector params (NaN in sigmas or weights) : ', &
+                  detectors(idet)%name
           end if
        end do
     end if
@@ -417,7 +420,8 @@ CONTAINS
          i = 1
          do ifield = 1,2
             i2 = scan(line(i:), ',') - 1
-            if (i2 < 1) call abort_mpi('Bad line in fpdb_supplement: ' // trim(line))
+            if (i2 < 1) &
+                 call abort_mpi('Bad line in fpdb_supplement: ' // trim(line))
 
             select case(ifield)
             case (1)
@@ -430,7 +434,10 @@ CONTAINS
          end do
 
          read(line(i:), *, iostat=ierr) value
-         if (ierr /= 0) call abort_mpi('Failed to parse ' // trim(line(i:)) // ' in ' // trim(line))
+         if (ierr /= 0) then
+            call abort_mpi('Failed to parse ' // trim(line(i:)) // &
+                 ' in ' // trim(line))
+         end if
 
          if (id == 0) write (*,'(3(a," : "),g15.5)') &
               'supplemental', trim(name), trim(key), value
@@ -459,11 +466,10 @@ CONTAINS
     end subroutine parse_fpdb_supplement
 
 
-
     !------------------------------------------------------------------------
 
 
-    SUBROUTINE nside_check(nside,varname)
+    SUBROUTINE nside_check(nside, varname)
 
       integer,intent(in) :: nside
       character(len=*)   :: varname
@@ -484,6 +490,34 @@ CONTAINS
       end if
 
     END SUBROUTINE nside_check
+
+
+    !------------------------------------------------------------------------
+
+
+    SUBROUTINE detector_check()
+
+      ! Check to see if all the processes have the same detectors
+
+      integer :: nodetectors_root, idet
+      character(len=SLEN) :: detname_root
+
+      nodetectors_root = nodetectors
+      call broadcast_mpi(nodetectors_root, 0)
+      if (nodetectors /= nodetectors_root) &
+           call abort_mpi('Processes have different numbers of detectors')
+
+      do idet = 1,nodetectors
+         detname_root = trim(detectors(idet)%name)
+         call broadcast_mpi(detname_root, 0)
+         if (trim(detectors(idet)%name) /= trim(detname_root)) &
+              call abort_mpi('Processes have different detectors')
+      end do
+
+    END SUBROUTINE detector_check
+
+
+    !------------------------------------------------------------------------
 
 
     function get_horn(name)
@@ -668,12 +702,14 @@ CONTAINS
     end if
 
     write (*,*)
-    write (*,fi) 'nside_map',  nside_map,'Healpix resolution (output map)'
-    write (*,fi) 'nside_cross',nside_cross,'Healpix resolution (destriping)'
+    write (*,fi) 'nside_map', nside_map, 'Healpix resolution (output map)'
+    write (*,fi) 'nside_cross', nside_cross, 'Healpix resolution (destriping)'
     if (info > 1) &
-         write (*,fi) 'nside_submap',nside_submap,'Submap resolution'
-    write (*,fk) 'concatenate_messages',concatenate_messages,'use mpi_alltoallv to communicate'
-    write (*,fk) 'reassign_submaps',reassign_submaps,'minimize communication by reassigning submaps'
+         write (*,fi) 'nside_submap', nside_submap, 'Submap resolution'
+    write (*,fk) 'concatenate_messages', concatenate_messages, &
+         'use mpi_alltoallv to communicate'
+    write (*,fk) 'reassign_submaps', reassign_submaps, &
+         'minimize communication by reassigning submaps'
 
     if (info > 1) then
        write (*,fi) 'pixmode_map',  pixmode_map,    &
@@ -689,7 +725,8 @@ CONTAINS
     write (*,*)
     write (*,*) 'Standard mode'
 
-    if (basis_order > 0 .and. kfilter) call abort_mpi('Filter only implemented for basis_order==0')
+    if (basis_order > 0 .and. kfilter) &
+         call abort_mpi('Filter only implemented for basis_order==0')
 
     if (noise_weights_from_psd .or. kfilter) then
        write (*,fi) 'psdlen',psdlen,'Length of requested noise PSD'
@@ -723,10 +760,12 @@ CONTAINS
        write (*,fe) 'cglimit',cglimit, 'Iteration convergence limit'
        write (*,fi) 'iter_min',iter_min, 'Minimum number of iterations'
        write (*,fi) 'iter_max',iter_max, 'Maximum number of iterations'
-       write (*,fk) 'initialize_by_regression',initialize_by_regression,'Baseline first guess'
+       write (*,fk) 'initialize_by_regression', initialize_by_regression, &
+            'Baseline first guess'
     end if
 
-    write(*,fi) 'precond_width',precond_width,'Width of the preconditioner band matrix'
+    write(*,fi) 'precond_width', precond_width, &
+         'Width of the preconditioner band matrix'
     if (precond_width==0) write(*,*) 'No preconditioning'
 
     if (flag_by_horn) then
@@ -775,7 +814,8 @@ CONTAINS
     write (*,ff) '',nosamples_tot/fsample/3600.,'hours'
 
     write (*,*)
-    write (*,*) 'Detectors available on the FIRST process and noise according to the FIRST period'
+    write (*,*) 'Detectors available on the FIRST process and noise ' &
+         // 'according to the FIRST period'
     write (*,'(a)') ' Detectors:   psi_pol    kpolar       sigma' // &
          '       slope       fknee        fmin      weight      1/sqrt(weight)'
     do idet = 1,nodetectors
@@ -788,16 +828,6 @@ CONTAINS
             detectors(idet)%fknee, detectors(idet)%fmin, &
             detectors(idet)%weights(1), sigma
     end do
-
-    !write (*,*)
-    !write (*,'(a)') ' Detector      weight      1/sqrt(weight)'
-    !do idet = 1,nodetectors
-    !   sigma = 0.0
-    !   if (detectors(idet)%weight > 0) &
-    !        sigma = 1.d0 / sqrt(detectors(idet)%weight)
-    !   write (*,'(x,a,t12,2es14.4)') detectors(idet)%name,  &
-    !        detectors(idet)%weight, sigma
-    !end do
 
     if (info > 1) then
        write (*,*)
@@ -815,6 +845,8 @@ CONTAINS
             write (*,*) 'file_matrix  = ',trim(file_matrix)
        if (len_trim(file_wcov) > 0)   &
             write (*,*) 'file_wcov    = ',trim(file_wcov)
+       if (len_trim(file_leakmatrix) > 0)   &
+            write (*,*) 'file_leakmatrix  = ',trim(file_leakmatrix)
        if (len_trim(file_base) > 0)     &
             write (*,*) 'file_base    = ',trim(file_base)
        if (len_trim(file_gap_out) > 0)  &
@@ -837,7 +869,8 @@ CONTAINS
     ! Find the TOD chunk handled in this step. In standard mode = all TOD.
     ! Also initialize parameters defining the division of TOD to processes.
     integer :: i, j, k, m, n0, n, ierr
-    integer(i8b) :: nsamp, order, my_offset, sublen, suboffset, sub_start, sub_end, isub
+    integer(i8b) :: nsamp, order, my_offset
+    integer(i8b) :: sublen, suboffset, sub_start, sub_end, isub
     real(dp) :: dn, dn0, ninv, r
     real(dp), pointer :: basis_function(:,:)
     real(sp) :: memsum, mem_min, mem_max
@@ -864,7 +897,8 @@ CONTAINS
 
     !if (kfirst) then
     allocate(baselines_short(noba_short_max), &
-         base_pntid_short(noba_short_max), basis_functions(noba_short_max), stat=ierr)
+         base_pntid_short(noba_short_max), basis_functions(noba_short_max), &
+         stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short')
 
     !Split the pointing period into short baselines of length int(dnshort)
@@ -885,18 +919,20 @@ CONTAINS
           base_pntid_short(m) = pntperiod_id(i)
        end do
        m = m + 1
-       baselines_short(m) = pntperiods(i) - n !Last baseline takes the rest
+       baselines_short(m) = pntperiods(i) - n ! Last baseline takes the rest
        base_pntid_short(m) = pntperiod_id(i)
        
-       if ( kfirst ) then
-          !if (baselines_short(m) < 1 .or. baselines_short(m) > int(dnshort) + 1) then
-          if (baselines_short(m) < 0 .or. baselines_short(m) > int(dnshort, i8b) + 1) then
-             write (*,*) id,' : ERROR in start_timeloop: Lengths do not match., dnshort = ',dnshort
-             write (*,*) id,' : i, pntperiods(i), noba_short_max =', i, pntperiods(i), noba_short_max
-             write (*,*) id,' : last baseline =', baselines_short(m)
-             print *,id,' : noba_short_pp(i) = ',noba_short_pp(i)
+       if (kfirst) then
+          if (baselines_short(m) < 0 &
+               .or. baselines_short(m) > int(dnshort, i8b) + 1) then
+             write (*,*) id, ' : ERROR in start_timeloop: ' &
+                  // 'Lengths do not match., dnshort = ', dnshort
+             write (*,*) id, ' : i, pntperiods(i), noba_short_max =', i, &
+                  pntperiods(i), noba_short_max
+             write (*,*) id, ' : last baseline =', baselines_short(m)
+             print *,id, ' : noba_short_pp(i) = ', noba_short_pp(i)
              do k=1,noba_short_pp(i)
-                print *,k,baselines_short(m-k+1),base_pntid_short(m-k+1)
+                print *, k, baselines_short(m-k+1), base_pntid_short(m-k+1)
              end do
              call exit_with_status(1)
           end if
@@ -929,8 +965,10 @@ CONTAINS
     baselines_short_stop  = 1
 
     do k = 1,noba_short
-       if (k > 1) baselines_short_start(k) = baselines_short_start(k-1) + baselines_short(k-1)
-       baselines_short_stop(k) = baselines_short_start(k) + baselines_short(k) - 1
+       if (k > 1) baselines_short_start(k) = baselines_short_start(k-1) &
+            + baselines_short(k-1)
+       baselines_short_stop(k) = baselines_short_start(k) &
+            + baselines_short(k) - 1
     end do
     
     ! Set up the basis function arrays.
@@ -948,11 +986,13 @@ CONTAINS
           end if
        end do
        if (.not. basis_functions(k)%copy) then
-          ! Allocate and initialize the basis function array for this baseline length
+          ! Allocate and initialize the basis function array for
+          ! this baseline length
           nsamp = basis_functions(k)%nsamp
           allocate(basis_functions(k)%arr(0:basis_order, 0:nsamp-1), stat=ierr )
           if (ierr /= 0) stop 'No room for basis function'
-          memory_basis_functions = memory_basis_functions + (basis_order+1)*nsamp*8
+          memory_basis_functions = memory_basis_functions &
+               + (basis_order+1)*nsamp*8
           basis_function => basis_functions(k)%arr
           ninv = 1 / dble(size(basis_function, 2)-1) * 2
           select case (basis_func)
@@ -985,9 +1025,11 @@ CONTAINS
                    if (order == 0) basis_function(order, i) = 1
                    if (order == 1) basis_function(order, i) = 2 * r
                    if (order > 1) basis_function(order, i) = &
-                        2*r*basis_function(order-1, i) - basis_function(order-2, i)
+                        2*r*basis_function(order-1, i) &
+                        - basis_function(order-2, i)
                 end do
-                ! normalize, Chebyshev polynomials are not orthogonal wrt the L2 norm
+                ! normalize, Chebyshev polynomials are not orthogonal
+                ! wrt the L2 norm
                 basis_function(:, i) = basis_function(:, i) * (1 - r**2)**.25
              end do
           case (basis_legendre)
@@ -998,7 +1040,8 @@ CONTAINS
                    if (order == 0) basis_function(order, i) = 1
                    if (order == 1) basis_function(order, i) = r
                    if (order > 1) basis_function(order, i) = &
-                        ((2*order-1)*r*basis_function(order-1, i) - (order-1)*basis_function(order-2, i))/order
+                        ((2*order-1)*r*basis_function(order-1, i) &
+                        - (order-1)*basis_function(order-2, i))/order
                 end do
              end do
           case default
@@ -1011,7 +1054,10 @@ CONTAINS
     mem_min = memsum; mem_max = memsum
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
-    if (ID==0.and.info.ge.1) write(*,mstr3) 'Allocated memory for basis_functions:',memsum, mem_min, mem_max
+    if (ID == 0 .and. info > 0) then
+       write(*,mstr3) 'Allocated memory for basis_functions:', &
+            memsum, mem_min, mem_max
+    end if
     
     !end if
 

@@ -8,12 +8,17 @@ MODULE maptod_transfer
   real(dp), allocatable, public :: locmap(:,:)
   real(dp), allocatable, public :: loccc(:,:,:)
 
-  real(dp), allocatable, target, public :: submaps_send_map(:,:,:), submaps_recv_map(:,:,:)
-  real(dp), pointer, public :: submaps_send_cross(:,:,:), submaps_recv_cross(:,:,:)
-  integer, allocatable, target, public :: submaps_send_int_map(:,:), submaps_recv_int_map(:,:)
-  integer, pointer, public :: submaps_send_int_cross(:,:), submaps_recv_int_cross(:,:)
+  real(dp), allocatable, target, public :: submaps_send_map(:,:,:)
+  real(dp), allocatable, target, public :: submaps_recv_map(:,:,:)
+  real(dp), pointer, public :: submaps_send_cross(:,:,:)
+  real(dp), pointer, public :: submaps_recv_cross(:,:,:)
+  integer, allocatable, target, public :: submaps_send_int_map(:,:)
+  integer, allocatable, target, public :: submaps_recv_int_map(:,:)
+  integer, pointer, public :: submaps_send_int_cross(:,:)
+  integer, pointer, public :: submaps_recv_int_cross(:,:)
   integer, allocatable, public :: submaps_send_ind(:), submaps_recv_ind(:)
-  integer, allocatable, public :: sendcounts(:), sendoffs(:), recvcounts(:), recvoffs(:)
+  integer, allocatable, public :: sendcounts(:), sendoffs(:)
+  integer, allocatable, public :: recvcounts(:), recvoffs(:)
   integer :: nsend_submap, nrecv_submap
 
   integer, allocatable, public :: locmask(:)
@@ -510,8 +515,10 @@ CONTAINS
           end if
           !$OMP END PARALLEL
 
-          call mpi_alltoallv( submaps_send, sendcounts*nmap0*nosubpix, sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-               submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
+          call mpi_alltoallv(submaps_send, sendcounts*nmap0*nosubpix, &
+               sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
+               submaps_recv, recvcounts*nmap0*nosubpix, &
+               recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr)
 
           if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect cc')
 

@@ -87,6 +87,7 @@ if __name__ == '__main__':
     pars[ 'write_matrix' ] = True
     pars[ 'write_wcov' ] = True
     pars[ 'write_hits' ] = True
+    pars[ 'write_leakmatrix' ] = True
     pars[ 'kfilter' ] = True
     pars[ 'file_root' ] = 'madam_pytest'
     pars[ 'path_output' ] = './mc_maps/'

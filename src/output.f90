@@ -12,8 +12,8 @@ MODULE output
   implicit none
   private
 
-  real(sp),parameter :: Healpix_undef = -1.6375e30
-  real(sp),save      :: cputime_output = 0.0
+  real(sp), parameter :: Healpix_undef = -1.6375e30
+  real(sp), save      :: cputime_output = 0.0
   integer, save      :: map_repcount = 1
   !logical, save      :: baseline_open = .false.
   logical, save, public :: baseline_open = .false. ! -RK
@@ -23,7 +23,7 @@ MODULE output
   integer :: comm_bin, ntasks_bin, id_bin, writegroup, groupsize
 
   public init_output, write_baselines_a, write_destriped_tod, write_matrix, &
-       write_map, write_binmap, write_mask, &
+       write_map, write_binmap, write_mask, write_leakmatrix, &
        write_hits, close_output, addi, addi2
 
 CONTAINS
@@ -42,20 +42,21 @@ CONTAINS
        map_repcount = nosubpix_map
     end if
 
-    call addpath(path_output,file_map)
-    call addpath(path_output,file_binmap)
-    call addpath(path_output,file_hit)
-    call addpath(path_output,file_base)
-    call addpath(path_output,file_mask)
-    call addpath(path_output,file_matrix)
-    call addpath(path_output,file_wcov)
-    call addpath(path_output,file_covmat)
+    call addpath(path_output, file_map)
+    call addpath(path_output, file_binmap)
+    call addpath(path_output, file_hit)
+    call addpath(path_output, file_base)
+    call addpath(path_output, file_mask)
+    call addpath(path_output, file_matrix)
+    call addpath(path_output, file_leakmatrix)
+    call addpath(path_output, file_wcov)
+    call addpath(path_output, file_covmat)
 
     ! output flags
-    do_binmap  = (len_trim(file_binmap).gt.0)
-    do_hits    = (len_trim(file_hit).gt.0)
+    do_binmap  = (len_trim(file_binmap) > 0)
+    do_hits    = (len_trim(file_hit) > 0)
     do_dethits = .false. ! (do_hits .and. nodetectors < 100)
-    do_mask    = (len_trim(file_mask).gt.0)
+    do_mask    = (len_trim(file_mask) > 0)
 
     if ( binary_output ) then
 
@@ -96,7 +97,7 @@ CONTAINS
 
       n = len_trim(filename)
 
-      if (n.gt.0) then
+      if (n > 0) then
          if (filename(1:1)=='!') then
             filename = '!' //trim(path) // filename(2:n)
          else
@@ -112,7 +113,7 @@ CONTAINS
   !----------------------------------------------------------------------
 
 
-  SUBROUTINE write_map(map,mask)
+  SUBROUTINE write_map(map, mask)
     !
     ! Write the destriped output map into file.
     !
@@ -141,14 +142,14 @@ CONTAINS
 
     call reset_time(10)
 
-    skycover = count(mask.gt.0)
+    skycover = count(mask > 0)
     call sum_mpi(skycover)
     
     idwr = 1
     if (ntasks==1) idwr=0    
     
-    if (ID==idwr) then
-       if (info.ge.2) write(*,*) 'Writing destriped map...'
+    if (ID == idwr) then
+       if (info > 1) write(*,*) 'Writing destriped map...'
 
        inquire( file=trim(file_map), exist=there )
 
@@ -181,24 +182,25 @@ CONTAINS
              columns(imap+coloffset)%unit = trim(unit_tod)
              columns(imap+coloffset)%type = fits_real4
              if (nmap == 1 .or. nmap == 3) then
-                if (imap==1) columns(imap+coloffset)%name='TEMPERATURE'  ! healpix naming
-                if (imap==2) columns(imap+coloffset)%name='Q-POLARISATION'
-                if (imap==3) columns(imap+coloffset)%name='U-POLARISATION'
+                ! healpix naming
+                if (imap==1) columns(imap+coloffset)%name = 'TEMPERATURE'
+                if (imap==2) columns(imap+coloffset)%name = 'Q-POLARISATION'
+                if (imap==3) columns(imap+coloffset)%name = 'U-POLARISATION'
              else if (nmap == 2) then
-                if (imap==1) columns(imap+coloffset)%name='Q-POLARISATION'
-                if (imap==2) columns(imap+coloffset)%name='U-POLARISATION'
+                if (imap==1) columns(imap+coloffset)%name = 'Q-POLARISATION'
+                if (imap==2) columns(imap+coloffset)%name = 'U-POLARISATION'
              else
                 columns(imap+coloffset)%name = addi('COMP', imap)
              end if
           enddo
           
-          call fits_insert_bintab(out,columns)
+          call fits_insert_bintab(out, columns)
           deallocate(columns)
        
-          call fits_add_key(out,'objtype','madam.map','Object type')
-          call write_header_healpix(out,nside_map)
-          call write_header_sky(out,skycover)
-          call fits_add_key(out,'MONOPOLE', rm_monopole, &
+          call fits_add_key(out, 'objtype', 'madam.map', 'Object type')
+          call write_header_healpix(out, nside_map)
+          call write_header_sky(out, skycover)
+          call fits_add_key(out, 'MONOPOLE', rm_monopole, &
                'Monopole removed (T map)')
        endif
 
@@ -327,7 +329,7 @@ CONTAINS
           
           if (sync_output) call wait_mpi
           
-          call get_submap(ibuffer,nosubpix_map,mask,isubmap,idwr)
+          call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
 
           if (id == idwr .and. write_cut) then
              nhit = 0
@@ -344,7 +346,8 @@ CONTAINS
           
           do imap = 1,nmap
              
-             call get_submap(sbuffer, nosubpix_map, map, nmap, imap, isubmap, idwr)
+             call get_submap(sbuffer, nosubpix_map, map, nmap, imap, &
+                  isubmap, idwr)
              
              if (ID==idwr) then
                 if (write_cut) then
@@ -379,7 +382,7 @@ CONTAINS
        write(*,*) 'Map written in '//trim(file_map)
     endif    
            
-    cputime_output = cputime_output +get_time(10)
+    cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_map
 
@@ -387,7 +390,7 @@ CONTAINS
   !----------------------------------------------------------------------
 
 
-  SUBROUTINE write_summap(map,mask)
+  SUBROUTINE write_summap(map, mask)
     !
     ! Write the sum map into file.
     !
@@ -405,14 +408,14 @@ CONTAINS
 
     call reset_time(10)
 
-    skycover = count(mask.gt.0)
+    skycover = count(mask > 0)
     call sum_mpi(skycover)
 
     idwr = 1
-    if (ntasks==1) idwr=0
+    if (ntasks == 1) idwr = 0
 
-    if (ID==idwr) then
-       if (info.ge.2) write(*,*) 'Writing destriped map...'
+    if (ID == idwr) then
+       if (info > 1) write(*,*) 'Writing destriped map...'
 
        call check_outfile(file_map)
 
@@ -439,24 +442,25 @@ CONTAINS
           columns(imap+coloffset)%unit = trim(unit_tod)
           columns(imap+coloffset)%type = fits_real4
           if (nmap == 1 .or. nmap == 3) then
-             if (imap==1) columns(imap+coloffset)%name='TEMPERATURE'  ! healpix naming
-             if (imap==2) columns(imap+coloffset)%name='Q-POLARISATION'
-             if (imap==3) columns(imap+coloffset)%name='U-POLARISATION'
+             ! healpix naming
+             if (imap==1) columns(imap+coloffset)%name = 'TEMPERATURE'
+             if (imap==2) columns(imap+coloffset)%name = 'Q-POLARISATION'
+             if (imap==3) columns(imap+coloffset)%name = 'U-POLARISATION'
           else if (nmap == 2) then
-             if (imap==1) columns(imap+coloffset)%name='Q-POLARISATION'
-             if (imap==2) columns(imap+coloffset)%name='U-POLARISATION'
+             if (imap==1) columns(imap+coloffset)%name = 'Q-POLARISATION'
+             if (imap==2) columns(imap+coloffset)%name = 'U-POLARISATION'
           else
              columns(imap+coloffset)%name = addi('STOKES', imap)
           end if
        enddo
 
-       call fits_insert_bintab(out,columns)
+       call fits_insert_bintab(out, columns)
        deallocate(columns)
 
-       call fits_add_key(out,'objtype','madam.map','Object type')
-       call write_header_healpix(out,nside_map)
-       call write_header_sky(out,skycover)
-       call fits_add_key(out,'MONOPOLE', rm_monopole, &
+       call fits_add_key(out, 'objtype', 'madam.map', 'Object type')
+       call write_header_healpix(out, nside_map)
+       call write_header_sky(out, skycover)
+       call fits_add_key(out, 'MONOPOLE', rm_monopole, &
             'Monopole removed (T map)')
     endif
 
@@ -470,7 +474,7 @@ CONTAINS
 
        if (sync_output) call wait_mpi
 
-       call get_submap(ibuffer,nosubpix_map,mask,isubmap,idwr)
+       call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
 
        if (id == idwr .and. write_cut) then
           nhit = 0
@@ -520,7 +524,7 @@ CONTAINS
     deallocate(sbuffer,ibuffer)
     if (write_cut) deallocate(i8buffer)
 
-    cputime_output = cputime_output +get_time(10)
+    cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_summap
 
@@ -528,7 +532,7 @@ CONTAINS
   !----------------------------------------------------------------------
 
 
-  SUBROUTINE write_binmap(binmap,mask)
+  SUBROUTINE write_binmap(binmap, mask)
     !
     ! Write the binned map into file.
     !
@@ -557,14 +561,14 @@ CONTAINS
 
     call reset_time(10)
 
-    skycover = count(mask.gt.0)
+    skycover = count(mask > 0)
     call sum_mpi(skycover)
 
     idwr = 1
-    if (ntasks==1) idwr=0
+    if (ntasks == 1) idwr = 0
 
-    if (ID==idwr) then
-       if (info.ge.2) write(*,*) 'Writing binned map...'
+    if (ID == idwr) then
+       if (info > 1) write(*,*) 'Writing binned map...'
 
        inquire( file=trim(file_binmap), exist=there )
 
@@ -595,24 +599,25 @@ CONTAINS
              columns(imap+coloffset)%unit = trim(unit_tod)
              columns(imap+coloffset)%type = fits_real4
              if (nmap == 1 .or. nmap == 3) then
-                if (imap==1) columns(imap+coloffset)%name='TEMPERATURE'  ! healpix naming
-                if (imap==2) columns(imap+coloffset)%name='Q-POLARISATION'
-                if (imap==3) columns(imap+coloffset)%name='U-POLARISATION'
+                ! healpix naming
+                if (imap==1) columns(imap+coloffset)%name = 'TEMPERATURE'
+                if (imap==2) columns(imap+coloffset)%name = 'Q-POLARISATION'
+                if (imap==3) columns(imap+coloffset)%name = 'U-POLARISATION'
              else if (nmap == 2) then
-                if (imap==1) columns(imap+coloffset)%name='Q-POLARISATION'
-                if (imap==2) columns(imap+coloffset)%name='U-POLARISATION'
+                if (imap==1) columns(imap+coloffset)%name  ='Q-POLARISATION'
+                if (imap==2) columns(imap+coloffset)%name  ='U-POLARISATION'
              else
                 columns(imap+coloffset)%name = addi('COMP', imap)
              end if
           enddo
           
-          call fits_insert_bintab(out,columns)
+          call fits_insert_bintab(out, columns)
           deallocate(columns)
           
-          call fits_add_key(out,"objtype","madam.binmap",'Object type')
-          call write_header_healpix(out,nside_map)
-          call write_header_sky(out,skycover)
-          call fits_add_key(out,'MONOPOLE', rm_monopole,     &
+          call fits_add_key(out, "objtype", "madam.binmap", 'Object type')
+          call write_header_healpix(out, nside_map)
+          call write_header_sky(out, skycover)
+          call fits_add_key(out, 'MONOPOLE', rm_monopole, &
                'Monopole removed (T map)')
        endif
 
@@ -711,7 +716,8 @@ CONTAINS
 
           if ( .not. there ) then
 
-             open( unit=55, file=trim(file_map_txt), status='replace', form='formatted' )
+             open( unit=55, file=trim(file_map_txt), status='replace', &
+                  form='formatted' )
              write( 55, * ) nosubmaps_tot, ntasks
              write( 55, * ) nosubpix_map, nmap
              do isubmap = 0, nosubmaps_tot-1
@@ -741,7 +747,7 @@ CONTAINS
 
           if (sync_output) call wait_mpi
           
-          call get_submap(ibuffer,nosubpix_map,mask,isubmap,idwr)
+          call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
           
           if (id == idwr .and. write_cut) then
              nhit = 0
@@ -759,7 +765,8 @@ CONTAINS
           do imap = 1,nmap
              
              !print *,id,' : getting submap ',isubmap,imap ! debug
-             call get_submap(sbuffer, nosubpix_map, binmap, nmap, imap, isubmap, idwr)
+             call get_submap(sbuffer, nosubpix_map, binmap, nmap, imap, &
+                  isubmap, idwr)
              
              if (ID==idwr) then
                 if (write_cut) then
@@ -773,10 +780,13 @@ CONTAINS
                    end do
                 else
                    ! Set unobserved pixels to undefined value
-                   where (ibuffer.le.0) sbuffer=Healpix_undef
+                   where (ibuffer <= 0) sbuffer = Healpix_undef
                 end if
                 
-                if (nhit > 0) call fits_write_column(out, imap+coloffset, sbuffer(:nhit), writeoffset)
+                if (nhit > 0) then
+                   call fits_write_column(out, imap+coloffset, sbuffer(:nhit), &
+                        writeoffset)
+                end if
              endif
           end do
           
@@ -789,12 +799,12 @@ CONTAINS
 
     end if
 
-    if (ID==idwr) then
+    if (ID == idwr) then
        call fits_close(out)
-       write(*,*) 'Binned map written in '//trim(file_binmap)
+       write(*,*) 'Binned map written in ' // trim(file_binmap)
     endif
 
-    cputime_output = cputime_output +get_time(10)
+    cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_binmap
 
@@ -821,14 +831,14 @@ CONTAINS
 
     call reset_time(10)
 
-    skycover = count(mask.gt.0)
+    skycover = count(mask > 0)
     call sum_mpi(skycover)
 
     idwr = 2
-    if (ntasks.lt.3) idwr=0
+    if (ntasks < 3) idwr = 0
 
-    if (ID==idwr) then
-       if (info.ge.2) write(*,*) 'Writing mask...'
+    if (ID == idwr) then
+       if (info > 1) write(*,*) 'Writing mask...'
 
        call check_outfile(file_mask)
 
@@ -855,10 +865,10 @@ CONTAINS
        columns(2)%type = fits_real4
        columns(2)%name = 'criterion'
 
-       call fits_insert_bintab(out,columns)
+       call fits_insert_bintab(out, columns)
        deallocate(columns)
 
-       call fits_add_key(out,"objtype","madam.mask",'Object type')
+       call fits_add_key(out, "objtype", "madam.mask", 'Object type')
 
        call write_header_healpix(out,nside_map)
        call write_header_sky(out,skycover)
@@ -874,7 +884,7 @@ CONTAINS
 
        if (sync_output) call wait_mpi
 
-       call get_submap(ibuffer,nosubpix_map,mask,isubmap,idwr)
+       call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
 
        if (id == idwr .and. write_cut) then
           nhit = 0
@@ -920,7 +930,7 @@ CONTAINS
 
     deallocate(sbuffer,ibuffer)
 
-    cputime_output = cputime_output +get_time(10)
+    cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_mask
 
@@ -954,10 +964,10 @@ CONTAINS
     call reset_time(10)
 
     idwr = 1
-    if (ntasks.lt.2) idwr=0
+    if (ntasks < 2) idwr = 0
 
-    if (ID==idwr) then
-       if (info.ge.2) write(*,*) 'Writing hits...'
+    if (ID == idwr) then
+       if (info > 1) write(*,*) 'Writing hits...'
 
        call check_outfile(file_hit)
 
@@ -997,11 +1007,11 @@ CONTAINS
           end do
        end if
 
-       call fits_insert_bintab(out,columns)
+       call fits_insert_bintab(out, columns)
        deallocate(columns)
 
-       call fits_add_key(out,'objtype','madam.hits','Object type')
-       call write_header_healpix(out,nside_map)
+       call fits_add_key(out, 'objtype', 'madam.hits', 'Object type')
+       call write_header_healpix(out, nside_map)
 
     endif
 
@@ -1049,7 +1059,7 @@ CONTAINS
 
     deallocate(ibuffer)
 
-    cputime_output = cputime_output +get_time(10)
+    cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_hits
 
@@ -1080,10 +1090,10 @@ CONTAINS
     call reset_time(10)
 
     idwr = 2
-    if (ntasks.lt.3) idwr=0
+    if (ntasks < 3) idwr = 0
 
     if (ID==idwr) then
-       if (info.ge.2) write(*,*) 'Writing pixel matrix...'
+       if (info > 1) write(*,*) 'Writing pixel matrix...'
 
        call check_outfile(outfile)
 
@@ -1115,7 +1125,7 @@ CONTAINS
           end do
        end do
 
-       call fits_insert_bintab(out,columns)
+       call fits_insert_bintab(out, columns)
        deallocate(columns)
 
        call fits_add_key(out, "objtype", "madam.matrix", 'Object type')
@@ -1139,7 +1149,6 @@ CONTAINS
              call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
           else
              ibuffer = 0
-             !call get_submap(dbuffer, nosubpix_map, reshape(cc, (/nmap**2,nosubpix_map,nosubmaps/)), nmap**2, 1, isubmap, idwr)
              call get_submap(dbuffer, nosubpix_map, cc, nmap, 1, 1, isubmap, idwr)
              where(dbuffer /= 0) ibuffer = 1
           end if
@@ -1152,7 +1161,8 @@ CONTAINS
                    i8buffer(nhit) = offset + i - 1
                 end if
              end do
-             if (nhit > 0) call fits_write_column(out, 1, i8buffer(:nhit), writeoffset)
+             if (nhit > 0) &
+                  call fits_write_column(out, 1, i8buffer(:nhit), writeoffset)
           end if
        else
           nhit = nosubpix_map
@@ -1162,12 +1172,10 @@ CONTAINS
        do imap = 1,nmap
           do jmap = imap,nmap
 
-             !call get_submap(dbuffer, nosubpix_map, reshape(cc, (/nmap**2,nosubpix_map,nosubmaps/)), &
-             !     nmap**2, int((imap-1)*nmap+j), isubmap, idwr)
-             !print *,id,' : calling get_submap ',imap,jmap,isubmap ! debug
-             call get_submap(dbuffer, nosubpix_map, cc, nmap, imap, jmap, isubmap, idwr)
+             call get_submap(dbuffer, nosubpix_map, cc, nmap, imap, jmap, &
+                  isubmap, idwr)
 
-             if (ID==idwr) then
+             if (ID == idwr) then
                 if (write_cut) then
                    ! Pack the observed pixels to the beginning
                    nhit = 0
@@ -1180,7 +1188,10 @@ CONTAINS
                 end if
 
                 coloffset = coloffset + 1
-                if (nhit > 0) call fits_write_column(out, coloffset, dbuffer(:nhit), writeoffset)
+                if (nhit > 0) then
+                   call fits_write_column(out, coloffset, dbuffer(:nhit), &
+                        writeoffset)
+                end if
              end if
           end do
        end do
@@ -1197,9 +1208,157 @@ CONTAINS
     deallocate(dbuffer)
     if (write_cut) deallocate( ibuffer, i8buffer )       
 
-    cputime_output = cputime_output +get_time(10)
+    cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_matrix
+
+
+  !----------------------------------------------------------------------
+
+
+  SUBROUTINE write_leakmatrix(cc, mask, detector_name)
+    !
+    ! Write the leakage matrices into file
+    !
+    real(dp),intent(in) :: cc(nmap,nmap,nosubpix_map,nosubmaps)
+    integer, intent(in) :: mask(nosubpix_map,nosubmaps)
+    character(len=*), intent(in) :: detector_name
+    integer :: idwr, isubmap, imap, jmap, coloffset, ncol
+    integer(idp):: offset, writeoffset, i, j, nhit
+    real(dp), allocatable :: dbuffer(:)
+    integer, allocatable  :: ibuffer(:)
+    integer(i8b), allocatable :: i8buffer(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
+    character(len=SLEN) :: outfile
+
+    if (len_trim(file_leakmatrix) <= 0) return
+
+    outfile = trim(file_leakmatrix) // '_' // trim(detector_name) // '.fits'
+
+    call reset_time(10)
+
+    idwr = 2
+    if (ntasks < 3) idwr=0
+
+    ncol = nmap * nmap
+
+    if (ID==idwr) then
+       if (info > 1) then
+          write(*,*) 'Writing leakage matrix for ', trim(detector_name), '...'
+       end if
+
+       call check_outfile(outfile)
+
+       call fits_create(out, outfile)
+
+       call write_header_code(out)
+       call write_header_simulation(out)
+
+       if (write_cut) then
+          allocate(columns(ncol+1))
+          columns(1)%repcount = map_repcount
+          columns(1)%name = 'Pixel index'
+          columns(1)%type = fits_int8
+          coloffset = 1
+       else
+          allocate(columns(ncol))
+          coloffset = 0
+       end if
+
+       do imap = 1,ncol
+          columns(imap + coloffset)%repcount = map_repcount
+          columns(imap + coloffset)%type = fits_real8
+       enddo
+
+       do i = 1,nmap
+          do j = 1,nmap
+             coloffset = coloffset + 1
+             write( columns(coloffset)%name, '("gamma(",i0,",",i0,")")' ) i, j
+          end do
+       end do
+
+       call fits_insert_bintab(out, columns)
+       deallocate(columns)
+
+       call fits_add_key(out, "objtype", "madam.leakmatrix", 'Object type')
+       call write_header_healpix(out, nside_map)
+    endif
+
+    allocate(dbuffer(nosubpix_map))
+    if (write_cut) then
+       allocate(ibuffer(nosubpix_map))
+       allocate(i8buffer(nosubpix_map))
+    end if
+
+    offset = 0
+    writeoffset = 0
+    do isubmap = 0,nosubmaps_tot-1
+
+       if (sync_output) call wait_mpi
+
+       if (write_cut) then
+          call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
+
+          if (id == idwr) then
+             nhit = 0
+             do i = 1,nosubpix_map
+                if (ibuffer(i) > 0) then
+                   nhit = nhit + 1
+                   i8buffer(nhit) = offset + i - 1
+                end if
+             end do
+             if (nhit > 0) then
+                call fits_write_column(out, 1, i8buffer(:nhit), writeoffset)
+             end if
+          end if
+       else
+          nhit = nosubpix_map
+       end if
+
+       coloffset = coloffset - ncol
+       do imap = 1,nmap
+          do jmap = 1,nmap
+
+             call get_submap(dbuffer, nosubpix_map, cc, nmap, imap, jmap, &
+                  isubmap, idwr)
+
+             if (ID == idwr) then
+                if (write_cut) then
+                   ! Pack the observed pixels to the beginning
+                   nhit = 0
+                   do i = 1,nosubpix_map
+                      if (ibuffer(i) > 0) then
+                         nhit = nhit + 1
+                         dbuffer(nhit) = dbuffer(i)
+                      end if
+                   end do
+                end if
+
+                coloffset = coloffset + 1
+                if (nhit > 0) then
+                   call fits_write_column(out, coloffset, dbuffer(:nhit), &
+                        writeoffset)
+                end if
+             end if
+          end do
+       end do
+
+       offset = offset + nosubpix_map
+       writeoffset = writeoffset + nhit
+    end do
+
+    if (ID==idwr) then
+       call fits_close(out)
+       write(*,*) 'Leakage matrix written in ' // trim(outfile)
+    endif
+
+    deallocate(dbuffer)
+    if (write_cut) deallocate( ibuffer, i8buffer )       
+
+    cputime_output = cputime_output + get_time(10)
+
+  END SUBROUTINE write_leakmatrix
 
 
   !---------------------------------------------------------------------------
@@ -1284,8 +1443,10 @@ CONTAINS
        call write_header_simulation(out)
        call write_header_destriping(out)
        call fits_add_key(out, 'baselen', dnshort, 'Baseline length (samples)')
-       call fits_add_key(out, 'basesec', real(dnshort/fsample), 'Baseline length (seconds)')
-       call fits_add_key(out, 'nobase', int(noba_short_tot), 'Number of baselines')
+       call fits_add_key(out, 'basesec', real(dnshort/fsample), &
+            'Baseline length (seconds)')
+       call fits_add_key(out, 'nobase', int(noba_short_tot), &
+            'Number of baselines')
 
     end if
 
@@ -1525,7 +1686,7 @@ CONTAINS
           ifile = ifile+1
           n = n+nosamples_file(ifile)
 
-          if (n.gt.istart_mission) then
+          if (n > istart_mission) then
              nleft_file = n-istart_mission
              exit
           endif
@@ -1548,7 +1709,7 @@ CONTAINS
 
              if (newobject) then
 
-                if (ifile.gt.nofiles) then
+                if (ifile > nofiles) then
                    if (ID==0) then
                       write(*,*) 'ERROR in write_tod: ifile too large.'
                       write(*,*) 'ifile, nofiles =',ifile,nofiles
@@ -1573,35 +1734,37 @@ CONTAINS
                    call write_header_simulation(out)
                    call write_header_destriping(out)
 
-                   call fits_insert_bintab(out,columns)
+                   call fits_insert_bintab(out, columns)
                    deallocate(columns)
 
                    offset = 0
                 endif
              endif
 
-             if (ID==id_send) sbuffer(1:n)=tod_stored(m+1:m+n,idet)
+             if (ID == id_send) sbuffer(1:n) = tod_stored(m+1:m+n,idet)
 
              nn = n
-             call send_mpi(sbuffer,nn,id_send,idwr)
+             call send_mpi(sbuffer, nn, id_send, idwr)
 
-             if (ID==idwr) call fits_write_column(out,1,sbuffer(1:nn),offset)
+             if (ID == idwr) then
+                call fits_write_column(out, 1, sbuffer(1:nn), offset)
+             end if
 
              newobject = .false.
 
-             nleft_proc = nleft_proc-n
-             nleft_file = nleft_file-n
-             nleft_tot = nleft_tot-n
-             m = m+n
-             offset = offset+n
+             nleft_proc = nleft_proc - n
+             nleft_file = nleft_file - n
+             nleft_tot = nleft_tot - n
+             m = m + n
+             offset = offset + n
 
              if (nleft_file==0.or.nleft_tot==0) then !time to close the object
 
                 if (ID==idwr) call fits_close(out)
 
-                if (nleft_tot.gt.0) then
+                if (nleft_tot > 0) then
                    newobject = .true.
-                   ifile = ifile+1
+                   ifile = ifile + 1
                    nleft_file = nosamples_file(ifile)
                 endif
              endif
@@ -1632,16 +1795,16 @@ CONTAINS
     integer                        :: k, n
     character(len=20)              :: s, ending
 
-    if (filename(1:1)=='!') return
+    if (filename(1:1) == '!') return
 
-    inquire(file=filename,exist=there)
+    inquire(file=filename, exist=there)
 
     if (.not.there) return
 
-    n = index(filename,'.',.true.)
-    if (n.le.0) then
+    n = index(filename, '.', .true.)
+    if (n <= 0) then
        ending = ''
-       n = len_trim(filename)+1
+       n = len_trim(filename) + 1
     else
        ending = filename(n:len_trim(filename))
     endif
@@ -1656,8 +1819,8 @@ CONTAINS
        write(s,'("_",i3.3)') k
        filename = filename(1:n-1) // trim(s) // trim(ending)
 
-       inquire(file=filename,exist=there)
-       if (.not.there) exit
+       inquire(file=filename, exist=there)
+       if (.not. there) exit
     enddo
 
   END SUBROUTINE check_outfile
@@ -1670,21 +1833,21 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE write_header_healpix(out,nside)
+  SUBROUTINE write_header_healpix(out, nside)
 
     type(fitshandle) :: out
     integer          :: nside
 
-    call fits_add_comment(out,'----------------------------------')
-    call fits_add_comment(out,'   Healpix Map Specific Keywords  ')
-    call fits_add_comment(out,'----------------------------------')
+    call fits_add_comment(out, '----------------------------------')
+    call fits_add_comment(out, '   Healpix Map Specific Keywords  ')
+    call fits_add_comment(out, '----------------------------------')
 
-    call fits_add_key(out,'PIXTYPE', 'HEALPIX','HEALPIX Pixelisation')
-    call fits_add_key(out,'ORDERING','NESTED', 'Pixel ordering scheme')
-    call fits_add_key(out,'NSIDE',nside,'Resolution parameter for HEALPIX')
-    call fits_add_key(out,'FIRSTPIX',0,'First pixel # (0 based)')
-    call fits_add_key(out,'LASTPIX',12*nside**2-1,'Last pixel # (0 based)')
-    call fits_add_key(out,'POLAR',(nmap/=1),  &
+    call fits_add_key(out, 'PIXTYPE', 'HEALPIX','HEALPIX Pixelisation')
+    call fits_add_key(out, 'ORDERING','NESTED', 'Pixel ordering scheme')
+    call fits_add_key(out, 'NSIDE', nside, 'Resolution parameter for HEALPIX')
+    call fits_add_key(out, 'FIRSTPIX', 0, 'First pixel # (0 based)')
+    call fits_add_key(out, 'LASTPIX', 12*nside**2-1, 'Last pixel # (0 based)')
+    call fits_add_key(out, 'POLAR', (nmap/=1),  &
          'Polarisation included (True/False)')
     call fits_add_key(out,'POLCONV','COSMO',   &
          'Coord. convention for polarisation (COSMO/IAU)')
@@ -1692,18 +1855,23 @@ CONTAINS
        call fits_update_key( out, 'EXTNAME', "'CUT SKY MAP'")
        call fits_add_key( out, 'COMMENT', 'Cut sky data')
        call fits_add_key( out, 'OBJECT', 'PARTIAL')
-       call fits_add_key( out, 'INDXSCHM', 'EXPLICIT',' Indexing : IMPLICIT or EXPLICIT' )
+       call fits_add_key( out, 'INDXSCHM', 'EXPLICIT', &
+            ' Indexing : IMPLICIT or EXPLICIT' )
        call fits_add_key( out, 'GRAIN', 1, ' Grain of pixel indexing')
     else
        call fits_update_key( out, 'EXTNAME', "'FULL SKY MAP'")
        call fits_add_key( out, 'COMMENT', 'Full sky data')
        call fits_add_key( out, 'OBJECT', 'FULLSKY')
-       call fits_add_key( out, 'INDXSCHM', 'IMPLICIT',' Indexing : IMPLICIT or EXPLICIT' )
+       call fits_add_key( out, 'INDXSCHM', 'IMPLICIT', &
+            ' Indexing : IMPLICIT or EXPLICIT' )
        call fits_add_key( out, 'GRAIN', 0, ' Grain of pixel indexing')
     end if
-    call fits_add_key( out, 'COMMENT', 'GRAIN=0 : no indexing of pixel data                         (IMPLICIT)')
-    call fits_add_key( out, 'COMMENT', 'GRAIN=1 : 1 pixel index -> 1 pixel data                     (EXPLICIT)')
-    call fits_add_key( out, 'COMMENT', 'GRAIN>1 : 1 pixel index -> data of GRAIN consecutive pixels (EXPLICIT)')
+    call fits_add_key( out, 'COMMENT', &
+         'GRAIN=0 : no indexing of pixel data                         (IMPLICIT)')
+    call fits_add_key( out, 'COMMENT', &
+         'GRAIN=1 : 1 pixel index -> 1 pixel data                     (EXPLICIT)')
+    call fits_add_key( out, 'COMMENT', &
+         'GRAIN>1 : 1 pixel index -> data of GRAIN consecutive pixels (EXPLICIT)')
 
   END SUBROUTINE write_header_healpix
 
@@ -1718,18 +1886,18 @@ CONTAINS
     call fits_add_comment(out,'----------------------------------')
     call fits_add_comment(out,'         CODE             ')
     call fits_add_comment(out,'----------------------------------')
-    call fits_add_key(out,'CREATOR','Madam','Software creating FITS file')
-    call fits_add_key(out,'VERSION',version,'Software version')
+    call fits_add_key(out, 'CREATOR', 'Madam', 'Software creating FITS file')
+    call fits_add_key(out, 'VERSION', version, 'Software version')
 
     if (parallel_version) then
-       call fits_add_comment(out,'Parallelized version')
+       call fits_add_comment(out, 'Parallelized version')
        call fits_add_key(out,'NOPROCS', ntasks, 'Number of processes')
     else
        call fits_add_comment(out,'Serial version')
     endif
 
-    call fits_add_key(out,'PARFILE',file_param,'Parameter file')
-    call fits_add_key(out,'SIMFILE',file_simulation,'Simulation file')
+    call fits_add_key(out, 'PARFILE', file_param, 'Parameter file')
+    call fits_add_key(out, 'SIMFILE', file_simulation, 'Simulation file')
 
   END SUBROUTINE write_header_code
 
@@ -1737,20 +1905,20 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE write_header_sky(out,skycover)
+  SUBROUTINE write_header_sky(out, skycover)
 
     type(fitshandle)   :: out
     integer,intent(in) :: skycover
 
-    call fits_add_comment(out,'----------------------------------')
-    call fits_add_comment(out,'         Sky coverage             ')
-    call fits_add_comment(out,'----------------------------------')
-    call fits_add_key(out,'PIXCOV',skycover,     'Recovered pixels')
-    call fits_add_key(out,'SKYCOV',real(skycover/(12.d0*nside_map**2)),  &
+    call fits_add_comment(out, '----------------------------------')
+    call fits_add_comment(out, '         Sky coverage             ')
+    call fits_add_comment(out, '----------------------------------')
+    call fits_add_key(out, 'PIXCOV', skycover, 'Recovered pixels')
+    call fits_add_key(out, 'SKYCOV', real(skycover/(12.d0*nside_map**2)),  &
          'Sky coverage')
-    call fits_add_key(out,'PIXMMAP',pixmode_map,  &
+    call fits_add_key(out, 'PIXMMAP', pixmode_map,  &
          'Pixel removal criterion')
-    call fits_add_key(out,'PIXLMAP',real(pixlim_map),'Pixel removal limit')
+    call fits_add_key(out, 'PIXLMAP', real(pixlim_map), 'Pixel removal limit')
 
   END SUBROUTINE write_header_sky
 
@@ -1766,48 +1934,48 @@ CONTAINS
 
     samples_to_d = 1.d0/fsample/24.d0/3600.d0
 
-    call fits_add_comment(out,'-------------------------------')
-    call fits_add_comment(out,'          Simulation           ')
-    call fits_add_comment(out,'-------------------------------')
+    call fits_add_comment(out, '-------------------------------')
+    call fits_add_comment(out, '          Simulation           ')
+    call fits_add_comment(out, '-------------------------------')
 
-    call fits_add_comment(out,simcomment)
-    call fits_add_key(out,'FSAMPLE',real(fsample),'Sampling frequency (Hz)')
-    call fits_add_key(out,'TMISSION',real(nosamples_tot*samples_to_d),  &
+    call fits_add_comment(out, simcomment)
+    call fits_add_key(out, 'FSAMPLE', real(fsample),'Sampling frequency (Hz)')
+    call fits_add_key(out, 'TMISSION', real(nosamples_tot*samples_to_d), &
          'Mission duration/days')
-    call fits_add_key(out,'TSTART',real(istart_mission*samples_to_d),    &
+    call fits_add_key(out,'TSTART', real(istart_mission*samples_to_d), &
          'Mission start/days')
     ! RK edit begins
-    call fits_add_key(out,'IMISSION',nosamples_tot,  &
+    call fits_add_key(out, 'IMISSION', nosamples_tot, &
          'Mission duration/samples')
-    call fits_add_key(out,'ISTART',istart_mission,    &
+    call fits_add_key(out,'ISTART', istart_mission, &
          'Mission start/samples')
-    call fits_add_key(out,'NSUBCHNK',nsubchunk,'Number of subchunks')
-    call fits_add_key(out,'ISUBCHNK',isubchunk,'Index of subchunk')
+    call fits_add_key(out, 'NSUBCHNK', nsubchunk,'Number of subchunks')
+    call fits_add_key(out, 'ISUBCHNK', isubchunk,'Index of subchunk')
     ! RK edit ends
-    call fits_add_key(out,'SIMFILE', trim(file_simulation),'Simulation file')
+    call fits_add_key(out, 'SIMFILE', trim(file_simulation), 'Simulation file')
 
-    call fits_add_comment(out,'---------------------------------')
-    call fits_add_comment(out,'         Detector info           ')
-    call fits_add_comment(out,'---------------------------------')
+    call fits_add_comment(out, '---------------------------------')
+    call fits_add_comment(out, '         Detector info           ')
+    call fits_add_comment(out, '---------------------------------')
 
-    call fits_add_key(out,'NODET',nodetectors,'Number of detectors')
-    call fits_add_key(out,'MDETW',mode_detweight,'Detector weighting mode')
+    call fits_add_key(out, 'NODET', nodetectors, 'Number of detectors')
+    call fits_add_key(out, 'MDETW', mode_detweight, 'Detector weighting mode')
 
     do i = 1,nodetectors
-       call fits_add_key(out,addi('DETNAM',i),detectors(i)%name,    &
+       call fits_add_key(out, addi('DETNAM',i), detectors(i)%name, &
             'Detector name')
-       call fits_add_key(out,addi('PSIPOL',i),degs(detectors(i)%psipol), &
+       call fits_add_key(out, addi('PSIPOL',i), degs(detectors(i)%psipol), &
             'Psi_pol/deg')
-       call fits_add_key(out,addi('KPOLAR',i), detectors(i)%kpolar,   &
+       call fits_add_key(out, addi('KPOLAR',i), detectors(i)%kpolar, &
             'Polarized/nonpolarized detector')
-       call fits_add_key(out,addi('IPOINT',i),detectors(i)%ipoint,    &
+       call fits_add_key(out, addi('IPOINT',i), detectors(i)%ipoint, &
             'Pointing ID')
     enddo
-    call fits_add_key(out,'TEMPONLY',temperature_only,'Temperature map only')
+    call fits_add_key(out, 'TEMPONLY', temperature_only, 'Temperature map only')
 
-    call fits_add_comment(out,'----------------------------')
-    call fits_add_comment(out,'          Pointing          ')
-    call fits_add_comment(out,'----------------------------')
+    call fits_add_comment(out, '----------------------------')
+    call fits_add_comment(out, '          Pointing          ')
+    call fits_add_comment(out, '----------------------------')
 
   END SUBROUTINE write_header_simulation
 
@@ -1820,77 +1988,82 @@ CONTAINS
     type(fitshandle) :: out
     integer          :: i
 
-    call fits_add_comment(out,'---------------------------')
-    call fits_add_comment(out,'     Data distribution     ')
-    call fits_add_comment(out,'---------------------------')
+    call fits_add_comment(out, '---------------------------')
+    call fits_add_comment(out, '     Data distribution     ')
+    call fits_add_comment(out, '---------------------------')
 
-    call fits_add_comment(out,'Standard mode')
+    call fits_add_comment(out, 'Standard mode')
 
-    call fits_add_key(out,'NSIDESUB',nside_submap,'Submap resolution')
+    call fits_add_key(out, 'NSIDESUB', nside_submap, 'Submap resolution')
 
-    call fits_add_comment(out,'-------------------------------------------')
-    call fits_add_comment(out,'        Destriping scheme                  ')
-    call fits_add_comment(out,'-------------------------------------------')
+    call fits_add_comment(out, '-------------------------------------------')
+    call fits_add_comment(out, '        Destriping scheme                  ')
+    call fits_add_comment(out, '-------------------------------------------')
 
-    call fits_add_key(out,'KFIRST', kfirst,'First destriping phase on/off')
+    call fits_add_key(out, 'KFIRST', kfirst, 'First destriping phase on/off')
 
     if (kfirst) then
-       call fits_add_key(out,'NSHORT',nshort,'Baseline length ')
-       call fits_add_key(out,'KFILTER',kfilter,'Noise filter on/off')
+       call fits_add_key(out, 'NSHORT', nshort, 'Baseline length ')
+       call fits_add_key(out, 'KFILTER', kfilter, 'Noise filter on/off')
        select case(basis_func)
        case (basis_poly)
-          call fits_add_key(out, 'BASIS', 'POLYNOMIAL', 'Destriping function basis')
+          call fits_add_key(out, 'BASIS', 'POLYNOMIAL', &
+               'Destriping function basis')
        case (basis_fourier)
-          call fits_add_key(out, 'BASIS', 'FOURIER', 'Destriping function basis')
+          call fits_add_key(out, 'BASIS', 'FOURIER', &
+               'Destriping function basis')
        case (basis_cheby)
-          call fits_add_key(out, 'BASIS', 'CHEBYSHEV', 'Destriping function basis')
+          call fits_add_key(out, 'BASIS', 'CHEBYSHEV', &
+               'Destriping function basis')
        case (basis_legendre)
-          call fits_add_key(out, 'BASIS', 'LEGENDRE', 'Destriping function basis')
+          call fits_add_key(out, 'BASIS', 'LEGENDRE', &
+               'Destriping function basis')
        case default
           call abort_mpi('Unknown function basis')
        end select
-       call fits_add_key(out, 'BORDER', basis_order, 'Destriping function order')
+       call fits_add_key(out, 'BORDER', basis_order, &
+            'Destriping function order')
     endif
 
-    call fits_add_key(out,'NSIDECR',nside_cross,'Crossing point resolution')
-    call fits_add_key(out,'PIXMCR', pixmode_cross,'Pixel removal criterion')
-    call fits_add_key(out,'PIXLCR', real(pixlim_cross),'Pixel removal limit')
-    call fits_add_key(out,'CGLIMIT',real(cglimit),  &
+    call fits_add_key(out, 'NSIDECR', nside_cross, 'Crossing point resolution')
+    call fits_add_key(out, 'PIXMCR', pixmode_cross, 'Pixel removal criterion')
+    call fits_add_key(out, 'PIXLCR', real(pixlim_cross), 'Pixel removal limit')
+    call fits_add_key(out, 'CGLIMIT',real(cglimit), &
          'Conjugate gradient convergence limit')
-    call fits_add_key(out,'ITERMAX',iter_max,  &
+    call fits_add_key(out,'ITERMAX',iter_max, &
          'Maximum number of iterations')
 
-    if (use_inmask) call fits_add_key(out,'INMASK',ftrim(file_inmask),  &
+    if (use_inmask) call fits_add_key(out, 'INMASK', ftrim(file_inmask), &
          'input mask')
 
     if (kfilter) then
 
-       call fits_add_comment(out,'---------------------------------------')
-       call fits_add_comment(out,'           Noise filter                ')
-       call fits_add_comment(out,'---------------------------------------')
+       call fits_add_comment(out, '---------------------------------------')
+       call fits_add_comment(out, '           Noise filter                ')
+       call fits_add_comment(out, '---------------------------------------')
 
-       call fits_add_key(out,'FILTTIM',real(filter_time),   &
+       call fits_add_key(out, 'FILTTIM', real(filter_time), &
             'Noise filter length/seconds')
-       call fits_add_key(out,'TAILTIM',real(tail_time),'Overlap/seconds')
+       call fits_add_key(out, 'TAILTIM', real(tail_time), 'Overlap/seconds')
 
-       if (len_trim(file_spectrum).eq.0) then
+       if (len_trim(file_spectrum) >= 0) then
           do i = 1,nodetectors
-             call fits_add_comment(out,detectors(i)%name)
-             call fits_add_key(out,addi('SIGMA',i),   &
-                  real(detectors(i)%sigmas(1)),'White noise std')
-             call fits_add_key(out,addi('SLOPE',i),   &
-                  real(detectors(i)%slope),'Spectral slope')
-             call fits_add_key(out,addi('FKNEE',i),   &
-                  real(detectors(i)%fknee),'Knee frequency (Hz)')
-             call fits_add_key(out,addi('FMIN',i),    &
-                  real(detectors(i)%fmin),'Minimum frequency (Hz)')
-          enddo
+             call fits_add_comment(out, detectors(i)%name)
+             call fits_add_key(out, addi('SIGMA', i), &
+                  real(detectors(i)%sigmas(1)), 'White noise std')
+             call fits_add_key(out, addi('SLOPE', i), &
+                  real(detectors(i)%slope), 'Spectral slope')
+             call fits_add_key(out, addi('FKNEE', i), &
+                  real(detectors(i)%fknee), 'Knee frequency (Hz)')
+             call fits_add_key(out, addi('FMIN', i), &
+                  real(detectors(i)%fmin), 'Minimum frequency (Hz)')
+          end do
        else
-          call fits_add_key(out,'FSPEC', trim(file_spectrum),  &
+          call fits_add_key(out, 'FSPEC', trim(file_spectrum), &
                'Noise spectrum file')
-       endif
+       end if
 
-    endif
+    end if
 
   END SUBROUTINE write_header_destriping
 
@@ -1905,7 +2078,9 @@ CONTAINS
 
        if ( nwrite_binary > 1 ) then
           call mpi_comm_free( comm_bin, ierr )
-          if ( ierr /= 0 ) call abort_mpi( 'Failed to close binary output communicator' )
+          if ( ierr /= 0 ) then
+             call abort_mpi( 'Failed to close binary output communicator' )
+          end if
        end if
        
     end if
@@ -1927,7 +2102,7 @@ CONTAINS
     real(dp) :: degs
     real(dp) :: angle
 
-    degs = angle/pi*180.d0
+    degs = angle / pi * 180.d0
 
   END FUNCTION degs
 
@@ -1941,10 +2116,9 @@ CONTAINS
     character(len=*)  :: filename
     integer           :: n
 
-    n = index(filename,'/',.true.)
+    n = index(filename, '/', .true.)
 
-    !if (n.gt.0) ftrim = filename(n+1:len_trim(filename)) -RK
-    ftrim = filename(n+1:len_trim(filename)) ! -RK
+    ftrim = filename(n+1:len_trim(filename))
 
   END FUNCTION ftrim
 
@@ -1952,7 +2126,7 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  FUNCTION addi(key_in,i) result(key)
+  FUNCTION addi(key_in, i) result(key)
 
     character(len=*) :: key_in
     character(len=8) :: key
@@ -1970,7 +2144,7 @@ CONTAINS
   END FUNCTION addi
 
 
-  FUNCTION addi2(key_in,i) result(key)
+  FUNCTION addi2(key_in, i) result(key)
 
     character(len=*) :: key_in
     character(len=24) :: key

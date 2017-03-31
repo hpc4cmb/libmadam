@@ -153,7 +153,8 @@ MODULE commonparam
   ! Output files
   character(len=SLEN) :: file_root='madam'
   character(len=SLEN) :: file_map='', file_hit='', file_base=''
-  character(len=SLEN) :: file_matrix='', file_mask='', file_binmap='', file_wcov=''
+  character(len=SLEN) :: file_matrix='', file_mask='', file_binmap=''
+  character(len=SLEN) :: file_wcov='', file_leakmatrix=''
   character(len=SLEN) :: file_gap_out='', file_mc='',  path_output=''
 
   logical :: write_tod=.false.
@@ -211,8 +212,9 @@ MODULE commonparam
   integer,allocatable :: id_submap(:)
   integer             :: id_next, id_prev
 
-  logical             :: do_map=.true., do_binmap=.false., do_hits=.false., do_mask=.false.
-  logical             :: do_matrix=.false., do_wcov=.false., do_base=.false.
+  logical             :: do_map=.true., do_binmap=.false., do_hits=.false.
+  logical             :: do_mask=.false., do_matrix=.false., do_wcov=.false.
+  logical             :: do_base=.false., do_leakmatrix=.false.
   logical             :: do_wnmap=.false., do_dethits=.false.
   logical             :: use_inmask
   logical             :: kinputcheck = .false.
