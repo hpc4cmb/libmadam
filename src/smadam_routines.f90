@@ -837,14 +837,13 @@ CONTAINS
        write(*,*)
        write(*,*) 'CG iteration begins'
        write(*,'(x,a,es25.15)') 'rzinit =',rzinit
-       write(*,*) 'istep, rz/rzinit'
-    endif
+       write(*,'(a4,3a16,a10)') 'istep', 'rz/rzinit', 'alpha', 'beta', 'time'
+    end if
 
     if (isnan(rz)) then
        if (id == 0) write(*,'(a)') 'WARNING: residual is NaN, no iterations'
        return
-    endif
-
+    end if
 
     allocate(locmap_all_threads(nmap,0:nsize_locmap,0:nthreads-1), stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for locmap_all_threads'
@@ -954,17 +953,16 @@ CONTAINS
        end if
 
        rzo = rz
-
        rz = sum(r*z)
        call sum_mpi(rz)
+       beta = rz/rzo
 
-       if (ID==0.and.info.ge.2) write(*,'(i4,es16.6," (",f6.3,"s)")') &
-            istep, rz/rzinit, get_time_and_reset(99)
+       if (ID==0.and.info.ge.2) write(*,'(i4,3es16.6," (",f6.3,"s)")') &
+            istep, rz/rzinit, alpha, beta, get_time_and_reset(99)
 
        if (rz/rzinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
 
-       beta = rz/rzo
        p = z + beta*p
 
     end do
@@ -977,7 +975,7 @@ CONTAINS
     if (id == 0 .and. info > 0) then
        write(*,*) 'Iteration done'
        write(*,'(i6,a)') noiter,' iteration steps'
-    endif
+    end if
     call wait_mpi
 
     cputime_cga = cputime_cga +get_time(10)
