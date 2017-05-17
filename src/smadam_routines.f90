@@ -1369,18 +1369,16 @@ CONTAINS
                  cycle loop_chunk_ap
             
             loop_baseline_ap : do k = kstart+1,kstart+noba
-               ! / detweight is canceled later
-               apn = nna(0,0,k,idet) * p(0,k,idet) / detweight
-               
+               apn = 0
                do i = baselines_short_start(k), baselines_short_stop(k)
                   if ( isubchunk /= 0 .and. subchunk(i) /= isubchunk ) cycle
                   ip = pixels(i, idet)
                   if (ip == dummy_pixel) cycle
-                  
-                  apn = apn - locmap(1,ip)
+
+                  apn = apn + locmap(1,ip)
                end do
-                  
-               ap_thread(1, k, idet) = ap_thread(1, k, idet) + apn * detweight
+               apn = nna(0,0,k,idet) * p(0,k,idet) - apn * detweight
+               ap_thread(1, k, idet) = apn
             end do loop_baseline_ap
          end do loop_chunk_ap
       end do loop_detector_ap
@@ -1417,20 +1415,18 @@ CONTAINS
                  cycle loop_chunk_ap
             
             loop_baseline_ap : do k = kstart+1,kstart+noba
-               ! / detweight is canceled later
-               apn = nna(0,0,k,idet) * p(0,k,idet) / detweight
-               
+               apn = 0
                do i = baselines_short_start(k), baselines_short_stop(k)
                   if ( isubchunk /= 0 .and. subchunk(i) /= isubchunk ) cycle
                   ip = pixels(i,idet)
                   if (ip == dummy_pixel) cycle
-                  
-                  apn = apn - weights(1,i,idet) * locmap(1,ip) &
-                       - weights(2,i,idet) * locmap(2,ip) &
-                       - weights(3,i,idet) * locmap(3,ip)
+
+                  apn = apn + weights(1,i,idet) * locmap(1,ip) &
+                       + weights(2,i,idet) * locmap(2,ip) &
+                       + weights(3,i,idet) * locmap(3,ip)
                end do
-               
-               ap_thread(1,k,idet) = ap_thread(1,k,idet) + apn * detweight
+               apn = nna(0,0,k,idet) * p(0,k,idet) - apn * detweight
+               ap_thread(1,k,idet) = apn
             end do loop_baseline_ap
          end do loop_chunk_ap
       end do loop_detector_ap
@@ -1467,19 +1463,17 @@ CONTAINS
                  cycle loop_chunk_ap
             
             loop_baseline_ap : do k = kstart+1,kstart+noba
-               ! / detweight is canceled later
-               apn = nna(0,0,k,idet) * p(0,k,idet) / detweight
-               
+               apn = 0
                do i = baselines_short_start(k), baselines_short_stop(k)
                   if ( isubchunk /= 0 .and. subchunk(i) /= isubchunk ) cycle
                   ip = pixels(i,idet)
                   if (ip == dummy_pixel) cycle
-                  
-                  apn = apn &
-                       - dot_product(weights(1:nmap,i,idet), locmap(1:nmap,ip))
-               end do
 
-               ap_thread(1, k, idet) = ap_thread(1, k, idet) + apn * detweight
+                  apn = apn &
+                       + dot_product(weights(1:nmap,i,idet), locmap(1:nmap,ip))
+               end do
+               apn = nna(0,0,k,idet) * p(0,k,idet) - apn * detweight
+               ap_thread(1, k, idet) = apn
             end do loop_baseline_ap
          end do loop_chunk_ap
       end do loop_detector_ap
@@ -1509,27 +1503,25 @@ CONTAINS
             if ( ipsd < 0 ) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if ( modulo( itask, omp_get_num_threads() ) /= id_thread ) &
                  cycle loop_chunk_ap
-            
+
             loop_baseline_ap : do k = kstart+1,kstart+noba
-               ! / detweight is canceled later
-               apnv = matmul( nna(0:basis_order,0:basis_order,k,idet), &
-                    p(0:basis_order,k,idet) ) / detweight
-                  
                i0 = baselines_short_start(k)
                basis_function => basis_functions(k)%arr
+               apnv = 0
                do i = baselines_short_start(k), baselines_short_stop(k)
                   if ( isubchunk /= 0 .and. subchunk(i) /= isubchunk ) cycle
                   ip = pixels(i,idet)
                   if (ip == dummy_pixel) cycle
-                  
-                  apnv = apnv - locmap(1,ip) * basis_function(0:basis_order,i-i0)
+
+                  apnv = apnv + locmap(1,ip) * basis_function(0:basis_order,i-i0)
                end do
-                  
-               ap_thread(:,k,idet) = ap_thread(:,k,idet) + apnv * detweight
+               apnv = matmul( nna(0:basis_order,0:basis_order,k,idet), &
+                    p(0:basis_order,k,idet) ) - apnv * detweight
+               ap_thread(:,k,idet) = apnv
             end do loop_baseline_ap
          end do loop_chunk_ap
       end do loop_detector_ap
@@ -1560,28 +1552,26 @@ CONTAINS
             if ( ipsd < 0 ) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if ( modulo( itask, omp_get_num_threads() ) /= id_thread ) &
                  cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1,kstart+noba
-               ! / detweight is canceled later
-               apnv = matmul(nna(0:basis_order,0:basis_order,k,idet), &
-                    p(0:basis_order,k,idet)) / detweight
-                  
                i0 = baselines_short_start(k)
                basis_function => basis_functions(k)%arr
+               apnv = 0
                do i = baselines_short_start(k), baselines_short_stop(k)
                   if ( isubchunk /= 0 .and. subchunk(i) /= isubchunk ) cycle
                   ip = pixels(i,idet)
                   if (ip == dummy_pixel) cycle
-                  
-                  apnv = apnv - dot_product(weights(1:nmap,i,idet), &
+
+                  apnv = apnv + dot_product(weights(1:nmap,i,idet), &
                        locmap(1:nmap,ip)) * basis_function(0:basis_order,i-i0)
                end do
-                  
-               ap_thread(:,k,idet) = ap_thread(:,k,idet) + apnv * detweight
+               apnv = matmul(nna(0:basis_order,0:basis_order,k,idet), &
+                    p(0:basis_order,k,idet)) - apnv * detweight
+               ap_thread(:,k,idet) = apnv
             end do loop_baseline_ap
          end do loop_chunk_ap
       end do loop_detector_ap

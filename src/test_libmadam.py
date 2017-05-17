@@ -60,6 +60,7 @@ if __name__ == '__main__':
 
     from mpi4py import MPI
     import numpy as np
+    np.random.seed(123456)
     comm = MPI.COMM_WORLD
     itask = comm.Get_rank()
     ntask = comm.Get_size()
@@ -203,8 +204,14 @@ if __name__ == '__main__':
         hmap = hmap_tot.astype( np.int32 )
         bmap = bmap_tot.astype( np.float32 )
 
-        hp.write_map( 'hits.fits', hmap, nest=True )
-        hp.write_map( 'binned.fits', bmap, nest=True )
+        try:
+            hp.write_map( 'hits.fits', hmap, nest=True )
+        except:
+            hp.write_map( 'hits.fits', hmap, nest=True, overwrite=True )
+        try:
+            hp.write_map( 'binned.fits', bmap, nest=True )
+        except:
+            hp.write_map( 'binned.fits', bmap, nest=True, overwrite=True )
 
         madam_hmap = hp.read_map( 'pymaps/madam_pytest_hmap.fits', nest=True )
         madam_bmap = hp.read_map( 'pymaps/madam_pytest_bmap.fits', nest=True )
