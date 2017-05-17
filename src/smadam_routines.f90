@@ -711,7 +711,7 @@ CONTAINS
     real(dp), intent(in) :: tod_stored(nosamples_proc,nodetectors)
 
     real(dp),allocatable   :: r(:,:,:), p(:,:,:), z(:,:,:), ap(:,:,:), proj(:)
-    real(dp)               :: rz, rzinit, rzo, pap
+    real(dp)               :: rz, rzinit, rzo, pap, rr, rrinit
     real(dp)               :: alpha, beta, pw, apn, bf, detweight
     integer :: i, j, k, n, m, ip, istep, idet, first, last, order, i0, m0
     integer :: order2, ichunk, noba, kstart, ipsd, itask
@@ -763,7 +763,8 @@ CONTAINS
     end if
     
     p = z
-    rz = sum(r*z)
+    rz = sum(r * z)
+    rr = sum(r * r)
 
     if (checknan) then
        if (isnan(rz)) print *,id,' : ERROR: rz is nan'          
@@ -822,8 +823,10 @@ CONTAINS
     end if ! checknan
 
     call sum_mpi(rz)
+    call sum_mpi(rr)
 
     rzinit = rz
+    rrinit = rr
     if (rzinit.lt.1.e-30) then
        if (id == 0) then
           write(*,*)
@@ -836,8 +839,10 @@ CONTAINS
     if (ID==0.and.info.ge.2) then
        write(*,*)
        write(*,*) 'CG iteration begins'
-       write(*,'(x,a,es25.15)') 'rzinit =',rzinit
-       write(*,'(a4,3a16,a10)') 'istep', 'rz/rzinit', 'alpha', 'beta', 'time'
+       write(*,'(x,a,es25.15)') 'rzinit =', rzinit
+       write(*,'(x,a,es25.15)') 'rrinit =', rrinit
+       write(*,'(a4,4a16,a10)') &
+            'istep', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
     end if
 
     if (isnan(rz)) then
@@ -953,14 +958,16 @@ CONTAINS
        end if
 
        rzo = rz
-       rz = sum(r*z)
+       rz = sum(r * z)
+       rr = sum(r * r)
        call sum_mpi(rz)
-       beta = rz/rzo
+       call sum_mpi(rr)
+       beta = rz / rzo
 
-       if (ID==0.and.info.ge.2) write(*,'(i4,3es16.6," (",f6.3,"s)")') &
-            istep, rz/rzinit, alpha, beta, get_time_and_reset(99)
+       if (ID==0.and.info.ge.2) write(*,'(i4,4es16.6," (",f6.3,"s)")') &
+            istep, rz/rzinit, rr/rrinit, alpha, beta, get_time_and_reset(99)
 
-       if (rz/rzinit < cglimit .and. istep > iter_min) exit
+       if ((rz/rzinit < cglimit .or. rr/rrinit < cglimit) .and. istep > iter_min) exit
        if (rz == 0) exit
 
        p = z + beta*p
@@ -1119,7 +1126,7 @@ CONTAINS
          end do loop_chunk
       end do loop_detector
       !$OMP END PARALLEL      
-      
+
     end subroutine baseline_to_map_order0_general
 
 
@@ -1144,7 +1151,7 @@ CONTAINS
             if ( ipsd < 0 ) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if ( modulo( itask, omp_get_num_threads() ) /= id_thread ) &
                  cycle loop_chunk
@@ -1157,7 +1164,7 @@ CONTAINS
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
                   ip = ip + 1 ! Start locmap indexing from 1
-                  
+
                   locmap_thread(1,ip) = locmap_thread(1,ip) + detweight &
                        * dot_product(basis_function(0:basis_order,m-m0), &
                        p(0:basis_order,k,idet))
@@ -1166,7 +1173,7 @@ CONTAINS
          end do loop_chunk
       end do loop_detector
       !$OMP END PARALLEL      
-      
+
     end subroutine baseline_to_map_nopol
 
     
