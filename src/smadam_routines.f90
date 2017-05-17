@@ -1107,7 +1107,7 @@ CONTAINS
     if (info >= 5) write(*,idf) ID,'Done'
 
   contains
-    
+
     ! Specific implementations of the CG iteration loop
 
     subroutine baseline_to_map_order0_nopol()
@@ -1129,7 +1129,7 @@ CONTAINS
             if ( ipsd < 0 ) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if ( modulo( itask, omp_get_num_threads() ) /= id_thread ) &
                  cycle loop_chunk
@@ -1141,14 +1141,14 @@ CONTAINS
                   ip = pixels(m,idet)
                   if (ip == dummy_pixel) cycle
                   ip = ip + 1 ! Start locmap indexing from 1
-                  
+
                   locmap_thread(1,ip) = locmap_thread(1,ip) + pw
                end do
             end do loop_baseline
          end do loop_chunk
       end do loop_detector
-      !$OMP END PARALLEL      
-      
+      !$OMP END PARALLEL
+
     end subroutine baseline_to_map_order0_nopol
 
 
@@ -1363,11 +1363,11 @@ CONTAINS
             if ( ipsd < 0 ) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if ( modulo( itask, omp_get_num_threads() ) /= id_thread ) &
                  cycle loop_chunk_ap
-            
+
             loop_baseline_ap : do k = kstart+1,kstart+noba
                apn = 0
                do i = baselines_short_start(k), baselines_short_stop(k)

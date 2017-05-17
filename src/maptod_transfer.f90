@@ -220,7 +220,10 @@ CONTAINS
     mem_min = memsum; mem_max = memsum
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
-    if (ID==0.and.info.ge.1) write(*,'(x,a,t32,3(f9.1," MB"))') 'Allocated memory for all2allv:', memsum, mem_min, mem_max
+    if (ID==0 .and. info > 0) then
+       write(*,'(x,a,t32,3(f9.1," MB"))') &
+            'Allocated memory for all2allv:', memsum, mem_min, mem_max
+    end if
 
   END SUBROUTINE initialize_alltoallv
 
@@ -242,13 +245,16 @@ CONTAINS
     integer :: ierr, itask, ind, i, nosubmap_target, isubmap
     integer, allocatable :: nosubmaps_task(:)
 
-    if (.not. allocated(ksubmap_table)) call abort_mpi('assign_submaps: ksubmap_table not allocated')
+    if (.not. allocated(ksubmap_table)) &
+         call abort_mpi('assign_submaps: ksubmap_table not allocated')
 
-    allocate( ksubmap(0:nosubmaps_tot-1,0:ntasks-1), nosubmaps_task(0:ntasks-1), stat=ierr )
+    allocate( ksubmap(0:nosubmaps_tot-1,0:ntasks-1), &
+         nosubmaps_task(0:ntasks-1), stat=ierr )
     if ( ierr /= 0 ) call abort_mpi('No room to assign submaps')
 
     if (id == 0 .and. nosubmaps_tot > 100000) then
-       write(*,'(a,i0,a,i0,a)') 'WARNING: You have a LOT of submaps (', nosubmaps_tot, &
+       write(*,'(a,i0,a,i0,a)') 'WARNING: You have a LOT of submaps (', &
+            nosubmaps_tot, &
             '). Reassigning submaps will take time. Reduce nside_submap (', &
             nside_submap, ') to divide the map in larger chunks'
     end if
@@ -262,7 +268,8 @@ CONTAINS
 
     id_submap = -1
 
-    ! First assign submaps to processes with local data up to nosubmap_target submaps per process
+    ! First assign submaps to processes with local data up to
+    ! nosubmap_target submaps per process
 
     loop_target : do i = 1,nosubmap_target
        loop_task : do itask = 0, ntasks-1
@@ -275,7 +282,8 @@ CONTAINS
              end if
           end do loop_submap
           if ( nosubmaps_task(itask) == 0 ) then
-             ! This process did not find any available submaps, pick the first available to have at least one
+             ! This process did not find any available submaps,
+             ! pick the first available to have at least one
              loop_submap2 : do isubmap = 0, nosubmaps_tot-1
                 if ( id_submap(isubmap) == -1 ) then
                    id_submap(isubmap) = itask
@@ -337,8 +345,10 @@ CONTAINS
        if (associated(submaps_send_cross)) deallocate(submaps_send_cross)
        if (associated(submaps_recv_cross)) deallocate(submaps_recv_cross)
        if ( use_inmask .or. do_hits ) then
-          if (associated(submaps_send_int_cross)) deallocate(submaps_send_int_cross)
-          if (associated(submaps_recv_int_cross)) deallocate(submaps_recv_int_cross)
+          if (associated(submaps_send_int_cross)) &
+               deallocate(submaps_send_int_cross)
+          if (associated(submaps_recv_int_cross)) &
+               deallocate(submaps_recv_int_cross)
        end if
     end if
 
@@ -413,10 +423,13 @@ CONTAINS
 
        nmap0 = size(submaps_send,1) ! Workaround for unpolarized subsets
 
-       call mpi_alltoallv( submaps_send, sendcounts*nmap0*nosubpix, sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-            submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
+       call mpi_alltoallv( submaps_send, sendcounts*nmap0*nosubpix, &
+            sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
+            submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, &
+            MPI_DOUBLE_PRECISION, comm, ierr )
 
-       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect map with alltoallv')
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to collect map with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m)
        id_thread = omp_get_thread_num()
@@ -424,7 +437,8 @@ CONTAINS
 
        do i = 1, nrecv_submap
           m = submaps_recv_ind(i)
-          if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
+          if ( num_threads > 1 ) then
+             ! don't do the costly modulo with one thread
              if ( modulo(m,num_threads) /= id_thread ) cycle
           end if
           map(1:nmap,:,m) = map(1:nmap,:,m) + submaps_recv(1:nmap,:,i)
@@ -528,7 +542,8 @@ CONTAINS
 
           do i = 1, nrecv_submap
              m = submaps_recv_ind(i)
-             if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
+             if ( num_threads > 1 ) then
+                ! don't do the costly modulo with one thread
                 if ( modulo(m,num_threads) /= id_thread ) cycle
              end if
              cc(1:nmap,col,:,m) = cc(1:nmap,col,:,m) + submaps_recv(1:nmap,:,i)
@@ -569,7 +584,7 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE collect_hits(hits,nosubpix)
+  SUBROUTINE collect_hits(hits, nosubpix)
 
     integer, intent(in)    :: nosubpix
     integer, intent(inout) :: hits(nosubpix,nosubmaps)
@@ -614,10 +629,12 @@ CONTAINS
        end if
        !$OMP END PARALLEL
 
-       call mpi_alltoallv( submaps_send, sendcounts*nosubpix, sendoffs*nosubpix, MPI_INTEGER, &
-            submaps_recv, recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, comm, ierr )
+       call mpi_alltoallv( submaps_send, sendcounts*nosubpix, &
+            sendoffs*nosubpix, MPI_INTEGER, submaps_recv, &
+            recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, comm, ierr )
 
-       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect hits with alltoallv')
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to collect hits with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m)
        id_thread = omp_get_thread_num()
@@ -625,7 +642,8 @@ CONTAINS
 
        do i = 1, nrecv_submap
           m = submaps_recv_ind(i)
-          if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
+          if ( num_threads > 1 ) then
+             ! don't do the costly modulo with one thread
              if ( modulo(m,num_threads) /= id_thread ) cycle
           end if
           hits(:,m) = hits(:,m) + submaps_recv(:,i)
@@ -640,7 +658,7 @@ CONTAINS
           
           do id_tod = 0,ntasks-1
              
-             if (.not.ksubmap_table(i,id_tod)) cycle
+             if (.not. ksubmap_table(i,id_tod)) cycle
              
              if (ID==id_tod) then  ! prepare send buffer
                 
@@ -649,16 +667,16 @@ CONTAINS
                    do j = 1,ndegrade
                       buffer(k) = buffer(k)+lochits(m)
                       m = m+1
-                   enddo
-                enddo
-             endif
+                   end do
+                end do
+             end if
              
              call send_mpi(buffer,nosubpix,id_tod,id_map)
 
              if (ID==id_map) hits(:,mrecv)=hits(:,mrecv)+buffer
              
-          enddo
-       enddo
+          end do
+       end do
     end if
 
   END SUBROUTINE collect_hits
@@ -667,7 +685,7 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE scatter_map(map,nosubpix)
+  SUBROUTINE scatter_map(map, nosubpix)
 
     integer, intent(in)  :: nosubpix
     real(dp),intent(in)  :: map(nmap,nosubpix,nosubmaps)
@@ -683,9 +701,9 @@ CONTAINS
     locmap = 0.0
 
     if (concatenate_messages .and. nosubpix==nosubpix_cross) then
-       ! use alltoallv to scatter the global map into locals       
-       ! This is the inverse operation of the alltoallv in collect_map so we swap the
-       ! send and recv arrays
+       ! use alltoallv to scatter the global map into locals
+       ! This is the inverse operation of the alltoallv in collect_map so we
+       ! swap the send and recv arrays
 
        if ( nosubpix == nosubpix_map ) then
           submaps_send => submaps_send_map
@@ -695,7 +713,8 @@ CONTAINS
           submaps_recv => submaps_recv_cross
        end if
 
-       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m,k,msend,id_tod)
+       !$OMP PARALLEL DEFAULT(SHARED) &
+       !$OMP    PRIVATE(id_thread,num_threads,i,m,k,msend,id_tod)
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
 
@@ -707,7 +726,8 @@ CONTAINS
              msend = msend + 1
              if ( .not. ksubmap_table(i,id_tod) ) cycle
              m = m + 1
-             if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
+             if ( num_threads > 1 ) then
+                ! don't do the costly modulo with one thread
                 if ( modulo(m,num_threads) /= id_thread ) cycle
              end if
              submaps_recv(:,:,m) = map(:,:,msend)
@@ -715,10 +735,13 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call mpi_alltoallv( submaps_recv, recvcounts*nmap*nosubpix, recvoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, &
-            submaps_send, sendcounts*nmap*nosubpix, sendoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr )
+       call mpi_alltoallv( submaps_recv, recvcounts*nmap*nosubpix, &
+            recvoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, &
+            submaps_send, sendcounts*nmap*nosubpix, sendoffs*nmap*nosubpix, &
+            MPI_DOUBLE_PRECISION, comm, ierr )
 
-       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to scatter map with alltoallv')
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to scatter map with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,m,k)
        if ( ndegrade == 1 ) then
@@ -734,7 +757,8 @@ CONTAINS
              m = submaps_send_ind(i) * nosubpix
              m = m * ndegrade
              do k = 1, nosubpix
-                locmap(:,m:m+ndegrade-1) = spread( submaps_send(:,k,i), 2, ndegrade )
+                locmap(:,m:m+ndegrade-1) = &
+                     spread( submaps_send(:,k,i), 2, ndegrade )
                 m = m + ndegrade
              end do
           end do
@@ -745,29 +769,29 @@ CONTAINS
 
        do i = 0,nosubmaps_tot-1
           id_map = id_submap(i)
-          
+
           if (ID==id_map) then
              msend = msend+1
              buffer = map(:,:,msend)
-          endif
-          
+          end if
+
           do id_tod = 0,ntasks-1
-             
-             if (.not.ksubmap_table(i,id_tod)) cycle
+
+             if (.not. ksubmap_table(i,id_tod)) cycle
 
              call send_mpi_vec_dp(buffer,nmap*nosubpix,id_map,id_tod)
-             
+
              if (ID==id_tod) then
                 do k = 1,nosubpix
                    do j = 1,ndegrade
                       locmap(:,m) = buffer(:,k)
                       m = m+1
-                   enddo
-                enddo
-             endif
-             
-          enddo
-       enddo
+                   end do
+                end do
+             end if
+
+          end do
+       end do
        
     end if
 
@@ -794,9 +818,9 @@ CONTAINS
     locmap = 0.0
 
     if (concatenate_messages .and. nosubpix==nosubpix_cross) then
-       ! use alltoallv to scatter the global map into locals       
-       ! This is the inverse operation of the alltoallv in collect_map so we swap the
-       ! send and recv arrays
+       ! use alltoallv to scatter the global map into locals
+       ! This is the inverse operation of the alltoallv in collect_map so we
+       ! swap the send and recv arrays
 
        if ( nosubpix == nosubpix_map ) then
           submaps_send => submaps_send_int_map
@@ -806,7 +830,8 @@ CONTAINS
           submaps_recv => submaps_recv_int_cross
        end if
 
-       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(id_thread,num_threads,i,m,k,msend,id_tod)
+       !$OMP PARALLEL DEFAULT(SHARED) &
+       !$OMP     PRIVATE(id_thread,num_threads,i,m,k,msend,id_tod)
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
 
@@ -818,7 +843,8 @@ CONTAINS
              msend = msend + 1
              if ( .not. ksubmap_table(i,id_tod) ) cycle
              m = m + 1
-             if ( num_threads > 1 ) then ! don't do the costly modulo with one thread
+             if ( num_threads > 1 ) then
+                ! don't do the costly modulo with one thread
                 if ( modulo(m,num_threads) /= id_thread ) cycle
              end if
              submaps_recv(:,m) = mask(:,msend)
@@ -826,10 +852,12 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call mpi_alltoallv( submaps_recv, recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, &
-            submaps_send, sendcounts*nosubpix, sendoffs*nosubpix, MPI_INTEGER, comm, ierr )
+       call mpi_alltoallv( submaps_recv, recvcounts*nosubpix, &
+            recvoffs*nosubpix, MPI_INTEGER, submaps_send, sendcounts*nosubpix, &
+            sendoffs*nosubpix, MPI_INTEGER, comm, ierr )
 
-       if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to scatter mask with alltoallv')
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to scatter mask with alltoallv')
 
        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,m,k)
        if ( ndegrade == 1 ) then
@@ -845,7 +873,8 @@ CONTAINS
              m = submaps_send_ind(i) * nosubpix
              m = m * ndegrade
              do k = 1, nosubpix
-                locmask(m:m+ndegrade-1) = spread( submaps_send(k,i), 1, ndegrade )
+                locmask(m:m+ndegrade-1) = &
+                     spread( submaps_send(k,i), 1, ndegrade )
                 m = m + ndegrade
              end do
           end do
@@ -859,7 +888,7 @@ CONTAINS
           if (ID==id_map) then
              msend = msend+1
              buffer = mask(:,msend)
-          endif
+          end if
           
           do id_tod = 0,ntasks-1
              
@@ -872,12 +901,12 @@ CONTAINS
                    do j = 1,ndegrade
                       locmask(m) = buffer(k)
                       m = m+1
-                   enddo
-                enddo
-             endif
+                   end do
+                end do
+             end if
              
-          enddo
-       enddo
+          end do
+       end do
     end if
 
   END SUBROUTINE scatter_mask

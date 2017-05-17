@@ -26,12 +26,7 @@ MODULE commonparam
   integer, external :: omp_get_num_procs, omp_get_max_threads, omp_get_thread_num, omp_get_num_threads
 
   ! TOAST additions -RK
-  !type(toast_mpi_run) :: run
   integer(dp), allocatable :: chunk_offsets(:), chunk_sizes(:)
-  !type(toast_mpi_distribution) :: data_distribution
-  !type(toast_chunkset), allocatable :: chunksets(:)
-  !type(toast_sky) :: sky
-  !type(toast_telescope) :: telescope
   integer(i4b) :: n_chunkset, n_chunkset_tot, n_channel, n_chunk, n_chunk_tot
   integer(i4b) :: n_chunk_max, n_sky_nonzero
   integer(i4b) :: first_chunk, last_chunk ! starts from 1
@@ -104,14 +99,6 @@ MODULE commonparam
   logical :: run_submap_test=.true.
   logical :: incomplete_matrices = .false.
   ! other additions end -RK
-
-  TYPE compressed_pointing  ! compressed pointing data for one baseline
-     integer, pointer :: ipix(:) => NULL()
-     integer, pointer :: iwp(:) => NULL()
-     real(sp),pointer :: qwp(:) => NULL()
-     real(sp),pointer :: uwp(:) => NULL()
-     integer          :: npix = 0
-  END TYPE compressed_pointing
 
   integer :: ID = 0
   integer :: ntasks = 1
