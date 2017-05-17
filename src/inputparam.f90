@@ -264,8 +264,6 @@ CONTAINS
        read(value,*,iostat=ierr) cglimit
     case ('fsample')
        read(value,*,iostat=ierr) fsample
-    case ('initialize_by_regression')
-       read(value,*,iostat=ierr) initialize_by_regression
     case ('mode_detweight')
        read(value,*,iostat=ierr) mode_detweight    
     case ('flag_by_horn')

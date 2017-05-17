@@ -47,7 +47,7 @@ MODULE commonparam
   character(len=SLEN) :: file_intermediate_profile = ''
   logical :: checknan=.false. ! Can cost time
   logical :: sync_output=.true., skip_existing=.false.
-  logical :: write_cut=.false., initialize_by_regression=.false.
+  logical :: write_cut=.false.
   logical :: filter_mean=.false.
   logical :: tod_is_clean = .false.
   logical :: binary_output=.false., concatenate_binary=.false.

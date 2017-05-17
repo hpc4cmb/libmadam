@@ -760,8 +760,6 @@ CONTAINS
        write (*,fe) 'cglimit',cglimit, 'Iteration convergence limit'
        write (*,fi) 'iter_min',iter_min, 'Minimum number of iterations'
        write (*,fi) 'iter_max',iter_max, 'Maximum number of iterations'
-       write (*,fk) 'initialize_by_regression', initialize_by_regression, &
-            'Baseline first guess'
     end if
 
     write(*,fi) 'precond_width', precond_width, &
