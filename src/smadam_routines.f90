@@ -908,12 +908,13 @@ CONTAINS
           call cinvmul(ap,p)
        else
           ap = 0
-          if (diagfilter) then
+          if (diagfilter /= 0) then
              do idet = 1,nodetectors
                 do k = 1, noba_short
                    do order = 0, basis_order
                       ap(order, k, idet) = &
-                           nna(order, order, k, idet) * p(order, k, idet)
+                           nna(order, order, k, idet) * p(order, k, idet) &
+                           * diagfilter
                    end do
                 end do
              end do

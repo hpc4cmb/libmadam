@@ -748,7 +748,7 @@ CONTAINS
           end if
        else
           write (*,fk) 'kfilter', kfilter, 'Noise filter OFF'
-          write (*,fk) 'diagfilter', diagfilter, 'diagonal baseline filter'
+          write (*,fe) 'diagfilter', diagfilter, 'diagonal baseline filter'
           write (*,ff) 'good_baseline_fraction', good_baseline_fraction, &
                'fraction of samples needed to use baseline'
        end if
