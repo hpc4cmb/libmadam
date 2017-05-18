@@ -290,6 +290,8 @@ CONTAINS
        read(value,*,iostat=ierr) psd_downsample
     case ('kfilter')
        read(value,*,iostat=ierr) kfilter
+    case ('diagfilter')
+       read(value,*,iostat=ierr) diagfilter
     case ('precond_width')
        read(value,*,iostat=ierr) precond_width
     case ('filter_time')

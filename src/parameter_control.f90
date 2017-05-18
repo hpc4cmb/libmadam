@@ -747,8 +747,9 @@ CONTAINS
              write (*,ff) 'tail_time',tail_time,'Filter overlap (s)'
           end if
        else
-          write (*,fk) 'kfilter',kfilter,'Noise filter OFF'
-          write (*,ff) 'good_baseline_fraction',good_baseline_fraction, &
+          write (*,fk) 'kfilter', kfilter, 'Noise filter OFF'
+          write (*,fk) 'diagfilter', diagfilter, 'diagonal baseline filter'
+          write (*,ff) 'good_baseline_fraction', good_baseline_fraction, &
                'fraction of samples needed to use baseline'
        end if
     else

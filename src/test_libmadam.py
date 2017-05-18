@@ -96,6 +96,7 @@ if __name__ == '__main__':
     pars[ 'write_hits' ] = True
     pars[ 'write_leakmatrix' ] = True
     pars[ 'kfilter' ] = True
+    pars[ 'diagfilter' ] = False
     pars[ 'file_root' ] = 'madam_pytest'
     pars[ 'path_output' ] = './pymaps/'
     pars[ 'iter_max' ] = 100

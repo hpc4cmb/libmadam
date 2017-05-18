@@ -526,7 +526,7 @@ CONTAINS
           ipsd = psd_index_det( idet, baselines_short_time(kstart+1) )
           if ( ipsd < 0 ) cycle
           detweight = detectors(idet)%weights(ipsd)
-          if (detweight == 0) cycle       
+          if (detweight == 0) cycle
           do k = kstart+1,kstart+noba
 
              yba(:,k,idet) = 0
@@ -538,7 +538,7 @@ CONTAINS
                 if ( isubchunk /= 0 .and. subchunk(i) /= isubchunk ) cycle
                 ip = pixels(i,idet)
                 if (ip == dummy_pixel) cycle
-                
+
                 ! Use of locmask rather than locmap==0 agrees with the old
                 ! versions of Madam and does not exclude poorly conditioned
                 ! pixels.
@@ -908,7 +908,17 @@ CONTAINS
           call cinvmul(ap,p)
        else
           ap = 0
-       endif
+          if (diagfilter) then
+             do idet = 1,nodetectors
+                do k = 1, noba_short
+                   do order = 0, basis_order
+                      ap(order, k, idet) = &
+                           nna(order, order, k, idet) * p(order, k, idet)
+                   end do
+                end do
+             end do
+          end if
+       end if
 
        ! From map to baseline
 
