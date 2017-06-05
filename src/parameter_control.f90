@@ -939,6 +939,7 @@ CONTAINS
     end do
 
     ! Split the pointing period into subchunks
+
     if (nsubchunk > 0) then
        my_offset = 0
        do i = first_chunk, last_chunk
@@ -993,7 +994,8 @@ CONTAINS
           memory_basis_functions = memory_basis_functions &
                + (basis_order+1)*nsamp*8
           basis_function => basis_functions(k)%arr
-          ninv = 1 / dble(size(basis_function, 2)-1) * 2
+          if (nsamp < 1) cycle
+          ninv = 1 / dble(nsamp-1) * 2
           select case (basis_func)
           case (basis_poly)
              ! Simple polynomial basis

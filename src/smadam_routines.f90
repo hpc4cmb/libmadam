@@ -761,14 +761,14 @@ CONTAINS
           end do
        end do
     end if
-    
+
     p = z
     rz = sum(r * z)
     rr = sum(r * r)
 
     if (checknan) then
        if (isnan(rz)) print *,id,' : ERROR: rz is nan'          
-          
+
        ybaloop : do idet = 1,nodetectors
           do i = 1,noba_short
              do order = 0, basis_order

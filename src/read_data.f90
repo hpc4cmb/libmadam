@@ -328,14 +328,21 @@ CONTAINS
     ! count the periods and their lengths
 
     if (nperiod > N_PERIOD_MAX) call abort_mpi('Please increase N_PERIOD_MAX')
-         
+
     do iperiod = 1, nperiod
        if (iperiod < nperiod) then
           len = periods(iperiod+1) - periods(iperiod)
        else
           len = nsamp - periods(iperiod)
        end if
-       
+       if (basis_order > 0 .and. len < basis_order + 1) then
+          ! The baseline hierarchy is degenerate for this period.  We could
+          ! try to handle the issue through flagging but likely the inputs
+          ! are wrong.
+          print *, id, ' : ERROR : period # ', iperiod, ' is only ', len, &
+               ' samples long but basis_order = ', basis_order
+          call abort_mpi('Too short period')
+       end if
        my_lengths(iperiod) = len
     end do
 
@@ -348,7 +355,7 @@ CONTAINS
        if (isend < id) first_chunk = first_chunk + n
     end do
     last_chunk = first_chunk + n_chunk - 1
-    
+
     if (info > 5) write (*, '(i4,a,i6,a,i6,a,i0,a)') &
          id, ' : first_chunk, last_chunk, n_chunk : ', &
          first_chunk, ' -- ', last_chunk, ' (', n_chunk, ')'
