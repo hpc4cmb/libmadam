@@ -87,7 +87,7 @@ MODULE commonparam
   integer(i4b) :: nsurvey
   logical, allocatable :: surveyflags(:)
 
-  logical :: bin_subsets = .true.
+  logical :: bin_subsets = .false.
   logical :: mcmode = .false., cached = .false.
 
   ! TOAST additions end -RK
