@@ -364,7 +364,7 @@ CONTAINS
       logical             :: kcover(0:nosubpix_map-1)
       real(dp)            :: summ(nmap), summ2(nmap), std(nmap)
       real(dp)            :: mean(nmap), minv(nmap), maxv(nmap), dmap(nmap)
-      character(len=14)   :: str(nmap)
+      character(len=15)   :: str(nmap)
 
       summ = 0.0
       summ2 = 0.0
