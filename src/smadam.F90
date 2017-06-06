@@ -35,7 +35,7 @@ module smadam
   real(sp) :: cputime_init=.0, cputime_final=.0, cputime_total=.0, &
        cputime_wait=.0, cputime_read=.0
 
-  real(dp), pointer :: temparr(:,:)=>null()
+  real(dp), pointer :: temparr(:, :)=>null()
   character(len=256) :: outfile
   character(len=80) :: header(1000)
   integer :: ierr, best_nside_submap, test_nside_submap
@@ -62,11 +62,11 @@ module smadam
 
 contains
 
-  subroutine destripe( comm, parstring, ndet, detstring, detweights, &
+  subroutine destripe(comm, parstring, ndet, detstring, detweights, &
        nsamp, nnz, timestamps, pix, pixweights, signal, &
        nperiod, periods, &
        npsd, npsdtot, psdstarts, npsdbin, psdfreqs, &
-       npsdval, psdvals ) bind( c, name='destripe' )
+       npsdval, psdvals) bind(c, name='destripe')
 
     integer(c_int), intent(in), value :: comm ! MPI communicator
 
@@ -105,7 +105,7 @@ contains
 
     ! set up MPI
 
-    call init_mpi( comm, ntasks, id )
+    call init_mpi(comm, ntasks, id)
 
     ! set up OpenMP
 
@@ -121,7 +121,7 @@ contains
 
     ! Then parse the parameter string
 
-    call read_parameters( parstring )
+    call read_parameters(parstring)
 
     if (id == 0 .and. info > 0) then
        write (*,*)
@@ -140,32 +140,32 @@ contains
     
     nmap = nnz
 
-    call read_detectors( detstring, ndet, detweights, npsd, npsdtot, &
-         psdstarts, npsdbin, psdfreqs, npsdval, psdvals )
+    call read_detectors(detstring, ndet, detweights, npsd, npsdtot, &
+         psdstarts, npsdbin, psdfreqs, npsdval, psdvals)
 
-    call c_f_pointer(timestamps, sampletime, (/nsamp/) )
-    call c_f_pointer(pix, pixels, (/nsamp, ndet/) )
-    call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/) )
-    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/) )
+    call c_f_pointer(timestamps, sampletime, (/nsamp/))
+    call c_f_pointer(pix, pixels, (/nsamp, ndet/))
+    call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/))
+    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/))
 
     ! Do a basic check for pointing
 
-    pixmin = minval( pixels )
-    pixmax = maxval( pixels )
+    pixmin = minval(pixels)
+    pixmax = maxval(pixels)
 
-    nside_max = max( nside_map, nside_cross )
+    nside_max = max(nside_map, nside_cross)
 
     if (pixmin < -1) then
        print *,'ERROR: smallest provided pixel number is ',pixmin
        call abort_mpi('Too small pixel number')
     end if
-    if (pixmax > 12*nside_max**2-1 ) then
+    if (pixmax > 12*nside_max**2-1) then
        print *,'ERROR: largest provided pixel number is ',pixmax, '>', &
             12*nside_max**2, ', nside = ',nside_max
        call abort_mpi('Too large pixel number')
     end if
 
-    call check_files( nperiod, periods, nsamp )
+    call check_files(nperiod, periods, nsamp)
 
     ! set output level for timing based on info level
     call tic
@@ -217,7 +217,7 @@ contains
        end if
 
        if (skip_existing) then
-          if ( file_exists(file_map) ) then
+          if (file_exists(file_map)) then
              file_map = subchunk_file_map
              file_binmap = subchunk_file_binmap
              file_base = subchunk_file_base
@@ -236,14 +236,14 @@ contains
        call write_parameters
        call wait_mpi
 
-       if ( isubchunk == subchunk_start ) then
+       if (isubchunk == subchunk_start) then
           call allocate_tod
 
           call allocate_baselines
 
           call tic
           call init_pointing
-          where ( pixels < 0 ) pixels = dummy_pixel
+          where (pixels < 0) pixels = dummy_pixel
           if (id == 0) call toc('init_pointing')
 
           call wait_mpi
@@ -261,7 +261,7 @@ contains
 
           call baseline_times(baselines_short_time, sampletime)
        else
-          if ( kfirst ) then
+          if (kfirst) then
              aa = 0
              yba = 0
              nna = 0
@@ -279,10 +279,10 @@ contains
        call update_maptod_transfer(ksubmap)
        if (id == 0) call toc('update_maptod_transfer')
 
-       if ( reassign_submaps ) then
+       if (reassign_submaps) then
           call tic
-          call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, &
-               nosubmaps_max )
+          call assign_submaps(id_submap, nosubmaps, nopix_map, nopix_cross, &
+               nosubmaps_max)
           if (id == 0) call toc('assign_submaps')
        end if
 
@@ -333,7 +333,7 @@ contains
           if (id == 0) call toc('reduce_pixels_a')
 
           if (use_inmask) then
-             if ( isubchunk == subchunk_start ) then
+             if (isubchunk == subchunk_start) then
                 call tic
                 call read_inmask(inmask)
                 if (id == 0) call toc('read_inmask')
@@ -353,7 +353,7 @@ contains
 
           if (basis_order == 0) then
              call tic
-             call construct_preconditioner(nna(0,0,:,:))
+             call construct_preconditioner(nna(0, 0, :, :))
              if (id == 0) call toc('construct_preconditioner')
           end if
 
@@ -429,7 +429,7 @@ contains
 
        call run_subsets()
 
-       if ( isubchunk == nsubchunk .and. kfirst ) then
+       if (isubchunk == nsubchunk .and. kfirst) then
           ! subtract the baselines to return the destriped TOD.
           ! If the baselines were already subtracted, the call has no effect.
           call tic
@@ -437,11 +437,11 @@ contains
           if (id == 0) call toc('clean_tod')
        end if
 
-       if ( kfirst ) then
+       if (kfirst) then
           call restore_pixels_a
        end if
 
-       if ( .not. mcmode ) then
+       if (.not. mcmode) then
           if (isubchunk == nsubchunk) then
              call free_baselines
           end if
@@ -530,14 +530,14 @@ contains
           call write_time('- save', cputime_save_matrix)
           call write_time('- Other')
 
-          call write_time('Subset maps', cputime_subset )
-          call write_time('- Flag subset', cputime_flag_subset )
-          call write_time('- Write subset', cputime_write_subset )
+          call write_time('Subset maps', cputime_subset)
+          call write_time('- Flag subset', cputime_flag_subset)
+          call write_time('- Write subset', cputime_write_subset)
 
-          call write_time('Finalization and output',cputime_final)
-          call write_time('Other',cputime_total-time_cum)
+          call write_time('Finalization and output', cputime_final)
+          call write_time('Other', cputime_total-time_cum)
 
-          call write_time('Total',cputime_total)
+          call write_time('Total', cputime_total)
           if (id == 0 .and. info > 0) write(*,*)
        endif
 
@@ -562,11 +562,14 @@ contains
 
     if (.not. mcmode) then
 
-       if (allocated(pntperiods)) deallocate( pntperiods, pntperiod_id, noba_short_pp )
-       if (allocated(baselines_short)) deallocate( baselines_short, base_pntid_short, basis_functions )
-       if (allocated(baselines_short_start)) deallocate( baselines_short_start, baselines_short_stop )
-       if (allocated(prec_diag)) deallocate( prec_diag )
-       if (allocated(bandprec)) deallocate( bandprec )
+       if (allocated(pntperiods)) &
+            deallocate(pntperiods, pntperiod_id, noba_short_pp)
+       if (allocated(baselines_short)) &
+            deallocate(baselines_short, base_pntid_short, basis_functions)
+       if (allocated(baselines_short_start)) &
+            deallocate(baselines_short_start, baselines_short_stop)
+       if (allocated(prec_diag)) deallocate(prec_diag)
+       if (allocated(bandprec)) deallocate(bandprec)
 
        call close_filter()
        call close_output()
@@ -576,14 +579,15 @@ contains
     end if
 
     call close_mpi()
-    
+
     return
 
   end subroutine destripe
 
 
-  subroutine destripe_with_cache( comm, ndet, nsamp, nnz, &
-       timestamps, pix, pixweights, signal, outpath ) bind( c, name='destripe_with_cache' )
+  subroutine destripe_with_cache(comm, ndet, nsamp, nnz, &
+       timestamps, pix, pixweights, signal, outpath) &
+       bind(c, name='destripe_with_cache')
 
     integer(c_int), intent(in), value :: comm ! MPI communicator
 
@@ -603,7 +607,7 @@ contains
 
     ! set up MPI
 
-    call init_mpi( comm, ntasks, id )
+    call init_mpi(comm, ntasks, id)
 
     ! set up OpenMP
 
@@ -633,24 +637,24 @@ contains
     ! Parse the output path
 
     n = 1
-    do while ( outpath(n) /= C_NULL_CHAR )
+    do while (outpath(n) /= C_NULL_CHAR)
        n = n + 1
     end do
 
-    if ( n > 1 ) then
+    if (n > 1) then
        path_output = ''
        do i = 1,n-1
           path_output(i:i) = outpath(i)
        end do
-       path_output = trim( adjustl( path_output ) )
+       path_output = trim(adjustl(path_output))
     end if
 
     nmap = nnz
 
-    call c_f_pointer(timestamps, sampletime, (/nsamp/) )
-    call c_f_pointer(pix, pixels, (/nsamp, ndet/) )
-    call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/) )
-    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/) )
+    call c_f_pointer(timestamps, sampletime, (/nsamp/))
+    call c_f_pointer(pix, pixels, (/nsamp, ndet/))
+    call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/))
+    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/))
 
     subchunk_file_map = file_map
     subchunk_file_binmap = file_binmap
@@ -681,7 +685,7 @@ contains
     end if
 
     if (skip_existing) then
-       if ( file_exists(file_map) ) then
+       if (file_exists(file_map)) then
           return
        end if
     end if
@@ -699,7 +703,7 @@ contains
     end if
 
     call tic
-    where ( pixels < 0 ) pixels = dummy_pixel
+    where (pixels < 0) pixels = dummy_pixel
     if (id == 0) call toc('init_pointing')
 
     call wait_mpi
@@ -720,9 +724,10 @@ contains
     call update_maptod_transfer(ksubmap)
     if (id == 0) call toc('update_maptod_transfer')
 
-    if ( reassign_submaps ) then
+    if (reassign_submaps) then
        call tic
-       call assign_submaps( id_submap, nosubmaps, nopix_map, nopix_cross, nosubmaps_max )
+       call assign_submaps(id_submap, nosubmaps, nopix_map, nopix_cross, &
+            nosubmaps_max)
        if (id == 0) call toc('assign_submaps')
     end if
 
@@ -807,7 +812,7 @@ contains
 
     call run_subsets()
 
-    if ( isubchunk == nsubchunk .and. kfirst ) then
+    if (isubchunk == nsubchunk .and. kfirst) then
        ! subtract the baselines to return the destriped TOD.
        ! If the baselines were already subtracted, the call has no effect.
        call tic
@@ -884,9 +889,9 @@ contains
        call write_time('- Preconditioning',     cputime_precond)
        call write_time('- Other')
 
-       call write_time('Subset maps', cputime_subset )
-       call write_time('- Flag subset', cputime_flag_subset )
-       call write_time('- Write subset', cputime_write_subset )
+       call write_time('Subset maps', cputime_subset)
+       call write_time('- Flag subset', cputime_flag_subset)
+       call write_time('- Write subset', cputime_write_subset)
 
        call write_time('Finalization and output',cputime_final)
        call write_time('Other',cputime_total-time_cum)
@@ -914,7 +919,7 @@ contains
   end subroutine destripe_with_cache
 
 
-  subroutine clear_caches() bind( c, name='clear_caches' )
+  subroutine clear_caches() bind(c, name='clear_caches')
 
     if (.not. cached .and. id == 0) &
          write (*,*) 'WARNING: Madam caches are already empty.'
@@ -924,13 +929,13 @@ contains
     call free_locmaps
     
     if (allocated(pntperiods)) &
-         deallocate( pntperiods, pntperiod_id, noba_short_pp )
+         deallocate(pntperiods, pntperiod_id, noba_short_pp)
     if (allocated(baselines_short)) &
-         deallocate( baselines_short, base_pntid_short, basis_functions )
+         deallocate(baselines_short, base_pntid_short, basis_functions)
     if (allocated(baselines_short_start)) &
-         deallocate( baselines_short_start, baselines_short_stop )
-    if (allocated(prec_diag)) deallocate( prec_diag )
-    if (allocated(bandprec)) deallocate( bandprec )
+         deallocate(baselines_short_start, baselines_short_stop)
+    if (allocated(prec_diag)) deallocate(prec_diag)
+    if (allocated(bandprec)) deallocate(bandprec)
 
     call close_filter()
     call close_output()
@@ -958,7 +963,7 @@ contains
     character(len=SLEN) :: detsetname, surveyname
     integer(i4b) :: pass, npass
 
-    if ( .not. bin_subsets ) return
+    if (.not. bin_subsets) return
 
     cputime_final = cputime_final + get_time_and_reset(1)
 
@@ -978,10 +983,10 @@ contains
     concatenate_messages_save = concatenate_messages
 
     npass = 1
-    if ( do_binmap .and. do_map ) npass = 2
+    if (do_binmap .and. do_map) npass = 2
 
     kfirst = .false.
-    if ( do_map ) do_binmap = .true.
+    if (do_map) do_binmap = .true.
 
     loop_pass : do pass = 1,npass
 
@@ -992,7 +997,7 @@ contains
        ! only if both binned and destriped maps are required are
        ! two passes performed
 
-       if ( pass == npass .and. do_map ) then
+       if (pass == npass .and. do_map) then
           ! subtract the baselines
           call tic
           call clean_tod(tod_stored, aa)
@@ -1002,9 +1007,9 @@ contains
        loop_survey : do isurvey = 0,nsurvey
 
           !cputime_final = cputime_final + get_time_and_reset(1)
-          call reset_time( 10 )
+          call reset_time(10)
 
-          if ( isurvey /= 0 ) then
+          if (isurvey /= 0) then
              survey = surveys(isurvey)
              surveyname = survey%name
 
@@ -1012,8 +1017,8 @@ contains
              surveyflags = .false.
              do i = 1, nosamples_proc
                 do j = 1,survey%nspan
-                   if ( survey%starts(j) <= sampletime(i) &
-                        .and. sampletime(i) <= survey%stops(j) ) then
+                   if (survey%starts(j) <= sampletime(i) &
+                        .and. sampletime(i) <= survey%stops(j)) then
                       surveyflags(i) = .true.
                    end if
                 end do
@@ -1028,30 +1033,30 @@ contains
 
           cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
 
-          if ( nhit_survey == 0 ) cycle
+          if (nhit_survey == 0) cycle
 
           loop_detset : do idetset = 0,ndetset
 
-             if ( idetset == 0 .and. isurvey == 0 ) then
+             if (idetset == 0 .and. isurvey == 0) then
                 cycle ! This case is already processed
              end if
 
-             call reset_time( 10 )
+             call reset_time(10)
 
-             if ( idetset /= 0 ) then
+             if (idetset /= 0) then
                 detset = detsets(idetset)
                 detsetname = detset%name
 
                 detflags = .false.
                 do idet = 1,nodetectors
                    do jdet = 1,detset%ndet
-                      if ( trim(detectors(idet)%name) &
-                           == trim(detset%detectors(jdet)) ) then
+                      if (trim(detectors(idet)%name) &
+                           == trim(detset%detectors(jdet))) then
                          detflags(idet) = .true.
                       end if
                    end do
                 end do
-                temperature_only = ( detset%nopol .and. .not. force_pol)
+                temperature_only = (detset%nopol .and. .not. force_pol)
              else
                 detflags = .true.
                 detsetname = detsets(0)%name
@@ -1066,19 +1071,19 @@ contains
 
              cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
 
-             if ( nhit_det == 0 ) cycle loop_detset
+             if (nhit_det == 0) cycle loop_detset
 
-             if ( temperature_only ) then
+             if (temperature_only) then
                 nmap = 1
                 ncc = 1
-                !if ( nmap_save /= nmap ) concatenate_messages = .false.
+                !if (nmap_save /= nmap) concatenate_messages = .false.
              else
                 nmap = nmap_save
                 ncc = ncc_save
                 concatenate_messages = concatenate_messages_save
              end if
 
-             if ( id == 0 .and. info > 0 ) then
+             if (id == 0 .and. info > 0) then
                 print *,''
                 print *,' *** Processing detset=', trim(detsetname), &
                      ', survey=',trim(surveyname)
@@ -1088,10 +1093,10 @@ contains
              ! construct file names
 
              subsetname = trim(path_output) // trim(file_root)
-             if ( len_trim(detsetname) /= 0 ) &
-                  subsetname = trim(subsetname) // '_' // trim( detsetname )
-             if ( len_trim(surveyname) /= 0 ) &
-                  subsetname = trim(subsetname) // '_' // trim( surveyname )
+             if (len_trim(detsetname) /= 0) &
+                  subsetname = trim(subsetname) // '_' // trim(detsetname)
+             if (len_trim(surveyname) /= 0) &
+                  subsetname = trim(subsetname) // '_' // trim(surveyname)
 
              file_binmap = ''
              file_hit = ''
@@ -1100,20 +1105,20 @@ contains
              file_wcov = ''
              file_mask = ''
 
-             if ( pass == npass .and. do_map ) then
+             if (pass == npass .and. do_map) then
                 file_binmap = trim(subsetname) // '_map.fits'
              else
-                if ( do_binmap ) file_binmap = trim(subsetname) // '_bmap.fits'
+                if (do_binmap) file_binmap = trim(subsetname) // '_bmap.fits'
              end if
-             if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
-             if ( do_matrix ) file_matrix = trim(subsetname) // '_wcov_inv.fits'
-             if ( do_leakmatrix ) then
+             if (do_hits)   file_hit    = trim(subsetname) // '_hmap.fits'
+             if (do_matrix) file_matrix = trim(subsetname) // '_wcov_inv.fits'
+             if (do_leakmatrix) then
                 file_leakmatrix = trim(subsetname) // '_leakmatrix.fits'
              end if
-             if ( do_wcov )   file_wcov   = trim(subsetname) // '_wcov.fits'
-             if ( do_mask )   file_mask   = trim(subsetname) // '_mask.fits'
+             if (do_wcov)   file_wcov   = trim(subsetname) // '_wcov.fits'
+             if (do_mask)   file_mask   = trim(subsetname) // '_mask.fits'
 
-             if ( nsubchunk > 1 ) then
+             if (nsubchunk > 1) then
                 call add_subchunk_id(file_hit, isubchunk, nsubchunk)
                 call add_subchunk_id(file_mask, isubchunk, nsubchunk)
                 call add_subchunk_id(file_matrix, isubchunk, nsubchunk)
@@ -1122,21 +1127,21 @@ contains
                 call add_subchunk_id(file_binmap, isubchunk, nsubchunk)
              end if
 
-             !if ( skip_existing ) then
-             if ( file_exists(file_binmap) .and. .not. concatenate_binary ) &
+             !if (skip_existing) then
+             if (file_exists(file_binmap) .and. .not. concatenate_binary) &
                   file_binmap = ''
-             if ( file_exists(file_hit) )    file_hit = ''
-             if ( file_exists(file_matrix) ) file_matrix = ''
-             if ( file_exists(file_leakmatrix) ) file_leakmatrix = ''
-             if ( file_exists(file_wcov) )   file_wcov = ''
-             if ( file_exists(file_mask) )   file_mask = ''
+             if (file_exists(file_hit))    file_hit = ''
+             if (file_exists(file_matrix)) file_matrix = ''
+             if (file_exists(file_leakmatrix)) file_leakmatrix = ''
+             if (file_exists(file_wcov))   file_wcov = ''
+             if (file_exists(file_mask))   file_mask = ''
              !end if
 
-             if ( len_trim(file_binmap) == 0 .and. len_trim(file_hit) == 0 &
+             if (len_trim(file_binmap) == 0 .and. len_trim(file_hit) == 0 &
                   .and. len_trim(file_matrix) == 0 &
                   .and. len_trim(file_leakmatrix) == 0 &
                   .and. len_trim(file_wcov) == 0 &
-                  .and. len_trim(file_mask) == 0 ) cycle
+                  .and. len_trim(file_mask) == 0) cycle
 
              cca = 0
              cc = 0
@@ -1153,10 +1158,10 @@ contains
              ! These calls required some tricks to accomodate unpolarized subsets
 
              call reset_time(10)
-             call pixel_matrix(cca(1:nmap,1:nmap,:), cc(1:nmap,1:nmap,:))
+             call pixel_matrix(cca(1:nmap, 1:nmap, :), cc(1:nmap, 1:nmap, :))
              cputime_write_subset = cputime_write_subset + get_time(10)
 
-             if ( pass == 1 ) then
+             if (pass == 1) then
                 call count_hits(nohits)
 
                 call reset_time(10)
@@ -1164,36 +1169,36 @@ contains
                 cputime_write_subset = cputime_write_subset + get_time(10)
              end if
 
-             call bin_tod(map(1:nmap,:), binmap(1:nmap,:), wamap(1:nmap,:), &
+             call bin_tod(map(1:nmap, :), binmap(1:nmap, :), wamap(1:nmap, :), &
                   tod_stored)
 
-             if ( pass == 1 ) then
+             if (pass == 1) then
                 call reset_time(10)
-                call write_matrix(cc(1:nmap,1:nmap,:))
+                call write_matrix(cc(1:nmap, 1:nmap, :))
                 cputime_write_subset = cputime_write_subset + get_time(10)
              end if
 
-             call invert_pixelmatrix_map(cc(1:nmap,1:nmap,:), outmask, crit)
+             call invert_pixelmatrix_map(cc(1:nmap, 1:nmap, :), outmask, crit)
 
-             if ( pass == 1 ) then
+             if (pass == 1) then
                 if (do_leakmatrix) then
                    do idet = 1,nodetectors
                       if (detflags(idet)) then
-                         call leakmatrix(idet, cc(1:nmap,1:nmap,:), outmask)
+                         call leakmatrix(idet, cc(1:nmap, 1:nmap, :), outmask)
                       end if
                    end do
                 end if
                 call reset_time(10)
-                call write_matrix(cc(1:nmap,1:nmap,:), outmask)
+                call write_matrix(cc(1:nmap, 1:nmap, :), outmask)
                 cputime_write_subset = cputime_write_subset + get_time(10)
              end if
 
-             call makemaps(binmap(1:nmap,:), cc(1:nmap,1:nmap,:), outmask)
-             call map_analysis(binmap(1:nmap,:), outmask)
+             call makemaps(binmap(1:nmap, :), cc(1:nmap, 1:nmap, :), outmask)
+             call map_analysis(binmap(1:nmap, :), outmask)
 
              call reset_time(10)
-             call write_binmap(binmap(1:nmap,:), outmask)
-             if ( pass == 1 ) call write_mask(outmask, crit)                
+             call write_binmap(binmap(1:nmap, :), outmask)
+             if (pass == 1) call write_mask(outmask, crit)                
              cputime_write_subset = cputime_write_subset + get_time(10)
 
              if (id == 0) call toc('subset map')
@@ -1201,7 +1206,7 @@ contains
           end do loop_detset
        end do loop_survey
 
-       if ( pass == npass .and. do_map .and. nsubchunk > 1 ) then
+       if (pass == npass .and. do_map .and. nsubchunk > 1) then
           ! add the baselines back
           call tic
           call unclean_tod(tod_stored, aa)
@@ -1233,18 +1238,18 @@ contains
 
 
 
-  function file_exists( filename )
+  function file_exists(filename)
     character(len=*) :: filename
     logical :: file_exists
 
     if (len_trim(filename) == 0) then
        file_exists = .false.
     else
-       inquire( file=trim(path_output) // trim(filename), exist=file_exists)
-       if ( .not. file_exists ) inquire( file=filename, exist=file_exists)
+       inquire(file=trim(path_output) // trim(filename), exist=file_exists)
+       if (.not. file_exists) inquire(file=filename, exist=file_exists)
     end if
 
-    if ( info > 0 ) then
+    if (info > 0) then
        if (file_exists .and. id == 0) write (*,*) trim(filename) // ' exists!'
        if (.not. file_exists .and. id == 0) &
             write (*,*) trim(path_output) // trim(filename) // ' does not exist!'
@@ -1288,136 +1293,6 @@ contains
   end subroutine add_subchunk_id
 
 
-
-  subroutine test_mpi_speed(nside_submap_test, best_nside_submap)
-    integer :: nside_submap_test, best_nside_submap
-
-    real(dp), allocatable :: tempmap(:,:,:)
-    real(dp), allocatable :: buffer(:,:)
-    logical, allocatable :: ksubmap_table_test(:,:), ksubmap_test(:)
-    logical, allocatable :: kbuffer(:)
-    integer, allocatable :: id_submap_test(:)
-
-    integer :: ierr, nosubpix_test, nosubmaps_test, nosubmaps_tot_test
-    integer :: nosubpix_max_test, nosubmaps_max_test
-    integer :: i, j, k, m, mrecv, id_tod, id_map, ndegrade
-    integer :: id_send, msend, idet
-    real(dp) :: time1, time2, time
-    real(dp), save :: best_time=1e9
-
-    if (id == 0 .and. info > 0) write (*,*) ' Running nside_submap test ...'
-
-    ! initialize submap parameters for nside_submap_test
-    nosubmaps_tot_test = 12*nside_submap_test**2
-    if (id == 0 .and. info > 0) &
-         write (*,'(a,"==",i0)') 'nosubmaps_tot_test', nosubmaps_tot_test
-    nosubmaps_max_test = (nosubmaps_tot_test-1)/ntasks+1
-    nosubpix_test = nside_cross**2/nside_submap_test**2
-    nosubpix_max_test = nside_max**2/nside_submap_test**2
-    ndegrade = nosubpix_max_test/nosubpix_test
-
-    ! simulate update_maptod_transfer to get ksubmap_table for the test
-    allocate(ksubmap_test(0:nosubmaps_tot_test))
-    ksubmap_test = .false.
-    do idet = 1, nodetectors
-       do i = 1,nosamples_proc
-          ksubmap_test(pixels(i, idet)/nosubpix_max_test) = .true.
-       end do
-    end do
-
-    allocate(ksubmap_table_test(0:nosubmaps_tot_test-1,0:ntasks-1), &
-         kbuffer(0:nosubmaps_tot_test-1))
-    do id_send = 0,ntasks-1
-       if (ID == id_send) kbuffer = ksubmap_test(0:nosubmaps_tot_test-1)
-       call broadcast_mpi(kbuffer,nosubmaps_tot_test,id_send)
-       ksubmap_table_test(0:nosubmaps_tot_test-1,id_send) = kbuffer
-    end do
-
-    allocate(id_submap_test(0:nosubmaps_tot_test-1))
-    nosubmaps_test = 0
-    do i = 0,nosubmaps_tot_test-1
-       k = mod(i,ntasks)
-       id_submap_test(i) = k
-       if (ID == k) nosubmaps_test = nosubmaps_test+1
-    enddo
-
-    ! Simulate collect_map
-    call wait_mpi
-    time1 = mpi_wtime()
-    allocate(tempmap(nmap,nosubpix_test,nosubmaps_test), &
-         buffer(nmap,nosubpix_test), stat=ierr)
-    mrecv = 0
-    m = 0
-    loop_submap : do i = 0,nosubmaps_tot_test-1
-       id_map = id_submap_test(i)
-       if (ID == id_map) mrecv = mrecv+1
-
-       loop_recv : do id_tod = 0,ntasks-1
-          if (.not. ksubmap_table_test(i,id_tod)) cycle
-          if (ID == id_tod) then  ! prepare send buffer
-             buffer = 0.0
-             loop_subpix : do k = 1,nosubpix_test
-                do j = 1,ndegrade
-                   buffer(:,k) = buffer(:,k) + 1.0 ! locmap(:,m)
-                   m = m + 1
-                end do
-             end do loop_subpix
-          end if
-
-          call send_mpi_vec_dp(buffer,nmap*nosubpix_test,id_tod,id_map)
-          if (ID == id_map) tempmap(:,:,mrecv) = tempmap(:,:,mrecv) + buffer
-       end do loop_recv
-    end do loop_submap
-    !call wait_mpi
-    time2 = mpi_wtime()
-    if (id == 0) write (*,'(a,i0,a,f6.3)') &
-         'collect_map@nside_submap == ',nside_submap_test,' : ',time2-time1
-
-    ! simulate scatter_map
-    msend = 0
-    m     = 0
-    do i = 0,nosubmaps_tot_test-1
-       id_map = id_submap_test(i)
-       if (id == id_map) then
-          msend = msend+1
-          buffer = 1.0 !map(:,:,msend)
-       endif
-       do id_tod = 0,ntasks-1
-          if (.not.ksubmap_table_test(i,id_tod)) cycle
-          call send_mpi_vec_dp(buffer,nmap*nosubpix_test,id_map,id_tod)
-          if (id == id_tod) then
-             do k = 1,nosubpix_test
-                do j = 1,ndegrade
-                   !locmap(:,m) = buffer(:,k)
-                   buffer(:,k) = buffer(:,k) + 1.0
-                   m = m + 1
-                end do
-             end do
-          end if
-       enddo
-    enddo
-    call wait_mpi
-    time = mpi_wtime()
-    if (id == 0) write (*,'(a,i0,a,f6.3)') &
-         'scatter_map@nside_submap == ',nside_submap_test,' : ',time-time2
-
-    time = time-time1
-    if (id == 0 .and. time < best_time) then
-       write (*,'(a,i0)') &
-            ' -- New OPTIMAL nside_submap is ',nside_submap_test
-       best_nside_submap = nside_submap_test
-       best_time = time
-    end if
-
-    call broadcast_mpi(best_nside_submap, 0) ! synchronize nside_submap
-
-    deallocate( ksubmap_table_test, id_submap_test, tempmap, buffer )
-
-    if (id == 0) write (*,*) ' ... nside_submap test completed'
-
-  end subroutine test_mpi_speed
-
-
   !---------------------------------------------------------------------------
 
 
@@ -1428,6 +1303,7 @@ contains
     if (id == 0 .and. info > 0) write(*,'(" Clock =",f10.3," s")') get_time(0)
 
   END SUBROUTINE time_stamp
+
 
   !---------------------------------------------------------------------------
 

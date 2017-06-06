@@ -43,8 +43,8 @@ CONTAINS
     real(dp) :: sigma, rms, fbase, psdmin
     integer(i8b) :: nn, ipsd
 
-    integer ( i8b ) :: nbin
-    real ( dp ), allocatable :: freqs(:), data(:)
+    integer (i8b) :: nbin
+    real (dp), allocatable :: freqs(:), data(:)
 
     ! Make sure path_output contains the separator
     
@@ -56,10 +56,10 @@ CONTAINS
     ! expand the file names
 
     subsetname = trim(file_root)
-    if ( len_trim( detsets(0)%name ) /= 0 ) &
-         subsetname = trim(subsetname) // '_' // trim( detsets(0)%name )
-    if ( len_trim( surveys(0)%name ) /= 0 ) &
-         subsetname = trim(subsetname) // '_' // trim( surveys(0)%name )
+    if (len_trim(detsets(0)%name) /= 0) &
+         subsetname = trim(subsetname) // '_' // trim(detsets(0)%name)
+    if (len_trim(surveys(0)%name) /= 0) &
+         subsetname = trim(subsetname) // '_' // trim(surveys(0)%name)
 
     file_map    = ''
     file_binmap = ''
@@ -70,19 +70,19 @@ CONTAINS
     file_base   = ''
     file_mask   = ''
 
-    if ( do_map )    file_map    = trim(subsetname) // '_map.fits'
-    if ( do_binmap ) file_binmap = trim(subsetname) // '_bmap.fits'
-    if ( do_hits )   file_hit    = trim(subsetname) // '_hmap.fits'
-    if ( do_matrix ) file_matrix = trim(subsetname) // '_wcov_inv.fits'
-    if ( do_leakmatrix ) file_leakmatrix = trim(subsetname) // '_leakmatrix'
-    if ( do_wcov )   file_wcov   = trim(subsetname) // '_wcov.fits'
-    if ( do_base )   file_base   = trim(subsetname) // '_base.fits'
-    if ( do_mask )   file_mask   = trim(subsetname) // '_mask.fits'
+    if (do_map)    file_map    = trim(subsetname) // '_map.fits'
+    if (do_binmap) file_binmap = trim(subsetname) // '_bmap.fits'
+    if (do_hits)   file_hit    = trim(subsetname) // '_hmap.fits'
+    if (do_matrix) file_matrix = trim(subsetname) // '_wcov_inv.fits'
+    if (do_leakmatrix) file_leakmatrix = trim(subsetname) // '_leakmatrix'
+    if (do_wcov)   file_wcov   = trim(subsetname) // '_wcov.fits'
+    if (do_base)   file_base   = trim(subsetname) // '_base.fits'
+    if (do_mask)   file_mask   = trim(subsetname) // '_mask.fits'
 
     ! in a Monte Carlo, the binary maps are appended into a single file
     ! rather than storing each realization separately
 
-    if ( binary_output .and. ( mc_loops > 1 .or. mc_id > 0 ) ) then
+    if (binary_output .and. (mc_loops > 1 .or. mc_id > 0)) then
        concatenate_binary = .true.
     else
        concatenate_binary = .false.
@@ -95,30 +95,30 @@ CONTAINS
        write(*,*) 'Initializing parameters'
     end if
 
-    if ( noise_weights_from_psd ) then
+    if (noise_weights_from_psd) then
 
        ! Improve noise weighting in case we have full PSDs from TOAST
 
        if (id == 0) write (*,*) 'Adjusting noise weights using noise spectra '
 
-       if ( radiometers ) then
+       if (radiometers) then
 
           ! well-behaved PSD, just get the last PSD bin value
 
           nbin = 1
-          allocate( freqs(nbin), data(nbin) )
+          allocate(freqs(nbin), data(nbin))
           freqs = fsample / 2
              
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd( detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:,ipsd), freqs, data )
-                rms = sqrt( data(1) * fsample )
+                call interpolate_psd(detectors(idet)%psdfreqs, &
+                     detectors(idet)%psds(:,ipsd), freqs, data)
+                rms = sqrt(data(1) * fsample)
                 detectors(idet)%sigmas(ipsd) = rms
              end do
           end do
 
-          deallocate( freqs, data )
+          deallocate(freqs, data)
 
        else
 
@@ -126,19 +126,19 @@ CONTAINS
           ! for white noise filters
 
           nbin = 10
-          allocate( freqs(nbin), data(nbin) )
+          allocate(freqs(nbin), data(nbin))
           freqs = (/ (dble(i), i=1,nbin) /)
              
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd( detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:,ipsd), freqs, data )
-                rms = sqrt( minval(data) * fsample )
+                call interpolate_psd(detectors(idet)%psdfreqs, &
+                     detectors(idet)%psds(:,ipsd), freqs, data)
+                rms = sqrt(minval(data) * fsample)
                 detectors(idet)%sigmas(ipsd) = rms
              end do
           end do
 
-          deallocate( freqs, data )
+          deallocate(freqs, data)
 
        end if
 
@@ -175,7 +175,6 @@ CONTAINS
        kfilter = .true.
        kfirst = .true. 
        filter_mean = .true.
-       run_submap_test = .false.
     end if
 
     if (nthreads > nthreads_max) nthreads = nthreads_max
@@ -189,7 +188,7 @@ CONTAINS
     call nside_check(nside_submap, 'nside_submap')
     call nside_check(nside_cross, 'nside_cross')
 
-    if ( nside_map < nside_cross ) &
+    if (nside_map < nside_cross) &
          call abort_mpi('nside_cross > nside_map not supported by Madam/TOAST')
 
     if (pixlim_cross < 0) pixlim_cross = pixlim_map
@@ -251,7 +250,7 @@ CONTAINS
     if (mode_detweight == 0) then ! Detector weights from RMS
 
        do idet = 1,nodetectors
-          where (detectors(idet)%sigmas == 0 )
+          where (detectors(idet)%sigmas == 0)
              detectors(idet)%weights = 0
           elsewhere
              detectors(idet)%weights = 1.d0 / detectors(idet)%sigmas**2
@@ -799,8 +798,6 @@ CONTAINS
        write (*,fi) 'mc_id', mc_id, &
             'Starting iteration identifier'
     end if
-    write (*,fk) 'run_submap_test', run_submap_test, &
-         'Run test for optimal nside_submap'
 
     write (*,*)
     if (time_unit >= 0) then
@@ -980,7 +977,7 @@ CONTAINS
        do j = 1, k-1
           if (basis_functions(j)%nsamp == basis_functions(k)%nsamp) then
              ! we already have a basis function of this length stored. 
-             basis_functions(k) = basis_functions(j)
+             basis_functions(k)%arr => basis_functions(j)%arr
              basis_functions(k)%copy = .true.
              exit
           end if
@@ -989,7 +986,7 @@ CONTAINS
           ! Allocate and initialize the basis function array for
           ! this baseline length
           nsamp = basis_functions(k)%nsamp
-          allocate(basis_functions(k)%arr(0:basis_order, 0:nsamp-1), stat=ierr )
+          allocate(basis_functions(k)%arr(0:basis_order, 0:nsamp-1), stat=ierr)
           if (ierr /= 0) stop 'No room for basis function'
           memory_basis_functions = memory_basis_functions &
                + (basis_order+1)*nsamp*8
@@ -1012,9 +1009,9 @@ CONTAINS
                 r = i * ninv
                 do order = 0,basis_order
                    if (modulo(order, 2) == 0) then
-                      basis_function(order, i) = cos( order * r )
+                      basis_function(order, i) = cos(order * r)
                    else
-                      basis_function(order, i) = sin( (order + 1) * r )
+                      basis_function(order, i) = sin((order + 1) * r)
                    end if
                 end do
              end do

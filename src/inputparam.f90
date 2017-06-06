@@ -222,8 +222,6 @@ CONTAINS
        read(value,*,iostat=ierr) nread_concurrent
     case ('good_baseline_fraction')
        read(value,*,iostat=ierr) good_baseline_fraction
-    case ('run_submap_test')
-       read(value,*,iostat=ierr) run_submap_test
     case ('concatenate_messages')
        read(value,*,iostat=ierr) concatenate_messages
     case ('reassign_submaps')

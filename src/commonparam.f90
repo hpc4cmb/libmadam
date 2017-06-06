@@ -59,10 +59,10 @@ MODULE commonparam
   type :: basis_function_type
      integer(i8b) :: nsamp
      logical :: copy
-     real(dp), pointer :: arr(:,:)
+     real(dp), pointer :: arr(:, :)
   end type basis_function_type
   type(basis_function_type), allocatable :: basis_functions(:)
-  real(dp), pointer :: basis_function(:,:)
+  real(dp), pointer :: basis_function(:, :)
 
   integer, parameter :: NDETMAX=1000
   integer, parameter :: NDETSETMAX=1000
@@ -97,7 +97,6 @@ MODULE commonparam
   real(dp) :: good_baseline_fraction=0 ! default acceps all baselines
   ! monte Carlo mode
   integer(idp) :: mc_increment=1e7, mc_loops=1, mc_id=0, rng_base=0
-  logical :: run_submap_test=.true.
   logical :: incomplete_matrices = .false.
   ! other additions end -RK
 

@@ -342,7 +342,7 @@ CONTAINS
     call sum_mpi(cover)
 
     do imap = 1,nmap
-       write ( stokes(imap), '(i8)') imap
+       write (stokes(imap), '(i9)') imap
     end do
 
     stdstr = ''
@@ -431,7 +431,7 @@ CONTAINS
     SUBROUTINE tempstr(str,t)
 
       real(dp)          :: t(nmap), abst
-      character(len=14) :: str(nmap)
+      character(len=15) :: str(nmap)
       integer           :: k
 
       str = ''
@@ -439,22 +439,22 @@ CONTAINS
          abst = abs(t(k))
 
          if (abst.gt.1.e-10.and.abst.le.1.e-6) then
-            write(str(k),'(f11.8," uK")') t(k)*1.e6
+            write(str(k),'(f12.8," uK")') t(k)*1.e6
 
          elseif (abst.gt.1e-6.and.abst.lt.0.001) then
-            write(str(k),'(f11.6," uK")') t(k)*1.e6
+            write(str(k),'(f12.6," uK")') t(k)*1.e6
 
          elseif (abst.ge.0.001.and.abst.lt.1) then
-            write(str(k),'(f11.3," uK")') t(k)*1.e6
+            write(str(k),'(f12.3," uK")') t(k)*1.e6
 
          elseif (abst.ge.1.and.abst.lt.1000) then
-            write(str(k),'(f11.6," K")') t(k)
+            write(str(k),'(f12.6," K")') t(k)
 
          elseif (abst.ge.1000.and.abst.lt.1000000) then
-            write(str(k),'(f11.3," K")') t(k)
+            write(str(k),'(f12.3," K")') t(k)
 
          else
-            write(str(k),'(es11.5," K")') t(k)
+            write(str(k),'(es12.5," K")') t(k)
          endif
       enddo
 
