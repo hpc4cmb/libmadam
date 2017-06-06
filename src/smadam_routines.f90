@@ -722,8 +722,6 @@ CONTAINS
     real(dp), allocatable, target :: locmap_all_threads(:, :, :)
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: locmap_thread(:, :), ap_thread(:, :, :)
-    real(dp) :: apnv(0:basis_order)    
-
 
     if (info > 4) write(*,idf) ID,'Begin iteration...'
 
@@ -1375,6 +1373,9 @@ CONTAINS
 
 
     subroutine map_to_baseline_nopol()
+
+      real(dp) :: apnv(0:basis_order)
+
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
       !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&
@@ -1422,7 +1423,9 @@ CONTAINS
 
 
     subroutine map_to_baseline_general()
-      
+
+      real(dp) :: apnv(0:basis_order)
+
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
       !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&

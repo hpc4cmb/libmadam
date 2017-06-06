@@ -112,6 +112,7 @@ contains
     nprocs = omp_get_num_procs()
     nthreads_max = omp_get_max_threads()
     nthreads = nthreads_max
+
     if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
             " threads per task.")') ntasks, nprocs, nthreads
