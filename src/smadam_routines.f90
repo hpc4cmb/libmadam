@@ -550,19 +550,20 @@ CONTAINS
                 do order = 0,basis_order
                    bf = basis_function(order, i-i0)
                    yba(order, k, idet) = yba(order, k, idet) &
-                        + bf * tod_stored(i, idet)
+                        + bf*tod_stored(i, idet)
                    nna(:, order, k, idet) = nna(:, order, k, idet) &
-                        + bf * basis_function(:, i-i0)
+                        + bf*basis_function(:, i-i0)
                 end do
 
                 ! This loop implicitly applies the locmap==0 (loccc==0) criterion
                 do order = 0,basis_order
                    bf = basis_function(order, i-i0)
                    if (nmap == 1) then
-                      yba(order, k, idet) = yba(order, k, idet) - bf * locmap(1, ip)
+                      yba(order, k, idet) = yba(order, k, idet) &
+                           - bf*locmap(1, ip)
                    else
                       yba(order, k, idet) = yba(order, k, idet) &
-                           - bf * dot_product(locmap(:, ip), weights(:, i, idet))
+                           - bf*dot_product(locmap(:, ip), weights(:, i, idet))
                    end if
                 end do
              end do
@@ -629,7 +630,8 @@ CONTAINS
              else if (minval(eigenvalues) / maxval(eigenvalues) < 1e-6) then
                 ! Degenerate basis functions
                 print *,id,' : rcond too small: ',eigenvalues
-                print *,id,' : hits : ',nna(0, 0, k, idet),' / ',baselines_short(k)
+                print *,id,' : hits : ',nna(0, 0, k, idet),' / ', &
+                     baselines_short(k)
                 print *,id,' : ',nna(:, :, k, idet)
                 nna(:, :, k, idet) = 0
                 yba(:, k, idet) = 0
@@ -640,9 +642,10 @@ CONTAINS
 
              if (bad_baseline) then
                 if (.not. kfilter) then
-                   call abort_mpi('Masking bad baselines not implemented. Increase good_baseline_fraction')
-                   ! There will be no baseline for this segment, subtract the corresponding
-                   ! binned signal
+                   call abort_mpi('Masking bad baselines not implemented. ' &
+                        // 'Increase good_baseline_fraction')
+                   ! There will be no baseline for this segment, subtract the
+                   ! corresponding binned signal
                    do i = baselines_short_start(k), baselines_short_stop(k)
                       ip = pixels(i, idet)
                       if (ip == dummy_pixel) cycle
@@ -651,8 +654,8 @@ CONTAINS
                               - tod_stored(i, idet) * detweight
                          loccc(1, 1, ip) = loccc(1, 1, ip) - detweight
                       else
-                         locmap(:, ip) = locmap(:, ip) &
-                              - weights(:, i, idet) * tod_stored(i, idet) * detweight
+                         locmap(:, ip) = locmap(:, ip) - weights(:, i, idet) &
+                              * tod_stored(i, idet) * detweight
                          call dsyr('U', nmap, detweight, weights(:, i, idet), &
                               -1, loccc(:, :, ip), nmap)
                       end if
@@ -703,16 +706,16 @@ CONTAINS
     ! Solution of the destriping equation by conjugate gradient algorithm
     ! This routine uses tables pixel,weights directly to speed up the computation.
     !
-    real(dp), intent(out)   :: aa(0:basis_order, noba_short_max, nodetectors)
-    real(dp), intent(in)    :: yba(0:basis_order, noba_short_max, nodetectors)
-    real(dp), intent(in)    :: nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
-    real(dp), intent(inout) :: wamap(nmap,0:nopix_cross-1)
-    real(dp), intent(in)    :: cca(nmap,nmap,0:nopix_cross-1)
-    real(dp), intent(in) :: tod_stored(nosamples_proc,nodetectors)
+    real(dp), intent(out) :: aa(0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(in) :: yba(0:basis_order, noba_short_max, nodetectors), &
+         nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(inout):: wamap(nmap, 0:nopix_cross-1)
+    real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
+    real(dp), intent(in) :: tod_stored(nosamples_proc, nodetectors)
 
-    real(dp),allocatable   :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :), proj(:)
-    real(dp)               :: rz, rzinit, rzo, pap, rr, rrinit
-    real(dp)               :: alpha, beta, pw, apn, bf, detweight
+    real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :)
+    real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
+    real(dp) :: alpha, beta, pw, apn, bf, detweight
     integer :: i, j, k, n, m, ip, istep, idet, first, last, order, i0, m0
     integer :: order2, ichunk, noba, kstart, ipsd, itask
     real(dp), pointer :: basis_function(:, :)
@@ -732,7 +735,7 @@ CONTAINS
          p(0:basis_order, noba_short, nodetectors), &
          ap(0:basis_order, noba_short, nodetectors), &
          z(0:basis_order, noba_short, nodetectors), &
-         proj(0:basis_order), stat=ierr)
+         stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
     memory_cg = max(noba_short*nodetectors*32.,memory_cg)
@@ -974,7 +977,8 @@ CONTAINS
        if (ID==0.and.info.ge.2) write(*,'(i4,4es16.6," (",f6.3,"s)")') &
             istep, rz/rzinit, rr/rrinit, alpha, beta, get_time_and_reset(99)
 
-       if ((rz/rzinit < cglimit .or. rr/rrinit < cglimit) .and. istep > iter_min) exit
+       if ((rz/rzinit < cglimit .or. rr/rrinit < cglimit) &
+            .and. istep > iter_min) exit
        if (rz == 0) exit
 
        p = z + beta*p
@@ -983,7 +987,7 @@ CONTAINS
 
     deallocate(locmap_all_threads, ap_all_threads)
 
-    deallocate(r, p, ap, z, proj)
+    deallocate(r, p, ap, z)
 
     noiter = istep
     if (id == 0 .and. info > 0) then
