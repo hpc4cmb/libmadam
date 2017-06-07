@@ -12,7 +12,7 @@ MODULE map_routines
 
   !real(sp),save     :: cputime_inv=.0 -RK
   real(sp),save,public :: cputime_inv=.0 ! -RK
-  character(len=14) :: stdstr(99,99)=''
+  character(len=15) :: stdstr(99,99)=''
 
   public stdstr, ccmultiply, invert_pixelmatrix_cross, &
        invert_pixelmatrix_map, makemaps, map_analysis
@@ -358,7 +358,7 @@ CONTAINS
 
     SUBROUTINE write_std(stdstr,map)
 
-      character(len=14)   :: stdstr(nmap) 
+      character(len=15)   :: stdstr(nmap)
       real(dp),intent(in) :: map(nmap,0:nosubpix_map-1,nosubmaps)
       integer             :: i, j, k
       logical             :: kcover(0:nosubpix_map-1)
