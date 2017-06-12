@@ -828,7 +828,7 @@ CONTAINS
        write(*,'(x,a,es25.15)') 'rzinit =', rzinit
        write(*,'(x,a,es25.15)') 'rrinit =', rrinit
        write(*,'(a4,4a16,a10)') &
-            'istep', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
+            'iter', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
     end if
 
     if (isnan(rz)) then
