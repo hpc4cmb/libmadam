@@ -33,7 +33,7 @@ MODULE commonparam
   logical, allocatable :: use_toast_channel(:)
   character(len=256) :: telescope_name, sky_name
   logical :: flag_by_horn=.false., force_pol=.false.
-  logical :: concatenate_messages = .true.
+  logical :: concatenate_messages = .true., allreduce = .false.
   logical :: reassign_submaps = .true.
   logical :: noise_weights_from_psd = .false. ! integrate noise weights internally
   logical :: radiometers = .true. ! Assume well-behaved noise spectrum without low pass filtering

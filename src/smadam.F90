@@ -138,7 +138,7 @@ contains
          call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
     if (temperature_only .and. nnz /= 1) &
          call abort_mpi('temperature_only=T but pointing weights are polarized')
-    
+
     nmap = nnz
 
     call read_detectors(detstring, ndet, detweights, npsd, npsdtot, &
@@ -162,7 +162,7 @@ contains
     end if
     if (pixmax > 12*nside_max**2-1) then
        print *,'ERROR: largest provided pixel number is ',pixmax, '>', &
-            12*nside_max**2, ', nside = ',nside_max
+            12*nside_max**2, ', nside = ', nside_max
        call abort_mpi('Too large pixel number')
     end if
 
@@ -345,7 +345,7 @@ contains
           end if
 
           call tic
-          call invert_pixelmatrix_cross(cca,inmask)
+          call invert_pixelmatrix_cross(cca, inmask)
           if (id == 0) call toc('invert_pixelmatrix_cross')
 
           call tic
@@ -375,7 +375,7 @@ contains
              call tic
              call write_baselines_a(aa)
              if (id == 0) call toc('write_baselines_a')
-             
+
           end if
 
        endif
@@ -404,7 +404,7 @@ contains
        call map_analysis(map, outmask)
 
        if (do_leakmatrix) then
-          do idet = 1,nodetectors
+          do idet = 1, nodetectors
              call leakmatrix(idet, cc, outmask)
           end do
        end if
@@ -497,26 +497,27 @@ contains
           call write_time('- TOD I/O', cputime_read_tod)
           call write_time('- Other')
 
-          call write_time('Waiting',                cputime_wait)
-          call write_time('Building pixel matrices',cputime_build_matrix)
-          call write_time('Multiplying leakage matrices',cputime_leakmatrix)
-          call write_time('Sending pixel matrices',cputime_send_matrix)
-          call write_time('Inverting pixel matrices',cputime_inv)
-          call write_time('Binning TOD',            cputime_bin_maps)
-          call write_time('Sending binned TOD',     cputime_send_maps)
-          call write_time('Counting hits',          cputime_count_hits)
-          call write_time('Building preconditioner',cputime_prec_construct)
+          call write_time('Waiting', cputime_wait)
+          call write_time('Building pixel matrices', cputime_build_matrix)
+          call write_time('Multiplying leakage matrices', cputime_leakmatrix)
+          call write_time('Sending pixel matrices', cputime_send_matrix)
+          call write_time('Inverting pixel matrices', cputime_inv)
+          call write_time('Binning TOD', cputime_bin_maps)
+          call write_time('Sending binned TOD', cputime_send_maps)
+          call write_time('Counting hits', cputime_count_hits)
+          call write_time('Building preconditioner', cputime_prec_construct)
           call write_time('Subtract/add baselines', &
                cputime_clean_tod+cputime_unclean_tod)
 
           call write_time('Initialization (1. phase)', cputime_cga_init)
-          call write_time('CG iteration',          cputime_cga)
-          call write_time('- TOD - map',           cputime_cga_1)
-          call write_time('- CG MPI',  cputime_cga_mpi)
-          call write_time('- CG ccmultiply',  cputime_cga_cc)
-          call write_time('- Map - TOD',           cputime_cga_2)
-          call write_time('- Filtering',           cputime_filter)
-          call write_time('- Preconditioning',     cputime_precond)
+          call write_time('CG iteration', cputime_cga)
+          call write_time('- TOD - map', cputime_cga_1)
+          call write_time('- MPI Reduce', cputime_cga_mpi_reduce)
+          call write_time('- MPI Scatter', cputime_cga_mpi_scatter)
+          call write_time('- CG ccmultiply', cputime_cga_cc)
+          call write_time('- Map - TOD', cputime_cga_2)
+          call write_time('- Filtering', cputime_filter)
+          call write_time('- Preconditioning', cputime_precond)
           call write_time('- Other')
 
           call write_time('NCM', cputime_ncm)
@@ -644,7 +645,7 @@ contains
 
     if (n > 1) then
        path_output = ''
-       do i = 1,n-1
+       do i = 1, n-1
           path_output(i:i) = outpath(i)
        end do
        path_output = trim(adjustl(path_output))
@@ -868,36 +869,37 @@ contains
        call write_time('- TOD I/O', cputime_read_tod)
        call write_time('- Other')
 
-       call write_time('Waiting',                cputime_wait)
-       call write_time('Building pixel matrices',cputime_build_matrix)
-       call write_time('Multiplying leakage matrices',cputime_leakmatrix)
-       call write_time('Sending pixel matrices',cputime_send_matrix)
-       call write_time('Inverting pixel matrices',cputime_inv)
-       call write_time('Binning TOD',            cputime_bin_maps)
-       call write_time('Sending binned TOD',     cputime_send_maps)
-       call write_time('Counting hits',          cputime_count_hits)
-       call write_time('Building preconditioner',cputime_prec_construct)
+       call write_time('Waiting', cputime_wait)
+       call write_time('Building pixel matrices', cputime_build_matrix)
+       call write_time('Multiplying leakage matrices', cputime_leakmatrix)
+       call write_time('Sending pixel matrices', cputime_send_matrix)
+       call write_time('Inverting pixel matrices', cputime_inv)
+       call write_time('Binning TOD', cputime_bin_maps)
+       call write_time('Sending binned TOD', cputime_send_maps)
+       call write_time('Counting hits', cputime_count_hits)
+       call write_time('Building preconditioner', cputime_prec_construct)
        call write_time('Subtract/add baselines', &
             cputime_clean_tod + cputime_unclean_tod)
 
        call write_time('Initialization (1. phase)', cputime_cga_init)
-       call write_time('CG iteration',          cputime_cga)
-       call write_time('- TOD - map',           cputime_cga_1)
-       call write_time('- CG MPI',  cputime_cga_mpi)
-       call write_time('- CG ccmultiply',  cputime_cga_cc)
-       call write_time('- Map - TOD',           cputime_cga_2)
-       call write_time('- Filtering',           cputime_filter)
-       call write_time('- Preconditioning',     cputime_precond)
+       call write_time('CG iteration', cputime_cga)
+       call write_time('- TOD - map', cputime_cga_1)
+       call write_time('- MPI Reduce', cputime_cga_mpi_reduce)
+       call write_time('- MPI Scatter', cputime_cga_mpi_scatter)
+       call write_time('- CG ccmultiply', cputime_cga_cc)
+       call write_time('- Map - TOD', cputime_cga_2)
+       call write_time('- Filtering', cputime_filter)
+       call write_time('- Preconditioning', cputime_precond)
        call write_time('- Other')
 
        call write_time('Subset maps', cputime_subset)
        call write_time('- Flag subset', cputime_flag_subset)
        call write_time('- Write subset', cputime_write_subset)
 
-       call write_time('Finalization and output',cputime_final)
-       call write_time('Other',cputime_total-time_cum)
+       call write_time('Finalization and output', cputime_final)
+       call write_time('Other', cputime_total-time_cum)
 
-       call write_time('Total',cputime_total)
+       call write_time('Total', cputime_total)
        if (id == 0) write(*,*)
 
     endif
@@ -924,11 +926,11 @@ contains
 
     if (.not. cached .and. id == 0) &
          write (*,*) 'WARNING: Madam caches are already empty.'
-    
+
     call free_baselines
     call free_maps
     call free_locmaps
-    
+
     if (allocated(pntperiods)) &
          deallocate(pntperiods, pntperiod_id, noba_short_pp)
     if (allocated(baselines_short)) &
@@ -989,12 +991,12 @@ contains
     kfirst = .false.
     if (do_map) do_binmap = .true.
 
-    loop_pass : do pass = 1,npass
+    loop_pass : do pass = 1, npass
 
        ! First pass produces the binned map, hit map, mask and the
        ! noise matrices then the baselines are subtracted and the
        ! second pass produces the destriped maps
-       ! 
+       !
        ! only if both binned and destriped maps are required are
        ! two passes performed
 
@@ -1005,7 +1007,7 @@ contains
           if (id == 0) call toc('clean_tod')
        end if
 
-       loop_survey : do isurvey = 0,nsurvey
+       loop_survey : do isurvey = 0, nsurvey
 
           !cputime_final = cputime_final + get_time_and_reset(1)
           call reset_time(10)
@@ -1036,7 +1038,7 @@ contains
 
           if (nhit_survey == 0) cycle
 
-          loop_detset : do idetset = 0,ndetset
+          loop_detset : do idetset = 0, ndetset
 
              if (idetset == 0 .and. isurvey == 0) then
                 cycle ! This case is already processed
@@ -1049,7 +1051,7 @@ contains
                 detsetname = detset%name
 
                 detflags = .false.
-                do idet = 1,nodetectors
+                do idet = 1, nodetectors
                    do jdet = 1,detset%ndet
                       if (trim(detectors(idet)%name) &
                            == trim(detset%detectors(jdet))) then
@@ -1183,7 +1185,7 @@ contains
 
              if (pass == 1) then
                 if (do_leakmatrix) then
-                   do idet = 1,nodetectors
+                   do idet = 1, nodetectors
                       if (detflags(idet)) then
                          call leakmatrix(idet, cc(1:nmap, 1:nmap, :), outmask)
                       end if
@@ -1199,7 +1201,7 @@ contains
 
              call reset_time(10)
              call write_binmap(binmap(1:nmap, :), outmask)
-             if (pass == 1) call write_mask(outmask, crit)                
+             if (pass == 1) call write_mask(outmask, crit)
              cputime_write_subset = cputime_write_subset + get_time(10)
 
              if (id == 0) call toc('subset map')
@@ -1348,7 +1350,8 @@ contains
     cputime_cga_init = 0
     cputime_cga = 0
     cputime_cga_1 = 0
-    cputime_cga_mpi = 0
+    cputime_cga_mpi_reduce = 0
+    cputime_cga_mpi_scatter = 0
     cputime_cga_cc = 0
     cputime_cga_2 = 0
 

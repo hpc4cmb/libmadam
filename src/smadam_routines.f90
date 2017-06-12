@@ -14,27 +14,14 @@ MODULE madam_routines
   implicit none
   private
 
-  real(sp), save, public :: memory_cg = 0.0
+  real(sp), save, public :: memory_cg = 0
 
-  real(sp), save, public :: cputime_build_matrix = 0.0,  &
-       cputime_send_matrix  = 0.0,  &
-       cputime_bin_maps     = 0.0,  &
-       cputime_send_maps    = 0.0,  &
-       cputime_count_hits   = 0.0,  &
-       cputime_cga          = 0.0,  &
-       cputime_cga_init     = 0.0,  &
-       cputime_cga_mpi      = 0.0,  &
-       cputime_cga_1        = 0.0,  &
-       cputime_cga_2        = 0.0,  &
-       cputime_cga_cc       = 0.0,  &
-       cputime_cgb          = 0.0,  &
-       cputime_cgb_init     = 0.0,  &
-       cputime_cgb_mpi      = 0.0,  &
-       cputime_cgb_1        = 0.0,  &
-       cputime_cgb_2        = 0.0,  &
-       cputime_clean_tod    = 0.0,  &
-       cputime_unclean_tod  = 0.0, &
-       cputime_leakmatrix   = 0.0
+  real(sp), save, public :: cputime_build_matrix = 0, cputime_send_matrix = 0, &
+       cputime_bin_maps = 0, cputime_send_maps = 0, cputime_count_hits = 0, &
+       cputime_cga = 0, cputime_cga_init = 0, cputime_cga_mpi_reduce = 0, &
+       cputime_cga_mpi_scatter = 0, cputime_cga_1 = 0, cputime_cga_2 = 0, &
+       cputime_cga_cc = 0, cputime_clean_tod = 0, cputime_unclean_tod = 0, &
+       cputime_leakmatrix = 0
 
   public pixel_matrix, bin_tod, &
        count_hits, initialize_a, iterate_a, &
@@ -95,7 +82,7 @@ CONTAINS
        cc_det(:, :, ip) = matmul(cc(:, :, ip), cc_det(:, :, ip))
     end do
     !$OMP END PARALLEL DO
-    
+
     cputime_leakmatrix = cputime_leakmatrix + get_time_and_reset(10)
 
     call write_leakmatrix(cc_det, mask, detectors(idet)%name)
@@ -165,7 +152,7 @@ CONTAINS
                 cycle
              end if
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle       
+             if (detweight == 0) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -222,7 +209,7 @@ CONTAINS
                 cycle
              end if
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle       
+             if (detweight == 0) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -299,7 +286,7 @@ CONTAINS
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) cycle
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle       
+             if (detweight == 0) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -318,7 +305,7 @@ CONTAINS
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) cycle
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle       
+             if (detweight == 0) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -380,7 +367,7 @@ CONTAINS
        !$OMP          nsize_locmap,nthreads,detectors,pixels,id,nopix_map) &
        !$OMP   PRIVATE(ichunk,noba,kstart,ipsd,detweight,k,i,ip,firstpix,&
        !$OMP          lastpix,id_thread)
-       
+
        if (id == 0 .and. nthreads /= omp_get_num_threads()) &
             print *, 'WARNING : counting hits with only ', &
             omp_get_num_threads(), ' / ', nthreads, ' threads'
@@ -414,7 +401,7 @@ CONTAINS
           end do
        end do
 
-       !$OMP END PARALLEL 
+       !$OMP END PARALLEL
 
        if (do_dethits) then
           call collect_hits(nohits(0, idet), nosubpix_map)
@@ -508,7 +495,7 @@ CONTAINS
           end do
        end do loop_idet
     end if
-    
+
     !$OMP PARALLEL DEFAULT(NONE) &
     !$OMP    PRIVATE(idet,ichunk,noba,kstart,ipsd,detweight,&
     !$OMP            k,i0,basis_function,i,ip,order,bf) &
@@ -546,7 +533,7 @@ CONTAINS
                    cycle ! masked by inmask or pixel rejection
                 end if
                 !if (use_inmask .and. locmask(ip) == 0) cycle
-                
+
                 do order = 0,basis_order
                    bf = basis_function(order, i-i0)
                    yba(order, k, idet) = yba(order, k, idet) &
@@ -601,7 +588,7 @@ CONTAINS
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
-          if (detweight == 0) cycle       
+          if (detweight == 0) cycle
           do k = kstart+1, kstart+noba
              nna_inv(:, :, k, idet) = 0
              if (abs(nna(0, 0, k, idet)) < 1e-30) then
@@ -667,14 +654,14 @@ CONTAINS
 
              eigenvectorsT = transpose(eigenvectors)
              do i = 1,n
-                eigenvectors(:,i) = eigenvectors(:,i) / eigenvalues(i)          
+                eigenvectors(:,i) = eigenvectors(:,i) / eigenvalues(i)
              end do
              nna_inv(:, :, k, idet) = matmul(eigenvectors, eigenvectorsT)
-             
+
              ngood = ngood + 1
           end do
        end do
-       
+
        deallocate(eigenvalues, eigenvectors, eigenvectorsT, workspace)
        !end if
     end do
@@ -690,7 +677,7 @@ CONTAINS
        print *,'                     ', 100.0*(ntot-nbad-ngood) / dble(ntot), &
             ' % were empty'
     end if
-    
+
     cputime_cga_init = cputime_cga_init + get_time(10)
 
     if (info > 4) write(*,idf) id,'Done'
@@ -750,7 +737,7 @@ CONTAINS
     ! Standard aa=0 first guess
 
     r = yba(:, 1:noba_short, 1:nodetectors)
-    
+
     if (basis_order == 0) then
        call preconditioning_band(z(0, :, :), r(0, :, :))
     else
@@ -766,7 +753,7 @@ CONTAINS
     rr = sum(r * r)
 
     if (checknan) then
-       if (isnan(rz)) print *,id,' : ERROR: rz is nan'          
+       if (isnan(rz)) print *,id,' : ERROR: rz is nan'
 
        ybaloop : do idet = 1,nodetectors
           do i = 1,noba_short
@@ -807,7 +794,7 @@ CONTAINS
              end do
           end do
        end do zloop ! z
-          
+
        ploop : do idet = 1,nodetectors
           do i = 1,noba_short
              do order = 0, basis_order
@@ -818,7 +805,7 @@ CONTAINS
                 end if
              end do
           end do
-       end do ploop ! p          
+       end do ploop ! p
     end if ! checknan
 
     call sum_mpi(rz)
@@ -861,7 +848,7 @@ CONTAINS
 
     istep = 0
     do
-       if (istep >= iter_max) exit 
+       if (istep >= iter_max) exit
        istep = istep + 1
 
        call reset_time(12)
@@ -896,14 +883,15 @@ CONTAINS
        wamap = 0.0
        call collect_map(wamap, nosubpix_cross) ! locmap -> wamap
        call wait_mpi
-       cputime_cga_mpi = cputime_cga_mpi + get_time_and_reset(12)
+       cputime_cga_mpi_reduce = cputime_cga_mpi_reduce + get_time_and_reset(12)
        ! apply cca, rejects masked pixels
        call ccmultiply(cca, wamap, nopix_cross)
        call wait_mpi
        cputime_cga_cc = cputime_cga_cc + get_time_and_reset(12)
        call scatter_map(wamap, nosubpix_cross) ! wamap -> locmap
        call wait_mpi
-       cputime_cga_mpi = cputime_cga_mpi +get_time_and_reset(12)
+       cputime_cga_mpi_scatter = cputime_cga_mpi_scatter &
+            + get_time_and_reset(12)
 
        if (kfilter) then
           call cinvmul(ap,p)
@@ -1068,7 +1056,7 @@ CONTAINS
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if (modulo(itask, omp_get_num_threads()) /= id_thread) &
                  cycle loop_chunk
@@ -1080,7 +1068,7 @@ CONTAINS
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
                   ip = ip + 1 ! Start locmap indexing from 1
-                  
+
                   locmap_thread(1, ip) = locmap_thread(1, ip) &
                        + weights(1, m, idet) * pw
                   locmap_thread(2, ip) = locmap_thread(2, ip) &
@@ -1092,13 +1080,13 @@ CONTAINS
          end do loop_chunk
       end do loop_detector
 
-      !$OMP END PARALLEL      
-      
+      !$OMP END PARALLEL
+
     end subroutine baseline_to_map_order0_pol
 
 
     subroutine baseline_to_map_order0_general()
-      
+
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
       !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
@@ -1117,7 +1105,7 @@ CONTAINS
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if (modulo(itask, omp_get_num_threads()) /= id_thread) &
                  cycle loop_chunk
@@ -1129,20 +1117,20 @@ CONTAINS
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
                   ip = ip + 1 ! Start locmap indexing from 1
-                  
+
                   locmap_thread(:, ip) = locmap_thread(:, ip) &
                        + weights(:, m, idet) * pw
                end do
             end do loop_baseline
          end do loop_chunk
       end do loop_detector
-      !$OMP END PARALLEL      
+      !$OMP END PARALLEL
 
     end subroutine baseline_to_map_order0_general
 
 
     subroutine baseline_to_map_nopol()
-      
+
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
       !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
@@ -1182,7 +1170,7 @@ CONTAINS
             end do loop_baseline
          end do loop_chunk
       end do loop_detector
-      !$OMP END PARALLEL      
+      !$OMP END PARALLEL
 
     end subroutine baseline_to_map_nopol
 
@@ -1230,7 +1218,7 @@ CONTAINS
             end do loop_baseline
          end do loop_chunk
       end do loop_detector
-      !$OMP END PARALLEL      
+      !$OMP END PARALLEL
 
     end subroutine baseline_to_map_general
 
@@ -1251,7 +1239,7 @@ CONTAINS
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))            
+            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1302,11 +1290,11 @@ CONTAINS
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle loop_chunk_ap
-            
+
             itask = itask + 1
             if (modulo(itask, omp_get_num_threads()) /= id_thread) &
                  cycle loop_chunk_ap
-            
+
             loop_baseline_ap : do k = kstart+1, kstart+noba
                apn = 0
                do i = baselines_short_start(k), baselines_short_stop(k)
@@ -1346,12 +1334,12 @@ CONTAINS
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))            
+            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
-            
+
             itask = itask + 1
             if (modulo(itask, omp_get_num_threads()) /= id_thread) &
                  cycle loop_chunk_ap
@@ -1395,7 +1383,7 @@ CONTAINS
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))            
+            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1445,7 +1433,7 @@ CONTAINS
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))            
+            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1504,18 +1492,19 @@ CONTAINS
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
-          if (detweight == 0) cycle       
+          if (detweight == 0) cycle
           do k = kstart+1, kstart+noba
              i0 = baselines_short_start(k)
              basis_function => basis_functions(k)%arr
              do i = baselines_short_start(k), baselines_short_stop(k)
                 if (isubchunk /= 0 .and. subchunk(i) /= isubchunk) cycle
-                
+
                 ip = pixels(i, idet)
                 if (ip == dummy_pixel) cycle
-                
-                aw = dot_product(basis_function(:, i-i0), aa(:, k, idet)) * detweight
-                
+
+                aw = dot_product(basis_function(:, i-i0), aa(:, k, idet)) &
+                     * detweight
+
                 if (nmap == 1) then
                    locmap(1, ip) = locmap(1, ip) - aw
                 else

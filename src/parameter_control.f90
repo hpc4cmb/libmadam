@@ -360,6 +360,12 @@ CONTAINS
     nosubpix_map = nside_map**2 / nside_submap**2
     nosubpix_cross = nside_cross**2 / nside_submap**2
 
+    ! Message passing strategy
+    if (allreduce) then
+       concatenate_messages = .false.
+       reassign_submaps = .true.
+    end if
+
     ! covmat specific checks
     if (kwrite_covmat) then
        ! ensure that the baseline correlation is evaluated far enough
@@ -707,6 +713,8 @@ CONTAINS
          write (*,fi) 'nside_submap', nside_submap, 'Submap resolution'
     write (*,fk) 'concatenate_messages', concatenate_messages, &
          'use mpi_alltoallv to communicate'
+    write (*,fk) 'allreduce', allreduce, &
+         'use allreduce to communicate'
     write (*,fk) 'reassign_submaps', reassign_submaps, &
          'minimize communication by reassigning submaps'
 

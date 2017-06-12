@@ -87,8 +87,8 @@ if __name__ == '__main__':
     pars[ 'base_first' ] = 1.0
     pars[ 'fsample' ] = fsample
     pars[ 'nside_map' ] = nside
-    pars[ 'nside_cross' ] = nside
-    pars[ 'nside_submap' ] = nside
+    pars[ 'nside_cross' ] = nside // 2
+    pars[ 'nside_submap' ] = nside // 4
     pars[ 'write_map' ] = True
     pars[ 'write_binmap' ] = True
     pars[ 'write_matrix' ] = True
@@ -101,20 +101,23 @@ if __name__ == '__main__':
     pars[ 'path_output' ] = './pymaps/'
     pars[ 'iter_max' ] = 100
     pars[ 'nsubchunk' ] = 2
+    pars[ 'allreduce' ] = True
 
     #pars[ 'detset' ] = ['LFI27 : LFI27M, LFI27S',
     #                    'LFI28 : LFI28M, LFI28S']
-    pars[ 'survey' ] = ['hm1 : {} - {}'.format(0, nsamp/2),
-                        #'hm2 : {} - {}'.format(nsamp/2, nsamp),
-                        #'odd : {} - {}, {} - {}'.format(0, nsamp/4, nsamp/2, 3*nsamp/4),
-                        #'even : {} - {}, {} - {}'.format(nsamp/4, nsamp/2, 3*nsamp/4, nsamp)
+    pars[ 'survey' ] = [
+        'hm1 : {} - {}'.format(0, nsamp/2),
+        #'hm2 : {} - {}'.format(nsamp/2, nsamp),
+        #'odd : {} - {}, {} - {}'.format(0, nsamp/4, nsamp/2, 3*nsamp/4),
+        #'even : {} - {}, {} - {}'.format(nsamp/4, nsamp/2, 3*nsamp/4, nsamp)
     ]
     pars[ 'bin_subsets' ] = True
 
     if itask == 0:
         shutil.rmtree('pymaps', ignore_errors=True)
         os.mkdir('pymaps')
-        for fn in ['pymaps/madam_pytest_hmap.fits', 'pymaps/madam_pytest_bmap.fits']:
+        for fn in ['pymaps/madam_pytest_hmap.fits',
+                   'pymaps/madam_pytest_bmap.fits']:
             if os.path.isfile(fn):
                 print('Removing old {}'.format(fn))
                 os.remove(fn)

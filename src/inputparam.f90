@@ -224,6 +224,8 @@ CONTAINS
        read(value,*,iostat=ierr) good_baseline_fraction
     case ('concatenate_messages')
        read(value,*,iostat=ierr) concatenate_messages
+    case ('allreduce')
+       read(value,*,iostat=ierr) allreduce
     case ('reassign_submaps')
        read(value,*,iostat=ierr) reassign_submaps
     case ('pixmode_map')
