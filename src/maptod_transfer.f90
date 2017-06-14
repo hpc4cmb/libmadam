@@ -856,7 +856,7 @@ CONTAINS
     integer :: ierr, ind, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
     real(dp), allocatable :: recvbuf(:, :, :), sendbuf(:, :, :)
-    integer :: recvcounts_gather(0:ntasks-1), displs_gather(0:ntasks-1)
+    integer :: recvcounts_gather(ntasks), displs_gather(ntasks)
     integer :: nsend, itask, sendcount_gather
 
     ndegrade = nosubpix_max / nosubpix
@@ -875,10 +875,12 @@ CONTAINS
        k = 0
        sendbuf = 0
        do i = 0, nosubmaps_tot-1
-          if (ksubmap_table(i, 0)) k = k + 1
-          if (id == id_submap(i)) m = m + 1
-          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
-             sendbuf(:, :, k) = map(:, :, m)
+          if (id == id_submap(i)) then
+             m = m + 1
+             if (ksubmap_table(i, 0)) then
+                k = k + 1
+                sendbuf(:, :, k) = map(:, :, m)
+             end if
           end if
        end do
 
@@ -886,8 +888,8 @@ CONTAINS
        call mpi_allgather(sendcount_gather, 1, MPI_INTEGER, recvcounts_gather, &
             1, MPI_INTEGER, comm, ierr)
 
-       displs_gather(0) = 0
-       do itask = 1, ntasks-1
+       displs_gather(1) = 0
+       do itask = 2, ntasks
           displs_gather(itask) = displs_gather(itask-1) &
                + recvcounts_gather(itask-1)
        end do
@@ -1038,39 +1040,61 @@ CONTAINS
     integer :: buffer(nosubpix)
     integer :: ierr, ind, id_thread, num_threads
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
-    integer, allocatable :: buf(:, :)
+    integer, allocatable :: recvbuf(:, :), sendbuf(:, :)
+    integer :: recvcounts_gather(ntasks), displs_gather(ntasks)
+    integer :: nsend, itask, sendcount_gather
 
     ndegrade = nosubpix_max / nosubpix
     locmask = 0
 
     if (allreduce .and. nosubpix == nosubpix_cross) then
-       allocate(buf(nosubpix, nolocmaps), stat=ierr)
-       if (ierr /= 0) stop 'No room for allreduce buffer'
+       nsend = 0
+       do i = 0, nosubmaps_tot-1
+          if ((id_submap(i) == id) .and. ksubmap_table(i, 0)) nsend = nsend + 1
+       end do
+       allocate(sendbuf(nosubpix, nsend), &
+            recvbuf(nosubpix, nolocmaps), stat=ierr)
+       if (ierr /= 0) stop 'No room for allgatherv buffers'
 
        m = 0
        k = 0
-       buf = 0
+       sendbuf = 0
        do i = 0, nosubmaps_tot-1
-          if (ksubmap_table(i, 0)) k = k + 1
-          if (id == id_submap(i)) m = m + 1
-          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
-             buf(:, k) = mask(:, m)
+          if (id == id_submap(i)) then
+             m = m + 1
+             if (ksubmap_table(i, 0)) then
+                k = k + 1
+                sendbuf(:, k) = mask(:, m)
+             end if
           end if
        end do
 
-       call mpi_allreduce(MPI_IN_PLACE, buf, nosubpix*nolocmaps, &
-            MPI_INTEGER, MPI_SUM, comm, ierr)
+       sendcount_gather = nosubpix * nsend
+       call mpi_allgather(sendcount_gather, 1, MPI_INTEGER, recvcounts_gather, &
+            1, MPI_INTEGER, comm, ierr)
+
+       displs_gather(1) = 0
+       do itask = 2, ntasks
+          displs_gather(itask) = displs_gather(itask-1) &
+               + recvcounts_gather(itask-1)
+       end do
+
+       call mpi_allgatherv(sendbuf, sendcount_gather, MPI_INTEGER, &
+            recvbuf, recvcounts_gather, displs_gather, MPI_INTEGER, &
+            comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to scatter mask with allreduce')
+            call abort_mpi('Failed to gather mask with allgatherv')
+
+       deallocate(sendbuf)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, k, m) &
-       !$OMP     SHARED(ndegrade, nolocmaps, nosubpix, buf, locmask)
+       !$OMP     SHARED(ndegrade, nolocmaps, nosubpix, recvbuf, locmask)
        if (ndegrade == 1) then
           !$OMP DO
           do i = 1, nolocmaps
              m = (i-1) * nosubpix
-             locmask(m:m+nosubpix-1) = buf(:, i)
+             locmask(m:m+nosubpix-1) = recvbuf(:, i)
           end do
           !$OMP END DO
        else
@@ -1078,7 +1102,7 @@ CONTAINS
           do i = 1, nolocmaps
              m = (i-1) * nosubpix * ndegrade
              do k = 1, nosubpix
-                locmask(m:m+ndegrade-1) = spread(buf(k, i), 1, ndegrade)
+                locmask(m:m+ndegrade-1) = spread(recvbuf(k, i), 1, ndegrade)
                 m = m + ndegrade
              end do
           end do
@@ -1086,7 +1110,7 @@ CONTAINS
        end if
        !$OMP END PARALLEL
 
-       deallocate(buf)
+       deallocate(recvbuf)
     else if (concatenate_messages .and. nosubpix == nosubpix_cross) then
        ! use alltoallv to scatter the global map into locals
        ! This is the inverse operation of the alltoallv in collect_map so we
