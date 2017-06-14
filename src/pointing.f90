@@ -10,27 +10,21 @@ MODULE pointing
   implicit none
   private
 
-  real(dp),allocatable,public :: cospsi(:),   &
-       sinpsi(:)
-
   logical, allocatable, public :: kpolarized(:)
 
-  integer, allocatable, public :: detbits(:)
-
-  integer(c_long), pointer, public :: pixels(:,:)
-  real(c_double), pointer, public :: weights(:,:,:)
-
+  integer(c_long), pointer, public :: pixels(:, :)
+  real(c_double), pointer, public :: weights(:, :, :)
 
   ! Next two are used for sub ring maps
 
-  integer(i2b), allocatable,target,public :: subchunk(:)
+  integer(i2b), allocatable, target, public :: subchunk(:)
   integer(i2b), pointer, public :: subchunkpp(:)
 
   integer :: buffersize = 0
 
-  integer, allocatable,public :: ipix(:)
-  logical, allocatable,public :: kpix(:)
-  real(dp),allocatable,public :: pweight(:,:)
+  integer, allocatable, public :: ipix(:)
+  logical, allocatable, public :: kpix(:)
+  real(dp), allocatable, public :: pweight(:, :)
 
   real(sp),public :: memory_pointing = 0.0
 
@@ -39,13 +33,8 @@ MODULE pointing
 
   integer, public :: dummy_pixel = -1
 
-  public init_pointing,      &
-       close_pointing,       &
-       allocate_pixbuffer
-
-  public reduce_pixels_buff, &
-       restore_pixels_buff,  &
-       reduce_pixels_a,      &
+  public init_pointing, close_pointing, allocate_pixbuffer, &
+       reduce_pixels_buff, restore_pixels_buff, reduce_pixels_a, &
        restore_pixels_a
 
 CONTAINS
@@ -57,39 +46,23 @@ CONTAINS
     !
     !Initialize the pointing module and allocate memory for pointing data.
     !
-    integer  :: idet, k, allocstat, detbit
+    integer  :: idet, k, allocstat
     real(dp) :: psi
     real(sp) :: memory, mem_min, mem_max
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
 
-    allocate(cospsi(nodetectors), sinpsi(nodetectors), &
-         kpolarized(nodetectors), detbits(nodetectors), stat=allocstat)
-    call check_stat(allocstat, 'cospsi, sinpsi, kpolarized and detbits')
+    allocate(kpolarized(nodetectors), stat=allocstat)
+    call check_stat(allocstat, 'kpolarized')
 
     if (temperature_only) detectors%kpolar = .false.
-
-    detbit = 1
-    do idet = 1,nodetectors
-       detbits(idet) = detbit
-       detbit = 2*detbit
-    enddo
 
     allocate(subchunk(nosamples_proc), stat=allocstat)
     call check_stat(allocstat, 'subchunk')
     subchunk = 0 ! initialize
 
-    !allocate(pixels(nosamples_proc, nodetectors), stat=allocstat)
-    !call check_stat(allocstat)
     memory_pointing = nosamples_proc*nodetectors*4.
-    !pixels = 0
-
-    !if (nmap /= 1) then
-    !   allocate(weights(nmap, nosamples_proc, nodetectors), stat=allocstat)
-    !   call check_stat(allocstat)
     memory_pointing = memory_pointing + nosamples_proc*nodetectors*24.
-    !   weights = 0
-    !endif
 
     call allocate_pixbuffer(1024)
 
@@ -122,7 +95,7 @@ CONTAINS
 
     integer :: k
 
-    if (allocated(cospsi)) deallocate(cospsi, sinpsi, kpolarized, detbits)
+    if (allocated(kpolarized)) deallocate(kpolarized)
 
     if (allocated(ipix))      deallocate(ipix)
     if (allocated(kpix))      deallocate(kpix)
@@ -138,7 +111,7 @@ CONTAINS
 
     if (allocated(basis_functions)) then
        do k = 1, noba_short
-          if ( .not. basis_functions(k)%copy ) deallocate(basis_functions(k)%arr)
+          if (.not. basis_functions(k)%copy) deallocate(basis_functions(k)%arr)
        end do
        deallocate(basis_functions)
     end if
@@ -159,26 +132,26 @@ CONTAINS
 
     integer, intent(in) :: n
 
-    if (n.le.buffersize) return
+    if (n <= buffersize) return
 
-    if (allocated(ipix))    deallocate(ipix)
-    if (allocated(kpix))    deallocate(kpix)
+    if (allocated(ipix)) deallocate(ipix)
+    if (allocated(kpix)) deallocate(kpix)
     if (allocated(pweight)) deallocate(pweight)
 
     buffersize = 1
     do
-       if (buffersize.ge.n) exit
+       if (buffersize >= n) exit
        buffersize = 2*buffersize
     enddo
 
     allocate(ipix(buffersize))
     allocate(kpix(buffersize))
-    allocate(pweight(nmap,buffersize))
+    allocate(pweight(nmap, buffersize))
 
     ipix = -1
     kpix = .true.
     pweight = 0.0
-    pweight(1,:) = 1.d0
+    pweight(1, :) = 1
 
   END SUBROUTINE allocate_pixbuffer
 
@@ -189,27 +162,34 @@ CONTAINS
   SUBROUTINE reduce_pixels_buff
     ! Reduce pixel numbers so that they point to locmap
     !
-    integer :: i, k, ip, idet
+    integer :: i, k, ip, idet, ierr
 
-    if (info > 4) write(*,idf) id,'Reduce pixel numbers...'
+    if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
     ksubmap = .false.
 
-    do idet = 1,nodetectors
-       if ( .not. detflags(idet) ) cycle
-       do i = 1,nosamples_proc
-          if ( isubchunk /= 0 .and. subchunkpp(i) /= isubchunk ) cycle
-          if ( .not. surveyflags(i) ) cycle
-          ip = pixels(i,idet) / nosubpix_max
+    do idet = 1, nodetectors
+       if (.not. detflags(idet)) cycle
+       do i = 1, nosamples_proc
+          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
+          if (.not. surveyflags(i)) cycle
+          ip = pixels(i, idet) / nosubpix_max
           ksubmap(ip) = .true.
        end do
     end do
     ksubmap(nosubmaps_tot) = .true.  ! always allocate the dummy pixel
 
+    if (allreduce) then
+       ! Flag all hit submaps on every process
+       call mpi_allreduce(MPI_IN_PLACE, ksubmap, nosubmaps_tot, MPI_LOGICAL, &
+            MPI_LOR, comm, ierr)
+       if (ierr /= 0) call abort_mpi('Reducing ksubmaps failed.')
+    end if
+
     subtable1 = -1
     subtable2 = -1
     k = -1
-    do i = 0,nosubmaps_tot
+    do i = 0, nosubmaps_tot
        if (ksubmap(i)) then
           k = k + 1
           subtable1(i) = i - k
@@ -217,19 +197,19 @@ CONTAINS
        endif
     end do
 
-    do idet = 1,nodetectors
-       if ( .not. detflags(idet) ) cycle
-       do i = 1,nosamples_proc
-          if ( isubchunk /= 0 .and. subchunkpp(i) /= isubchunk ) cycle
-          if ( .not. surveyflags(i) ) cycle
-          ip = pixels(i,idet) / nosubpix_max
-          pixels(i,idet) = pixels(i,idet) - subtable1(ip)*nosubpix_max
+    do idet = 1, nodetectors
+       if (.not. detflags(idet)) cycle
+       do i = 1, nosamples_proc
+          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
+          if (.not. surveyflags(i)) cycle
+          ip = pixels(i, idet) / nosubpix_max
+          pixels(i, idet) = pixels(i, idet) - subtable1(ip)*nosubpix_max
        end do
     end do
 
     dummy_pixel = (nosubmaps_tot - subtable1(nosubmaps_tot)) * nosubpix_max
 
-    if (info > 4) write(*,idf) id,'Done'
+    if (info > 4) write(*,idf) id, 'Done'
 
   END SUBROUTINE reduce_pixels_buff
 
@@ -242,15 +222,15 @@ CONTAINS
     !
     integer :: i, ip, idet
 
-    if (info > 4) write(*,idf) id,'Restore pixel numbers...'
+    if (info > 4) write(*,idf) id, 'Restore pixel numbers...'
 
-    do idet = 1,nodetectors
-       if ( .not. detflags(idet) ) cycle
-       do i = 1,nosamples_proc
-          if ( isubchunk /= 0 .and. subchunkpp(i) /= isubchunk ) cycle
-          if ( .not. surveyflags(i) ) cycle
-          ip = pixels(i,idet) / nosubpix_max
-          pixels(i,idet) = pixels(i,idet) + subtable2(ip)*nosubpix_max            
+    do idet = 1, nodetectors
+       if (.not. detflags(idet)) cycle
+       do i = 1, nosamples_proc
+          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
+          if (.not. surveyflags(i)) cycle
+          ip = pixels(i, idet) / nosubpix_max
+          pixels(i, idet) = pixels(i, idet) + subtable2(ip)*nosubpix_max
        end do
     end do
 
@@ -259,7 +239,7 @@ CONTAINS
     subtable2 = 0
     dummy_pixel = 12*nside_max**2
 
-    if (info > 4) write(*, idf) ID,'Done'
+    if (info > 4) write(*, idf) id, 'Done'
 
   END SUBROUTINE restore_pixels_buff
 
@@ -272,14 +252,14 @@ CONTAINS
     !
     integer :: i, idet, k, ip
 
-    if (info.ge.5) write(*,idf) ID,'Reduce pixel numbers...'
+    if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
     ksubmap = .false.
 
     do idet = 1, nodetectors
-       do i = 1,nosamples_proc
-          if ( isubchunk /= 0 .and. subchunkpp(i) /= isubchunk ) cycle
-          ip = pixels(i,idet) / nosubpix_max
+       do i = 1, nosamples_proc
+          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
+          ip = pixels(i, idet) / nosubpix_max
           ksubmap(ip) = .true.
        enddo
     enddo
@@ -288,7 +268,7 @@ CONTAINS
     subtable1 = -1
     subtable2 = -1
     k = -1
-    do i = 0,nosubmaps_tot
+    do i = 0, nosubmaps_tot
        if (ksubmap(i)) then
           k = k+1
           subtable1(i) = i-k
@@ -297,16 +277,16 @@ CONTAINS
     enddo
 
     do idet = 1, nodetectors
-       do i = 1,nosamples_proc
-          if ( isubchunk /= 0 .and. subchunkpp(i) /= isubchunk ) cycle
+       do i = 1, nosamples_proc
+          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet)/nosubpix_max
-          pixels(i, idet) = pixels(i,idet) -subtable1(ip)*nosubpix_max
+          pixels(i, idet) = pixels(i, idet) - subtable1(ip)*nosubpix_max
        enddo
     enddo
 
-    dummy_pixel = (nosubmaps_tot-subtable1(nosubmaps_tot))*nosubpix_max
+    dummy_pixel = (nosubmaps_tot-subtable1(nosubmaps_tot)) * nosubpix_max
 
-    if (info > 4) write(*,idf) ID,'Done'
+    if (info > 4) write(*,idf) id, 'Done'
 
   END SUBROUTINE reduce_pixels_a
 
@@ -318,22 +298,22 @@ CONTAINS
     !
     integer :: i, idet, ip
 
-    if (info.ge.5) write(*,idf) ID,'Restore pixel numbers (a)...'
+    if (info.ge.5) write(*,idf) id, 'Restore pixel numbers (a)...'
 
     do idet = 1, nodetectors
-       do i = 1,nosamples_proc
-          if ( isubchunk /= 0 .and. subchunkpp(i) /= isubchunk ) cycle
+       do i = 1, nosamples_proc
+          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet) / nosubpix_max
-          pixels(i, idet) = pixels(i,idet) + subtable2(ip)*nosubpix_max
-       enddo
-    enddo
-       
+          pixels(i, idet) = pixels(i, idet) + subtable2(ip)*nosubpix_max
+       end do
+    end do
+
     ksubmap = .true.
     subtable1 = 0
     subtable2 = 0
     dummy_pixel = 12*nside_max**2
 
-    if (info > 4) write(*,idf) ID,'Done'
+    if (info > 4) write(*,idf) id, 'Done'
 
   END SUBROUTINE restore_pixels_a
 

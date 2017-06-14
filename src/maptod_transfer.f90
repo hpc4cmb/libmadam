@@ -61,18 +61,14 @@ CONTAINS
        ksubmap_table = .false.
     end if
 
-    call mpi_allgather(ksubmap, nosubmaps_tot, MPI_LOGICAL, &
-         ksubmap_table, nosubmaps_tot, MPI_LOGICAL, comm, ierr)
+    if (allreduce) then
+       ksubmap_table(:, :) = spread(ksubmap(0:nosubmaps_tot-1), 2, ntasks)
+    else
+       call mpi_allgather(ksubmap, nosubmaps_tot, MPI_LOGICAL, &
+            ksubmap_table, nosubmaps_tot, MPI_LOGICAL, comm, ierr)
+    end if
 
     if (ierr /= 0) call abort_mpi('Gathering ksubmaps failed.')
-
-    if (allreduce) then
-       ! Flag all hit submaps on every process
-       ksubmap(0:nosubmaps_tot-1) = any(ksubmap_table, 2)
-       ksubmap_table = spread(ksubmap(0:nosubmaps_tot-1), 2, ntasks)
-       nolocmaps = count(ksubmap(0:nosubmaps_tot-1))
-       nolocpix = nolocmaps * nosubpix_max
-    end if
 
     if (nsize_locmap < nolocpix) then
        if (allocated(locmap)) deallocate(locmap)

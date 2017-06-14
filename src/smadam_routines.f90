@@ -424,7 +424,8 @@ CONTAINS
   SUBROUTINE initialize_a(yba, nna, wamap, cca, tod_stored)
 
     real(dp),intent(inout) :: yba(0:basis_order, noba_short_max, nodetectors)
-    real(dp), intent(out) :: nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(out) :: &
+         nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
     real(dp),intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp),intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: tod_stored(nosamples_proc, nodetectors)

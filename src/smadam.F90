@@ -13,7 +13,6 @@ module smadam
   use pointing
   use maptod_transfer
   use submap_transfer
-  !use compression
   use fourier
   use noise_routines
   use madam_routines
