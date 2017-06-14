@@ -209,7 +209,7 @@ CONTAINS
   SUBROUTINE reduce_pixels_a
     ! Reduce pixel numbers so that they point to locmap
     !
-    integer :: i, idet, k, ip
+    integer :: i, idet, k, ip, ierr
 
     if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
@@ -223,6 +223,13 @@ CONTAINS
        end do
     end do
     ksubmap(nosubmaps_tot) = .true.
+
+    if (allreduce) then
+       ! Flag all hit submaps on every process
+       call mpi_allreduce(MPI_IN_PLACE, ksubmap, nosubmaps_tot, MPI_LOGICAL, &
+            MPI_LOR, comm, ierr)
+       if (ierr /= 0) call abort_mpi('Reducing ksubmaps failed.')
+    end if
 
     subtable1 = -1
     subtable2 = -1

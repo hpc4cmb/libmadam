@@ -46,29 +46,28 @@ CONTAINS
     !   which control the MPI communication.
     ! Ksubmap tells which submaps are hit by the TOD handled by this process.
     !
-    logical, allocatable, intent(inout) :: ksubmap(:)
+    logical, allocatable, intent(in) :: ksubmap(:)
     logical, allocatable :: kbuffer(:)
     integer :: id_send
     integer :: ierr
 
     nolocmaps = count(ksubmap(0:nosubmaps_tot-1))
-
     nolocpix = nolocmaps * nosubpix_max
 
     if (.not. allocated(ksubmap_table)) then
-       allocate(ksubmap_table(0:nosubmaps_tot-1,0:ntasks-1), stat=ierr)
+       allocate(ksubmap_table(0:nosubmaps_tot-1, 0:ntasks-1), stat=ierr)
        if (ierr /= 0) call abort_mpi('No room for ksubmap_table')
        ksubmap_table = .false.
     end if
 
     if (allreduce) then
-       ksubmap_table(:, :) = spread(ksubmap(0:nosubmaps_tot-1), 2, ntasks)
+       ! All processes share ksubmap
+       ksubmap_table = spread(ksubmap(0:nosubmaps_tot-1), 2, ntasks)
     else
        call mpi_allgather(ksubmap, nosubmaps_tot, MPI_LOGICAL, &
             ksubmap_table, nosubmaps_tot, MPI_LOGICAL, comm, ierr)
+       if (ierr /= 0) call abort_mpi('Gathering ksubmaps failed.')
     end if
-
-    if (ierr /= 0) call abort_mpi('Gathering ksubmaps failed.')
 
     if (nsize_locmap < nolocpix) then
        if (allocated(locmap)) deallocate(locmap)
@@ -77,18 +76,18 @@ CONTAINS
        if (allocated(lochits)) deallocate(lochits)
 
        nsize_locmap = nolocpix
-       allocate(locmap(nmap,0:nsize_locmap), &
+       allocate(locmap(nmap, 0:nsize_locmap), &
             loccc(nmap, nmap, 0:nsize_locmap), locmask(0:nsize_locmap), &
             lochits(0:nsize_locmap), stat=ierr)
 
        if (ierr /= 0) call abort_mpi('Failed to allocate locmap')
 
-       memory_locmap = (nsize_locmap + 1)*(nmap*8. + nmap**2*8. + 8)
+       memory_locmap = (nsize_locmap+1) * (nmap*8.+nmap**2*8.+8)
 
     end if
 
-    locmap = 0.0
-    loccc  = 0.0
+    locmap = 0
+    loccc = 0
     locmask = 0
     lochits = 0
 
@@ -414,9 +413,6 @@ CONTAINS
     real(dp), allocatable :: buf(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
-    mrecv = 0
-    m = 0
-
     map = 0
 
     if (allreduce) then
@@ -427,14 +423,14 @@ CONTAINS
        if (ndegrade == 1) then
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix
+             m = (i-1) * nosubpix
              buf(:, :, i) = locmap(:, m:m+nosubpix-1)
           end do
           !$OMP END DO
        else
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix*ndegrade
+             m = (i-1) * nosubpix * ndegrade
              do k = 1, nosubpix
                 buf(:, k, i) = sum(locmap(:, m:m+ndegrade-1), 2)
                 m = m + ndegrade
@@ -453,12 +449,10 @@ CONTAINS
        m = 0
        k = 0
        do i = 0, nosubmaps_tot-1
-          if (id == id_submap(i)) then
-             m = m + 1
-             if (ksubmap_table(i, 0)) then
-                k = k + 1
-                map(:, :, m) = buf(1:nmap, :, k)
-             end if
+          if (ksubmap_table(i, 0)) k = k + 1
+          if (id == id_submap(i)) m = m + 1
+          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+             map(:, :, m) = buf(1:nmap, :, k)
           end if
        end do
 
@@ -523,6 +517,7 @@ CONTAINS
        !$OMP END PARALLEL
 
     else
+       mrecv = 0
        do i = 0, nosubmaps_tot-1
 
           id_map = id_submap(i)
@@ -568,9 +563,6 @@ CONTAINS
     real(dp), allocatable :: buf(:, :, :, :)
 
     ndegrade = nosubpix_max / nosubpix
-    mrecv = 0
-    m = 0
-
     cc = 0
 
     if (allreduce) then
@@ -581,15 +573,15 @@ CONTAINS
        if (ndegrade == 1) then
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix
+             m = (i-1) * nosubpix
              buf(:, :, :, i) = loccc(:, :, m:m+nosubpix-1)
           end do
           !$OMP END DO
        else
           !$OMP DO
           do i = 1, nolocmaps
-             do col = 1,nmap
-                m = (i - 1)*nosubpix*ndegrade
+             do col = 1, nmap
+                m = (i-1) * nosubpix * ndegrade
                 do k = 1, nosubpix
                    buf(:, col, k, i) = sum(loccc(:, col, m:m+ndegrade-1), 2)
                    m = m + ndegrade
@@ -606,12 +598,10 @@ CONTAINS
        m = 0
        k = 0
        do i = 0, nosubmaps_tot-1
-          if (id == id_submap(i)) then
-             m = m + 1
-             if (ksubmap_table(i, 0)) then
-                k = k + 1
-                cc(1:nmap, 1:nmap, :, m) = buf(:, :, :, k)
-             end if
+          if (ksubmap_table(i, 0)) k = k + 1
+          if (id == id_submap(i)) m = m + 1
+          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+             cc(1:nmap, 1:nmap, :, m) = buf(:, :, :, k)
           end if
        end do
 
@@ -679,6 +669,7 @@ CONTAINS
           !$OMP END PARALLEL
        end do
     else
+       mrecv = 0
        do i = 0, nosubmaps_tot-1
 
           id_map = id_submap(i)
@@ -723,13 +714,9 @@ CONTAINS
     integer, allocatable :: buf(:, :)
 
     ndegrade = nosubpix_max / nosubpix
-    mrecv = 0
-    m = 0
-
     hits = 0
 
     if (allreduce) then
-       ! FIXME: what about unpolarized subsets?
        allocate(buf(nosubpix, nolocmaps), stat=ierr)
        if (ierr /= 0) stop 'No room for allreduce buffer'
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, k, m) &
@@ -737,14 +724,14 @@ CONTAINS
        if (ndegrade == 1) then
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix
+             m = (i-1) * nosubpix
              buf(:, i) = lochits(m:m+nosubpix-1)
           end do
           !$OMP END DO
        else
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix*ndegrade
+             m = (i-1) * nosubpix * ndegrade
              do k = 1, nosubpix
                 buf(k, i) = sum(lochits(m:m+ndegrade-1))
                 m = m + ndegrade
@@ -760,12 +747,10 @@ CONTAINS
        m = 0
        k = 0
        do i = 0, nosubmaps_tot-1
-          if (id == id_submap(i)) then
-             m = m + 1
-             if (ksubmap_table(i, 0)) then
-                k = k + 1
-                hits(:, m) = buf(:, k)
-             end if
+          if (ksubmap_table(i, 0)) k = k + 1
+          if (id == id_submap(i)) m = m + 1
+          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+             hits(:, m) = buf(:, k)
           end if
        end do
 
@@ -827,10 +812,11 @@ CONTAINS
        !$OMP END PARALLEL
 
     else
+       mrecv = 0
        do i = 0, nosubmaps_tot-1
 
           id_map = id_submap(i)
-          if (ID == id_map) mrecv=mrecv+1
+          if (ID == id_map) mrecv = mrecv + 1
 
           do id_tod = 0, ntasks-1
 
@@ -874,9 +860,6 @@ CONTAINS
     integer :: nsend, itask, sendcount_gather
 
     ndegrade = nosubpix_max / nosubpix
-    msend = 0
-    m = 0
-
     locmap = 0
 
     if (allreduce) then
@@ -892,12 +875,10 @@ CONTAINS
        k = 0
        sendbuf = 0
        do i = 0, nosubmaps_tot-1
-          if (id == id_submap(i)) then
-             m = m + 1
-             if (ksubmap_table(i, 0)) then
-                k = k + 1
-                sendbuf(:, :, k) = map(:, :, m)
-             end if
+          if (ksubmap_table(i, 0)) k = k + 1
+          if (id == id_submap(i)) m = m + 1
+          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+             sendbuf(:, :, k) = map(:, :, m)
           end if
        end do
 
@@ -925,14 +906,14 @@ CONTAINS
        if (ndegrade == 1) then
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix
+             m = (i-1) * nosubpix
              locmap(:, m:m+nosubpix-1) = recvbuf(:, :, i)
           end do
           !$OMP END DO
        else
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix*ndegrade
+             m = (i-1) * nosubpix * ndegrade
              do k = 1, nosubpix
                 locmap(:, m:m+ndegrade-1) = &
                      spread(recvbuf(:, k, i), 2, ndegrade)
@@ -1014,7 +995,7 @@ CONTAINS
        end if
        !$OMP END PARALLEL
     else
-
+       msend = 0
        do i = 0, nosubmaps_tot-1
           id_map = id_submap(i)
 
@@ -1060,9 +1041,6 @@ CONTAINS
     integer, allocatable :: buf(:, :)
 
     ndegrade = nosubpix_max / nosubpix
-    msend = 0
-    m = 0
-
     locmask = 0
 
     if (allreduce .and. nosubpix == nosubpix_cross) then
@@ -1073,12 +1051,10 @@ CONTAINS
        k = 0
        buf = 0
        do i = 0, nosubmaps_tot-1
-          if (ksubmap_table(i, 0)) then
-             k = k + 1
-             if (id == id_submap(i)) then
-                m = m + 1
-                buf(:, k) = mask(:, m)
-             end if
+          if (ksubmap_table(i, 0)) k = k + 1
+          if (id == id_submap(i)) m = m + 1
+          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+             buf(:, k) = mask(:, m)
           end if
        end do
 
@@ -1093,14 +1069,14 @@ CONTAINS
        if (ndegrade == 1) then
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix
+             m = (i-1) * nosubpix
              locmask(m:m+nosubpix-1) = buf(:, i)
           end do
           !$OMP END DO
        else
           !$OMP DO
           do i = 1, nolocmaps
-             m = (i - 1)*nosubpix*ndegrade
+             m = (i-1) * nosubpix * ndegrade
              do k = 1, nosubpix
                 locmask(m:m+ndegrade-1) = spread(buf(k, i), 1, ndegrade)
                 m = m + ndegrade
@@ -1180,6 +1156,7 @@ CONTAINS
        end if
        !$OMP END PARALLEL
     else
+       msend = 0
        do i = 0, nosubmaps_tot-1
           id_map = id_submap(i)
 
