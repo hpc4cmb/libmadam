@@ -22,10 +22,6 @@ MODULE pointing
 
   integer :: buffersize = 0
 
-  integer, allocatable, public :: ipix(:)
-  logical, allocatable, public :: kpix(:)
-  real(dp), allocatable, public :: pweight(:, :)
-
   real(sp),public :: memory_pointing = 0.0
 
   logical, allocatable, public :: ksubmap(:)
@@ -33,7 +29,7 @@ MODULE pointing
 
   integer, public :: dummy_pixel = -1
 
-  public init_pointing, close_pointing, allocate_pixbuffer, &
+  public init_pointing, close_pointing, &
        reduce_pixels_buff, restore_pixels_buff, reduce_pixels_a, &
        restore_pixels_a
 
@@ -64,8 +60,6 @@ CONTAINS
     memory_pointing = nosamples_proc*nodetectors*4.
     memory_pointing = memory_pointing + nosamples_proc*nodetectors*24.
 
-    call allocate_pixbuffer(1024)
-
     allocate(ksubmap(0:nosubmaps_tot))
     allocate(subtable1(0:nosubmaps_tot))
     allocate(subtable2(0:nosubmaps_tot))
@@ -75,10 +69,10 @@ CONTAINS
 
     dummy_pixel = 12*nside_max**2
 
-    memory = memory_pointing/1024./1024.
+    memory = memory_pointing / 2d0**20
 
-    mem_min = memory; mem_max = memory ! -RK
-    call min_mpi(mem_min); call max_mpi(mem_max) ! -RK
+    mem_min = memory; mem_max = memory
+    call min_mpi(mem_min); call max_mpi(mem_max)
 
     call sum_mpi(memory)
 
@@ -97,11 +91,7 @@ CONTAINS
 
     if (allocated(kpolarized)) deallocate(kpolarized)
 
-    if (allocated(ipix))      deallocate(ipix)
-    if (allocated(kpix))      deallocate(kpix)
-    if (allocated(pweight)) deallocate(pweight)
-
-    if (allocated(ksubmap))   deallocate(ksubmap)
+    if (allocated(ksubmap)) deallocate(ksubmap)
     if (allocated(subtable1)) deallocate(subtable1)
     if (allocated(subtable2)) deallocate(subtable2)
 
@@ -125,37 +115,6 @@ CONTAINS
   END SUBROUTINE close_pointing
 
 
-  !------------------------------------------------------------------------
-
-
-  SUBROUTINE allocate_pixbuffer(n)
-
-    integer, intent(in) :: n
-
-    if (n <= buffersize) return
-
-    if (allocated(ipix)) deallocate(ipix)
-    if (allocated(kpix)) deallocate(kpix)
-    if (allocated(pweight)) deallocate(pweight)
-
-    buffersize = 1
-    do
-       if (buffersize >= n) exit
-       buffersize = 2*buffersize
-    enddo
-
-    allocate(ipix(buffersize))
-    allocate(kpix(buffersize))
-    allocate(pweight(nmap, buffersize))
-
-    ipix = -1
-    kpix = .true.
-    pweight = 0.0
-    pweight(1, :) = 1
-
-  END SUBROUTINE allocate_pixbuffer
-
-
   !--------------------------------------------------------------------------
 
 
@@ -177,7 +136,7 @@ CONTAINS
           ksubmap(ip) = .true.
        end do
     end do
-    ksubmap(nosubmaps_tot) = .true.  ! always allocate the dummy pixel
+    ksubmap(nosubmaps_tot) = .true. ! always allocate the dummy pixel
 
     if (allreduce) then
        ! Flag all hit submaps on every process
@@ -194,7 +153,7 @@ CONTAINS
           k = k + 1
           subtable1(i) = i - k
           subtable2(k) = i - k
-       endif
+       end if
     end do
 
     do idet = 1, nodetectors
@@ -261,8 +220,8 @@ CONTAINS
           if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet) / nosubpix_max
           ksubmap(ip) = .true.
-       enddo
-    enddo
+       end do
+    end do
     ksubmap(nosubmaps_tot) = .true.
 
     subtable1 = -1
@@ -273,16 +232,16 @@ CONTAINS
           k = k+1
           subtable1(i) = i-k
           subtable2(k) = i-k
-       endif
-    enddo
+       end if
+    end do
 
     do idet = 1, nodetectors
        do i = 1, nosamples_proc
           if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet)/nosubpix_max
           pixels(i, idet) = pixels(i, idet) - subtable1(ip)*nosubpix_max
-       enddo
-    enddo
+       end do
+    end do
 
     dummy_pixel = (nosubmaps_tot-subtable1(nosubmaps_tot)) * nosubpix_max
 
