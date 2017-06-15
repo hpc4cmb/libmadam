@@ -8,18 +8,19 @@ MODULE maptod_transfer
   real(dp), allocatable, public :: locmap(:, :)
   real(dp), allocatable, public :: loccc(:, :, :)
 
-  real(dp), allocatable, target, public :: submaps_send_map(:, :, :)
-  real(dp), allocatable, target, public :: submaps_recv_map(:, :, :)
-  real(dp), pointer, public :: submaps_send_cross(:, :, :)
-  real(dp), pointer, public :: submaps_recv_cross(:, :, :)
-  integer, allocatable, target, public :: submaps_send_int_map(:, :)
-  integer, allocatable, target, public :: submaps_recv_int_map(:, :)
-  integer, pointer, public :: submaps_send_int_cross(:, :)
-  integer, pointer, public :: submaps_recv_int_cross(:, :)
-  integer, allocatable, public :: submaps_send_ind(:), submaps_recv_ind(:)
-  integer, allocatable, public :: sendcounts(:), sendoffs(:)
-  integer, allocatable, public :: recvcounts(:), recvoffs(:)
-  integer :: nsend_submap, nrecv_submap
+  real(dp), allocatable, target :: submaps_send_map(:, :, :)
+  real(dp), allocatable, target :: submaps_recv_map(:, :, :)
+  real(dp), pointer :: submaps_send_cross(:, :, :)
+  real(dp), pointer :: submaps_recv_cross(:, :, :)
+  integer, allocatable, target :: submaps_send_int_map(:, :)
+  integer, allocatable, target :: submaps_recv_int_map(:, :)
+  integer, pointer :: submaps_send_int_cross(:, :)
+  integer, pointer :: submaps_recv_int_cross(:, :)
+  integer, allocatable :: submaps_send_ind(:), submaps_recv_ind(:)
+  integer, allocatable :: sendcounts(:), sendoffs(:)
+  integer, allocatable :: recvcounts(:), recvoffs(:)
+  integer, allocatable :: recvcounts_gather(:), displs_gather(:)
+  integer :: nsend_submap, nrecv_submap, nsend_gather
 
   integer, allocatable, public :: locmask(:)
   integer, allocatable, public :: lochits(:)
@@ -110,6 +111,32 @@ CONTAINS
     integer :: ierr
     integer :: nsend, nrecv, itask, offset, ioffset, i
     real(sp) :: memsum, mem_min, mem_max
+
+    if (allreduce) then
+       nsend_gather = 0
+       do i = 0, nosubmaps_tot-1
+          if ((id_submap(i) == id) .and. ksubmap_table(i, 0)) then
+             nsend_gather = nsend_gather + 1
+          end if
+       end do
+
+       if (allocated(recvcounts_gather)) deallocate(recvcounts_gather)
+       if (allocated(displs_gather)) deallocate(displs_gather)
+       allocate(recvcounts_gather(ntasks), displs_gather(ntasks), stat=ierr)
+       if (ierr /= 0) stop 'No room for allgatherv counts'
+
+       call mpi_allgather(nsend_gather, 1, MPI_INTEGER, recvcounts_gather, &
+            1, MPI_INTEGER, comm, ierr)
+
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to gather counts with allgather')
+
+       displs_gather(1) = 0
+       do itask = 2, ntasks
+          displs_gather(itask) = displs_gather(itask-1) &
+               + recvcounts_gather(itask-1)
+       end do
+    end if
 
     if (.not. concatenate_messages) return
 
@@ -392,6 +419,9 @@ CONTAINS
     if (allocated(sendoffs)) deallocate(sendoffs)
     if (allocated(recvcounts)) deallocate(recvcounts)
     if (allocated(recvoffs)) deallocate(recvoffs)
+
+    if (allocated(recvcounts_gather)) deallocate(recvcounts_gather)
+    if (allocated(displs_gather)) deallocate(displs_gather)
 
     nsize_locmap = -1
 
@@ -856,18 +886,12 @@ CONTAINS
     integer :: ierr, ind, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
     real(dp), allocatable :: recvbuf(:, :, :), sendbuf(:, :, :)
-    integer :: recvcounts_gather(ntasks), displs_gather(ntasks)
-    integer :: nsend, itask, sendcount_gather
 
     ndegrade = nosubpix_max / nosubpix
     locmap = 0
 
     if (allreduce) then
-       nsend = 0
-       do i = 0, nosubmaps_tot-1
-          if ((id_submap(i) == id) .and. ksubmap_table(i, 0)) nsend = nsend + 1
-       end do
-       allocate(sendbuf(nmap, nosubpix, nsend), &
+       allocate(sendbuf(nmap, nosubpix, nsend_gather), &
             recvbuf(nmap, nosubpix, nolocmaps), stat=ierr)
        if (ierr /= 0) stop 'No room for allgatherv buffers'
 
@@ -884,19 +908,9 @@ CONTAINS
           end if
        end do
 
-       sendcount_gather = nmap * nosubpix * nsend
-       call mpi_allgather(sendcount_gather, 1, MPI_INTEGER, recvcounts_gather, &
-            1, MPI_INTEGER, comm, ierr)
-
-       displs_gather(1) = 0
-       do itask = 2, ntasks
-          displs_gather(itask) = displs_gather(itask-1) &
-               + recvcounts_gather(itask-1)
-       end do
-
-       call mpi_allgatherv(sendbuf, sendcount_gather, MPI_DOUBLE_PRECISION, &
-            recvbuf, recvcounts_gather, displs_gather, MPI_DOUBLE_PRECISION, &
-            comm, ierr)
+       call mpi_allgatherv(sendbuf, nsend_gather*nmap*nosubpix, &
+            MPI_DOUBLE_PRECISION, recvbuf, recvcounts_gather*nmap*nosubpix, &
+            displs_gather*nmap*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to gather map with allgatherv')
@@ -1041,18 +1055,12 @@ CONTAINS
     integer :: ierr, ind, id_thread, num_threads
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
     integer, allocatable :: recvbuf(:, :), sendbuf(:, :)
-    integer :: recvcounts_gather(ntasks), displs_gather(ntasks)
-    integer :: nsend, itask, sendcount_gather
 
     ndegrade = nosubpix_max / nosubpix
     locmask = 0
 
     if (allreduce .and. nosubpix == nosubpix_cross) then
-       nsend = 0
-       do i = 0, nosubmaps_tot-1
-          if ((id_submap(i) == id) .and. ksubmap_table(i, 0)) nsend = nsend + 1
-       end do
-       allocate(sendbuf(nosubpix, nsend), &
+       allocate(sendbuf(nosubpix, nsend_gather), &
             recvbuf(nosubpix, nolocmaps), stat=ierr)
        if (ierr /= 0) stop 'No room for allgatherv buffers'
 
@@ -1069,19 +1077,9 @@ CONTAINS
           end if
        end do
 
-       sendcount_gather = nosubpix * nsend
-       call mpi_allgather(sendcount_gather, 1, MPI_INTEGER, recvcounts_gather, &
-            1, MPI_INTEGER, comm, ierr)
-
-       displs_gather(1) = 0
-       do itask = 2, ntasks
-          displs_gather(itask) = displs_gather(itask-1) &
-               + recvcounts_gather(itask-1)
-       end do
-
-       call mpi_allgatherv(sendbuf, sendcount_gather, MPI_INTEGER, &
-            recvbuf, recvcounts_gather, displs_gather, MPI_INTEGER, &
-            comm, ierr)
+       call mpi_allgatherv(sendbuf, nsend_gather*nosubpix, MPI_INTEGER, &
+            recvbuf, recvcounts_gather*nosubpix, displs_gather*nosubpix, &
+            MPI_INTEGER, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to gather mask with allgatherv')

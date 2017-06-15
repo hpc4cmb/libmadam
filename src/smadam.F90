@@ -324,7 +324,7 @@ contains
 
           if (id == 0 .and. info > 0) then
              write(*,*)
-             write(*,*) 'First destriping phase'
+             write(*,*) 'Destriping TOD'
           endif
           call time_stamp
 
