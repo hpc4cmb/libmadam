@@ -7,12 +7,13 @@ MODULE parameter_control
   use mpi_wrappers
   use noise_routines, only : interpolate_psd
   use pointing, only : subchunk
+  use maps_and_baselines, only : memory_baselines, memory_maps
 
   implicit none
   private
 
   public init_parameters, init_parallelization, start_timeloop, &
-       write_parameters, baseline_times       
+       write_parameters, baseline_times
 
   real(sp), save, public :: memory_basis_functions = 0
   character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
@@ -29,12 +30,11 @@ CONTAINS
     ! enabled by default and looping over pointing, time and buffer
     ! are disabled
 
-    integer  :: nodets_per_point, nodet_pol
-    integer  :: idet, ipoint, ndet, i, m, n
-    integer  :: nleft, ns
-    real(dp) :: weight
-    logical  :: use_all_data
-    integer :: idet1, idet2, horn1, horn2
+    integer(i4b) :: nodets_per_point, nodet_pol, idet, ipoint, ndet, i, m, n
+    integer(i4b) :: nleft, ns, ierr
+    real(i8b) :: weight
+    logical :: use_all_data
+    integer(i4b) :: idet1, idet2, horn1, horn2
     character(len=SLEN) :: subsetname
 
     real(dp), allocatable :: weights(:)
@@ -44,10 +44,10 @@ CONTAINS
     integer(i8b) :: nn, ipsd
 
     integer (i8b) :: nbin
-    real (dp), allocatable :: freqs(:), data(:)
+    real(dp), allocatable :: freqs(:), data(:)
 
     ! Make sure path_output contains the separator
-    
+
     n = len_trim(path_output)
     if (n /= 0) then
        if (path_output(n:n) /= '/') path_output = path_output(1:n) // '/'
@@ -61,23 +61,23 @@ CONTAINS
     if (len_trim(surveys(0)%name) /= 0) &
          subsetname = trim(subsetname) // '_' // trim(surveys(0)%name)
 
-    file_map    = ''
+    file_map = ''
     file_binmap = ''
-    file_hit    = ''
+    file_hit = ''
     file_matrix = ''
     file_leakmatrix = ''
-    file_wcov   = ''
-    file_base   = ''
-    file_mask   = ''
+    file_wcov = ''
+    file_base = ''
+    file_mask = ''
 
-    if (do_map)    file_map    = trim(subsetname) // '_map.fits'
+    if (do_map) file_map = trim(subsetname) // '_map.fits'
     if (do_binmap) file_binmap = trim(subsetname) // '_bmap.fits'
-    if (do_hits)   file_hit    = trim(subsetname) // '_hmap.fits'
+    if (do_hits) file_hit = trim(subsetname) // '_hmap.fits'
     if (do_matrix) file_matrix = trim(subsetname) // '_wcov_inv.fits'
     if (do_leakmatrix) file_leakmatrix = trim(subsetname) // '_leakmatrix'
-    if (do_wcov)   file_wcov   = trim(subsetname) // '_wcov.fits'
-    if (do_base)   file_base   = trim(subsetname) // '_base.fits'
-    if (do_mask)   file_mask   = trim(subsetname) // '_mask.fits'
+    if (do_wcov) file_wcov = trim(subsetname) // '_wcov.fits'
+    if (do_base) file_base = trim(subsetname) // '_base.fits'
+    if (do_mask) file_mask = trim(subsetname) // '_mask.fits'
 
     ! in a Monte Carlo, the binary maps are appended into a single file
     ! rather than storing each realization separately
@@ -108,7 +108,7 @@ CONTAINS
           nbin = 1
           allocate(freqs(nbin), data(nbin))
           freqs = fsample / 2
-             
+
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
                 call interpolate_psd(detectors(idet)%psdfreqs, &
@@ -128,11 +128,11 @@ CONTAINS
           nbin = 10
           allocate(freqs(nbin), data(nbin))
           freqs = (/ (dble(i), i=1,nbin) /)
-             
+
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
                 call interpolate_psd(detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:,ipsd), freqs, data)
+                     detectors(idet)%psds(:, ipsd), freqs, data)
                 rms = sqrt(minval(data) * fsample)
                 detectors(idet)%sigmas(ipsd) = rms
              end do
@@ -164,7 +164,7 @@ CONTAINS
 
     if (nread_concurrent < 1 .or. nread_concurrent > ntasks) &
          nread_concurrent = ntasks
-    
+
     if (info > 0) then
        if (id == 0) write (*,'(" nread_concurrent == ",i0)') nread_concurrent
        if (id == 0) write (*,'(" read_buffer_len == ",i0)') read_buffer_len
@@ -173,7 +173,7 @@ CONTAINS
     if (len_trim(file_covmat) > 0) kwrite_covmat = .true.
     if (kwrite_covmat) then
        kfilter = .true.
-       kfirst = .true. 
+       kfirst = .true.
        filter_mean = .true.
     end if
 
@@ -259,8 +259,8 @@ CONTAINS
 
     elseif (mode_detweight == 1) then ! uniform weights
 
-       do idet = 1,nodetectors
-          detectors(idet)%weights = 1.d0
+       do idet = 1, nodetectors
+          detectors(idet)%weights = 1
        end do
 
     elseif (mode_detweight == 2) then ! one weight per horn
@@ -277,7 +277,7 @@ CONTAINS
                 end if
 
                 allocate(weights(detectors(idet1)%npsd))
-                
+
                 where (detectors(idet1)%sigmas == 0 &
                      .or. detectors(idet2)%sigmas == 0)
                    weights = 0
@@ -288,8 +288,8 @@ CONTAINS
                 detectors(idet1)%weights = weights
                 detectors(idet2)%weights = weights
                 if (id == 0) write (*,'(a,es15.6,a)') &
-                     'Assigning horn weight, ',weights(1),', to ' // &
-                     trim(detectors(idet1)%name) // ' and ' // & 
+                     'Assigning horn weight, ', weights(1), ', to ' // &
+                     trim(detectors(idet1)%name) // ' and ' // &
                      trim(detectors(idet2)%name)  // ' for the FIRST period'
 
                 deallocate(weights)
@@ -297,12 +297,12 @@ CONTAINS
           end do
        end do
     else
-       print *,' ERROR: bad mode_detweight : ',mode_detweight
+       print *, ' ERROR: bad mode_detweight : ', mode_detweight
        call abort_mpi('bad mode_detweight')
     end if
 
-    nside_max = max(nside_map,nside_cross)
-    nside_submap = min(nside_submap,nside_map,nside_cross)
+    nside_max = max(nside_map, nside_cross)
+    nside_submap = min(nside_submap, nside_map, nside_cross)
 
     nosubmaps_tot = 12*nside_submap**2
 
@@ -313,7 +313,7 @@ CONTAINS
 
     if (id == 0 .and. info > 2) then
        write(*,*)
-       write(*,'(x,a,t24,"= ",i12)') 'istart_mission',istart_mission
+       write(*,'(x,a,t24,"= ",i12)') 'istart_mission', istart_mission
        write(*,'(x,a,t24,"= ",i12)') 'nosamples_tot', nosamples_tot
     end if
 
@@ -333,14 +333,16 @@ CONTAINS
     ! Data divided by pointing periods
 
     if (nopntperiods <= 0) then
-       if (id == 0) write(*,*) 'ERROR: Pointing periods not known.'
+       if (id == 0) write(*, *) 'ERROR: Pointing periods not known.'
        call exit_with_status(1)
     end if
 
     ! Store the number of baselines per pointing period
     ! Most loops now iterate over baselines, even whenno destriping is done
     !if (kfirst) then
-    allocate(noba_short_pp(nopntperiods))
+    allocate(noba_short_pp(nopntperiods), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for noba_short_pp')
+    memory_baselines = memory_baselines + nopntperiods*4
     noba_short_pp = 0
 
     do i = 1,nopntperiods
@@ -384,11 +386,11 @@ CONTAINS
        end do
     end if
 
-    
-    
+
+
   CONTAINS
 
-    
+
     subroutine parse_fpdb_supplement()
       !
       ! file_fpdb_supplement is used to override information from TOAST
@@ -397,7 +399,7 @@ CONTAINS
       integer :: iend, nline, iline, i, i2, ifield, idet, ierr
       logical :: there
       real(dp) :: value
-      
+
       if (id == 0) then
          ! Check file and count the number of lines
          inquire(file=file_fpdb_supplement, exist=there)
@@ -467,7 +469,7 @@ CONTAINS
             end if
          end do
       end do
-      
+
     end subroutine parse_fpdb_supplement
 
 
@@ -556,21 +558,18 @@ CONTAINS
 
     character(len=30) :: fi
 
-    integer(idp) :: nleft, kstart, n, nmax
-    integer      :: i, k, iloop, nba
+    integer(i8b) :: nleft, kstart, n, nmax
+    integer(i4b) :: i, k, iloop, nba, ierr
 
     fi = '(x,a,t24,"= ",i12,   2x,a)'
 
     if (id == 0 .and. info >= 3) write(*,*) 'Initializing parallelization'
-    if (info > 4) write(*,idf) id,'Initializing parallelization'
-
-    if (allocated(id_submap)) deallocate(id_submap)
+    if (info > 4) write(*,idf) id, 'Initializing parallelization'
 
     ! Compute the total number of short baselines (first destriping)
     ! and the maximum number per process.
 
     ! most loops now iterate over baselines regardless of kfirst
-    !if (kfirst) then
     noba_short_max = 0
     noba_short_tot = 0
 
@@ -579,7 +578,6 @@ CONTAINS
     call max_mpi(noba_short_max)
     noba_short_tot = nba
     call sum_mpi(noba_short_tot)
-    !end if
 
     ! set Madam parameters describing load balancing
 
@@ -588,13 +586,20 @@ CONTAINS
 
     ! Distribute submaps
 
-    allocate(id_submap(0:nosubmaps_tot-1))
+    if (allocated(id_submap)) then
+       deallocate(id_submap)
+       memory_maps = memory_maps - nosubmaps_tot*4
+    end if
+
+    allocate(id_submap(0:nosubmaps_tot-1), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for id_submap')
+    memory_maps = memory_maps + nosubmaps_tot*4
 
     nosubmaps_max = (nosubmaps_tot-1) / ntasks + 1
 
     nosubmaps = 0
-    do i = 0,nosubmaps_tot-1
-       k = mod(i,ntasks)
+    do i = 0, nosubmaps_tot-1
+       k = mod(i, ntasks)
        id_submap(i) = k
        if (id == k) nosubmaps = nosubmaps + 1
     end do
@@ -668,7 +673,7 @@ CONTAINS
             'Temperature-only treatment (no polarization)'
     end if
     write (*,fi) 'ncc',ncc,'Independent wcov elements'
-       
+
     if (nsubchunk > 1) then
        write (*,*)
        write (*,*) 'Mapping SUBCHUNKS'
@@ -881,9 +886,6 @@ CONTAINS
 
     call wait_mpi
 
-    !id_prev = toast_chunkset_prev(chunksets(1))
-    !id_next = toast_chunkset_next(chunksets(1))
-
     ! Samples handled by the current process
 
     istart_proc = sum(pntperiods(1:first_chunk-1))
@@ -892,18 +894,17 @@ CONTAINS
     ! Short baselines handled by the current process.
 
     ! most loops iterate over baselines when there is no destriping
-    !if (kfirst) then
     kshort_start = sum(noba_short_pp(1:first_chunk-1))
     noba_short = sum(noba_short_pp(first_chunk:last_chunk))
-    !end if
 
     ! Store the baseline lengths for first destriping
 
-    !if (kfirst) then
     allocate(baselines_short(noba_short_max), &
          base_pntid_short(noba_short_max), basis_functions(noba_short_max), &
          stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short')
+
+    memory_baselines = memory_baselines + noba_short_max*(4+4+17)
 
     !Split the pointing period into short baselines of length int(dnshort)
     ! or int(dnshort+1).
@@ -911,7 +912,7 @@ CONTAINS
     baselines_short = 0
     base_pntid_short = 0
     do i = first_chunk, last_chunk
-       dn = 0.0 
+       dn = 0.0
        n = 0
        do k = 1, noba_short_pp(i) - 1 ! Loop over all but the last
           dn0 = dn
@@ -925,7 +926,7 @@ CONTAINS
        m = m + 1
        baselines_short(m) = pntperiods(i) - n ! Last baseline takes the rest
        base_pntid_short(m) = pntperiod_id(i)
-       
+
        if (kfirst) then
           if (baselines_short(m) < 0 &
                .or. baselines_short(m) > int(dnshort, i8b) + 1) then
@@ -960,31 +961,34 @@ CONTAINS
           my_offset = my_offset + n
        end do
     end if
-    
+
     ! Auxiliary arrays for OpenMP threading and output
-    
+
     allocate(baselines_short_start(noba_short_max), &
          baselines_short_stop(noba_short_max), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short_start')
-    baselines_short_start = 1
-    baselines_short_stop  = 1
 
-    do k = 1,noba_short
+    memory_baselines = memory_baselines + noba_short_max*(4+4)
+
+    baselines_short_start = 1
+    baselines_short_stop = 1
+
+    do k = 1, noba_short
        if (k > 1) baselines_short_start(k) = baselines_short_start(k-1) &
             + baselines_short(k-1)
        baselines_short_stop(k) = baselines_short_start(k) &
             + baselines_short(k) - 1
     end do
-    
+
     ! Set up the basis function arrays.
-    
+
     do k = 1,noba_short
        basis_functions(k)%copy = .false.
        basis_functions(k)%nsamp = baselines_short(k)
        basis_functions(k)%arr => NULL()
        do j = 1, k-1
           if (basis_functions(j)%nsamp == basis_functions(k)%nsamp) then
-             ! we already have a basis function of this length stored. 
+             ! we already have a basis function of this length stored.
              basis_functions(k)%arr => basis_functions(j)%arr
              basis_functions(k)%copy = .true.
              exit
@@ -1056,15 +1060,17 @@ CONTAINS
        end if
     end do
 
-    memsum = memory_basis_functions / 1024. / 1024.
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
+    memsum = memory_basis_functions / 2**20
+    mem_min = memsum
+    mem_max = memsum
+    call min_mpi(mem_min)
+    call max_mpi(mem_max)
     call sum_mpi(memsum)
     if (ID == 0 .and. info > 0) then
        write(*,mstr3) 'Allocated memory for basis_functions:', &
             memsum, mem_min, mem_max
     end if
-    
+
     !end if
 
     if (info > 3) then
@@ -1090,13 +1096,13 @@ CONTAINS
     integer :: ierr
 
     ! insert the baseline start times
-    !if (kfirst) then 
     ! local array of short baseline start times
     allocate(short_times(noba_short_max), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for short_times')
 
+    memory_baselines = memory_baselines + noba_short_max*8
+
     short_times = sample_times(baselines_short_start)
-    !end if
 
   end subroutine baseline_times
 

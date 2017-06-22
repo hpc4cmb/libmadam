@@ -77,7 +77,7 @@ map_routines.lo : map_routines.f90 commonparam.lo matrix.lo mpi_wrappers.lo \
 submap_transfer.lo : submap_transfer.f90 commonparam.lo mpi_wrappers.lo
 
 parameter_control.lo : parameter_control.f90 simulation.lo commonparam.lo \
-	noise_routines.lo pointing.lo mpi_wrappers.lo
+	noise_routines.lo pointing.lo mpi_wrappers.lo maps_and_baselines.lo
 
 pointing.lo : pointing.f90 commonparam.lo mpi_wrappers.lo memory_and_time.lo
 

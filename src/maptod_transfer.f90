@@ -30,11 +30,14 @@ MODULE maptod_transfer
   logical, allocatable, public :: ksubmap_table(:, :)
   integer, save, public :: nsize_locmap = -1
 
+  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
+
   public update_maptod_transfer, collect_map, collect_cc, collect_hits, &
        scatter_map, scatter_mask, free_locmaps, initialize_alltoallv, &
        assign_submaps
 
-  real(sp), save, public :: memory_locmap = 0.0, memory_all2all = 0.0
+  real(sp), save, public :: memory_locmap = 0, memory_all2all = 0
 
 CONTAINS
 
@@ -48,9 +51,8 @@ CONTAINS
     ! Ksubmap tells which submaps are hit by the TOD handled by this process.
     !
     logical, allocatable, intent(in) :: ksubmap(:)
-    logical, allocatable :: kbuffer(:)
-    integer :: id_send
-    integer :: ierr
+    integer(i4b) :: ierr
+    real(sp) :: memsum, mem_min, mem_max
 
     nolocmaps = count(ksubmap(0:nosubmaps_tot-1))
     nolocpix = nolocmaps * nosubpix_max
@@ -91,6 +93,18 @@ CONTAINS
     loccc = 0
     locmask = 0
     lochits = 0
+
+    memsum = memory_locmap / 2**20
+    mem_min = memsum
+    mem_max = memsum
+    call min_mpi(mem_min)
+    call max_mpi(mem_max)
+    call sum_mpi(memsum)
+
+    if (ID==0 .and. info > 0) then
+       write(*,mstr3) 'Allocated memory for local maps:', &
+            memsum, mem_min, mem_max
+    end if
 
   END SUBROUTINE update_maptod_transfer
 
@@ -436,56 +450,42 @@ CONTAINS
     ! locmap->map
     integer, intent(in) :: nosubpix
     real(dp), intent(inout) :: map(nmap, nosubpix, nosubmaps)
-    integer :: i, j, k, m, mrecv, id_tod, id_map, ndegrade, nmap0
+    integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0
     real(dp) :: buffer(nmap, nosubpix)
     integer :: ierr, ind, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
-    real(dp), allocatable :: buf(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       allocate(buf(nmap, nosubpix, nolocmaps), stat=ierr)
-       if (ierr /= 0) stop 'No room for allreduce buffer'
-       !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, k, m) &
-       !$OMP     SHARED(ndegrade, nolocmaps, nosubpix, buf, locmap)
-       if (ndegrade == 1) then
-          !$OMP DO
-          do i = 1, nolocmaps
-             m = (i-1) * nosubpix
-             buf(:, :, i) = locmap(:, m:m+nosubpix-1)
-          end do
-          !$OMP END DO
-       else
-          !$OMP DO
-          do i = 1, nolocmaps
-             m = (i-1) * nosubpix * ndegrade
-             do k = 1, nosubpix
-                buf(:, k, i) = sum(locmap(:, m:m+ndegrade-1), 2)
-                m = m + ndegrade
-             end do
-          end do
-          !$OMP END DO
-       end if
-       !$OMP END PARALLEL
-
-       call mpi_allreduce(MPI_IN_PLACE, buf, nmap*nosubpix*nolocmaps, &
+       call mpi_allreduce(MPI_IN_PLACE, locmap, nmap*nosubpix_max*nolocmaps, &
             MPI_DOUBLE_PRECISION, MPI_SUM, comm, ierr)
-
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect map with allreduce')
-
        m = 0
        k = 0
-       do i = 0, nosubmaps_tot-1
-          if (ksubmap_table(i, 0)) k = k + 1
-          if (id == id_submap(i)) m = m + 1
-          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
-             map(:, :, m) = buf(1:nmap, :, k)
-          end if
-       end do
-
-       deallocate(buf)
+       if (ndegrade == 1) then
+          do i = 0, nosubmaps_tot-1
+             if (ksubmap_table(i, 0)) k = k + 1
+             if (id == id_submap(i)) m = m + 1
+             if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+                j = (k-1) * nosubpix
+                map(:, :, m) = locmap(:, j:j+nosubpix-1)
+             end if
+          end do
+       else
+          do i = 0, nosubmaps_tot-1
+             if (ksubmap_table(i, 0)) k = k + 1
+             if (id == id_submap(i)) m = m + 1
+             if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+                n = 0
+                do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, ndegrade
+                   n = n + 1
+                   map(:, n, m) = sum(locmap(:, j:j+ndegrade-1), 2)
+                end do
+             end if
+          end do
+       end if
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
@@ -585,55 +585,45 @@ CONTAINS
 
     integer, intent(in) :: nosubpix
     real(dp), intent(inout) :: cc(nmap, nmap, nosubpix, nosubmaps)
-    integer :: i, j, k, m, mrecv, id_tod, id_map, ndegrade, nmap0, col
+    integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0, col
     real(dp) :: buffer(nmap, nmap, nosubpix)
     integer :: ierr, ind, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
-    real(dp), allocatable :: buf(:, :, :, :)
 
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       allocate(buf(nmap, nmap, nosubpix, nolocmaps), stat=ierr)
-       if (ierr /= 0) stop 'No room for allreduce buffer'
-       !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, k, m) &
-       !$OMP     SHARED(ndegrade, nolocmaps, nosubpix, buf, loccc, nmap)
-       if (ndegrade == 1) then
-          !$OMP DO
-          do i = 1, nolocmaps
-             m = (i-1) * nosubpix
-             buf(:, :, :, i) = loccc(:, :, m:m+nosubpix-1)
-          end do
-          !$OMP END DO
-       else
-          !$OMP DO
-          do i = 1, nolocmaps
-             do col = 1, nmap
-                m = (i-1) * nosubpix * ndegrade
-                do k = 1, nosubpix
-                   buf(:, col, k, i) = sum(loccc(:, col, m:m+ndegrade-1), 2)
-                   m = m + ndegrade
-                end do
-             end do
-          end do
-          !$OMP END DO
-       end if
-       !$OMP END PARALLEL
-
-       call mpi_allreduce(MPI_IN_PLACE, buf, nmap*nmap*nosubpix*nolocmaps, &
+       call mpi_allreduce(MPI_IN_PLACE, loccc, nmap*nmap*nosubpix_max*nolocmaps, &
             MPI_DOUBLE_PRECISION, MPI_SUM, comm, ierr)
-
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to collect cc with allreduce')
        m = 0
        k = 0
-       do i = 0, nosubmaps_tot-1
-          if (ksubmap_table(i, 0)) k = k + 1
-          if (id == id_submap(i)) m = m + 1
-          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
-             cc(1:nmap, 1:nmap, :, m) = buf(:, :, :, k)
-          end if
-       end do
-
-       deallocate(buf)
+       if (ndegrade == 1) then
+          do i = 0, nosubmaps_tot-1
+             if (ksubmap_table(i, 0)) k = k + 1
+             if (id == id_submap(i)) m = m + 1
+             if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+                j = (k-1) * nosubpix
+                cc(:, :, :, m) = loccc(:, :, j:j+nosubpix-1)
+             end if
+          end do
+       else
+          do i = 0, nosubmaps_tot-1
+             if (ksubmap_table(i, 0)) k = k + 1
+             if (id == id_submap(i)) m = m + 1
+             if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+                do col = 1, nmap
+                   n = 0
+                   do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, &
+                        ndegrade
+                      n = n + 1
+                      cc(:, col, n, m) = sum(loccc(:, col, j:j+ndegrade-1), 2)
+                   end do
+                end do
+             end if
+          end do
+       end if
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
@@ -735,53 +725,42 @@ CONTAINS
 
     integer, intent(in) :: nosubpix
     integer, intent(inout) :: hits(nosubpix, nosubmaps)
-    integer :: i, j, k, m, mrecv, id_tod, id_map, ndegrade
+    integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade
     integer :: buffer(nosubpix)
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
     integer :: ierr, ind, id_thread, num_threads
-    integer, allocatable :: buf(:, :)
 
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       allocate(buf(nosubpix, nolocmaps), stat=ierr)
-       if (ierr /= 0) stop 'No room for allreduce buffer'
-       !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, k, m) &
-       !$OMP     SHARED(ndegrade, nolocmaps, nosubpix, buf, lochits)
-       if (ndegrade == 1) then
-          !$OMP DO
-          do i = 1, nolocmaps
-             m = (i-1) * nosubpix
-             buf(:, i) = lochits(m:m+nosubpix-1)
-          end do
-          !$OMP END DO
-       else
-          !$OMP DO
-          do i = 1, nolocmaps
-             m = (i-1) * nosubpix * ndegrade
-             do k = 1, nosubpix
-                buf(k, i) = sum(lochits(m:m+ndegrade-1))
-                m = m + ndegrade
-             end do
-          end do
-          !$OMP END DO
-       end if
-       !$OMP END PARALLEL
-
-       call mpi_allreduce(MPI_IN_PLACE, buf, nosubpix*nolocmaps, &
+       call mpi_allreduce(MPI_IN_PLACE, lochits, nosubpix_max*nolocmaps, &
             MPI_INTEGER, MPI_SUM, comm, ierr)
-
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to collect hits with allreduce')
        m = 0
        k = 0
-       do i = 0, nosubmaps_tot-1
-          if (ksubmap_table(i, 0)) k = k + 1
-          if (id == id_submap(i)) m = m + 1
-          if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
-             hits(:, m) = buf(:, k)
-          end if
-       end do
-
-       deallocate(buf)
+       if (ndegrade == 1) then
+          do i = 0, nosubmaps_tot-1
+             if (ksubmap_table(i, 0)) k = k + 1
+             if (id == id_submap(i)) m = m + 1
+             if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+                j = (k-1) * nosubpix
+                hits(:, m) = lochits(j:j+nosubpix-1)
+             end if
+          end do
+       else
+          do i = 0, nosubmaps_tot-1
+             if (ksubmap_table(i, 0)) k = k + 1
+             if (id == id_submap(i)) m = m + 1
+             if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
+                n = 0
+                do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, ndegrade
+                   n = n + 1
+                   hits(n, m) = sum(lochits(j:j+ndegrade-1))
+                end do
+             end if
+          end do
+       end if
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
@@ -849,7 +828,7 @@ CONTAINS
 
              if (.not. ksubmap_table(i, id_tod)) cycle
 
-             if (ID == id_tod) then  ! prepare send buffer
+             if (ID == id_tod) then ! prepare send buffer
 
                 buffer = 0
                 do k = 1, nosubpix

@@ -23,7 +23,8 @@ MODULE commonparam
 
   ! OpenMP
   integer :: nthreads_max=1, nthreads=1, id_thread=0
-  integer, external :: omp_get_num_procs, omp_get_max_threads, omp_get_thread_num, omp_get_num_threads
+  integer, external :: omp_get_num_procs, omp_get_max_threads, &
+       omp_get_thread_num, omp_get_num_threads
 
   ! TOAST additions -RK
   integer(dp), allocatable :: chunk_offsets(:), chunk_sizes(:)
@@ -36,7 +37,8 @@ MODULE commonparam
   logical :: concatenate_messages = .true., allreduce = .false.
   logical :: reassign_submaps = .true.
   logical :: noise_weights_from_psd = .false. ! integrate noise weights internally
-  logical :: radiometers = .true. ! Assume well-behaved noise spectrum without low pass filtering
+  ! Assume well-behaved noise spectrum without low pass filtering
+  logical :: radiometers = .true.
   integer(i8b) :: read_buffer_len = 1e6, psd_downsample=10
   integer (i8b) :: psdlen=1e6
   ! Enable sub ring map making
@@ -52,9 +54,12 @@ MODULE commonparam
   logical :: filter_mean=.false.
   logical :: tod_is_clean = .false.
   logical :: binary_output=.false., concatenate_binary=.false.
-  integer :: record_number=1 ! Used for concatenate_binary when storing multiple MC maps
-  integer(i4b) :: nwrite_binary = 10 ! Number of independent groups of processes writing binary maps
-  integer(i4b), parameter :: basis_poly=1, basis_fourier=2, basis_cheby=3, basis_legendre=4
+  ! Used for concatenate_binary when storing multiple MC maps
+  integer :: record_number=1
+  ! Number of independent groups of processes writing binary maps
+  integer(i4b) :: nwrite_binary = 10
+  integer(i4b), parameter :: basis_poly=1, basis_fourier=2, basis_cheby=3, &
+       basis_legendre=4
   integer(i4b) :: basis_func=basis_legendre, basis_order=0
   type :: basis_function_type
      integer(i8b) :: nsamp
@@ -82,7 +87,7 @@ MODULE commonparam
      character(len=SLEN) :: name
      real(dp) :: starts(NSPANMAX), stops(NSPANMAX)
      integer(i4b) :: nspan
-  end type survey_type  
+  end type survey_type
   type(survey_type) :: surveys(0:NSURVEYMAX)
   integer(i4b) :: nsurvey
   logical, allocatable :: surveyflags(:)
@@ -90,15 +95,11 @@ MODULE commonparam
   logical :: bin_subsets = .false.
   logical :: mcmode = .false., cached = .false.
 
-  ! TOAST additions end -RK
-
-  ! other additions -RK
   integer :: nread_concurrent=-1
   real(dp) :: good_baseline_fraction=0 ! default acceps all baselines
   ! monte Carlo mode
   integer(idp) :: mc_increment=1e7, mc_loops=1, mc_id=0, rng_base=0
   logical :: incomplete_matrices = .false.
-  ! other additions end -RK
 
   integer :: ID = 0
   integer :: ntasks = 1
@@ -129,11 +130,11 @@ MODULE commonparam
 
   integer :: mode_detweight=0
 
-  logical :: rm_monopole=.false., temperature_only=.false.       
+  logical :: rm_monopole=.false., temperature_only=.false.
 
   ! Input files
   character(len=SLEN) :: file_param='', file_simulation='', &
-       file_inmask='', file_spectrum='', file_gap='',  &
+       file_inmask='', file_spectrum='', file_gap='', &
        file_pntperiod='', file_objectsize='', &
        file_fpdb_supplement=''
 
@@ -157,56 +158,46 @@ MODULE commonparam
   type(detector_data), allocatable :: detectors(:)
 
   ! Derived directly from input parameters
-  !integer            :: nostokes, ncc, nside_max
-  integer            :: nmap=0, ncc=0, nside_max
-  integer            :: nodetectors=-1
+  integer :: nmap=0, ncc=0, nside_max, nodetectors=-1
 
   ! Pixels
-  integer            :: nopix_map, nopix_cross
-  integer            :: nosubpix_map, nosubpix_cross, nosubpix_max
-  integer            :: nosubmaps_tot, nosubmaps, nosubmaps_max
-  integer            :: nolocmaps, nolocpix
+  integer :: nopix_map, nopix_cross
+  integer :: nosubpix_map, nosubpix_cross, nosubpix_max
+  integer :: nosubmaps_tot, nosubmaps, nosubmaps_max
+  integer :: nolocmaps, nolocpix
 
   ! Number of samples
-  integer(idp)       :: nosamples_tot
-  integer(idp)       :: nosamples_proc_max, nosamples_proc
-
-  integer(idp)       :: istart_mission
-  integer(idp)       :: istart_proc
+  integer(i8b) :: nosamples_tot, nosamples_proc_max, nosamples_proc
+  integer(i8b) :: istart_mission, istart_proc
 
   ! Baselines
-  integer(idp)        :: noba_short_tot
-  integer(idp)        :: noba_short_max
+  integer(i8b) :: noba_short_tot, noba_short_max, noba_short
+  integer(i8b) :: kshort_start
 
-  integer(idp)        :: noba_short
-
-  integer(idp)        :: kshort_start
-
-  integer, allocatable :: baselines_short(:) ! short baselines per process
-  integer, allocatable :: baselines_short_start(:)
-  integer, allocatable :: baselines_short_stop(:)
-  real(dp), allocatable :: baselines_short_time(:)
-  integer, allocatable :: base_pntid_short(:)
+  integer(i4b), allocatable :: baselines_short(:) ! short baselines per process
+  integer(i4b), allocatable :: baselines_short_start(:)
+  integer(i4b), allocatable :: baselines_short_stop(:)
+  real(i8b), allocatable :: baselines_short_time(:)
+  integer(i4b), allocatable :: base_pntid_short(:)
 
   ! Number of pointing periods and their duration as a number of samples
-  integer(i4b)              :: nopntperiods = -1
+  integer(i4b) :: nopntperiods = -1
   integer(i8b), allocatable :: pntperiods(:)
   integer(i4b), allocatable :: pntperiod_id(:)
 
   ! Baselines per pointing period (only used in case use_pntperiods=T)
-  integer,allocatable :: noba_short_pp(:)
+  integer(i4b), allocatable :: noba_short_pp(:)
 
-  integer,allocatable :: id_submap(:)
-  integer             :: id_next, id_prev
+  integer(i4b), allocatable :: id_submap(:)
+  integer(i4b) :: id_next, id_prev
 
-  logical             :: do_map=.true., do_binmap=.false., do_hits=.false.
-  logical             :: do_mask=.false., do_matrix=.false., do_wcov=.false.
-  logical             :: do_base=.false., do_leakmatrix=.false.
-  logical             :: do_wnmap=.false., do_dethits=.false.
-  logical             :: use_inmask
-  logical             :: kinputcheck = .false.
+  logical :: do_map=.true., do_binmap=.false., do_hits=.false.
+  logical :: do_mask=.false., do_matrix=.false., do_wcov=.false.
+  logical :: do_base=.false., do_leakmatrix=.false.
+  logical :: do_wnmap=.false., do_dethits=.false.
+  logical :: use_inmask
 
-  integer             :: noiter = 0
+  integer :: noiter = 0
 
   !--------------------------------------------------------------------------
 
