@@ -985,7 +985,7 @@ CONTAINS
     end if
     call wait_mpi
 
-    cputime_cga = cputime_cga +get_time(10)
+    cputime_cga = cputime_cga + get_time(10)
 
     if (info >= 5) write(*,idf) ID,'Done'
 

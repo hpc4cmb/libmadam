@@ -486,6 +486,8 @@ CONTAINS
              end if
           end do
        end if
+       ! Replace locmap values with an average so subsequent calls won't fail
+       locmap = locmap / ntasks
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
@@ -593,8 +595,10 @@ CONTAINS
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, loccc, nmap*nmap*nosubpix_max*nolocmaps, &
-            MPI_DOUBLE_PRECISION, MPI_SUM, comm, ierr)
+       call mpi_allreduce(MPI_IN_PLACE, loccc, &
+            nmap*nmap*nosubpix_max*nolocmaps, MPI_DOUBLE_PRECISION, MPI_SUM, &
+            comm, ierr)
+            
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect cc with allreduce')
        m = 0
@@ -624,6 +628,8 @@ CONTAINS
              end if
           end do
        end if
+       ! Replace locmap values with an average so subsequent calls won't fail
+       loccc = loccc / ntasks
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
@@ -761,6 +767,7 @@ CONTAINS
              end if
           end do
        end if
+       ! Collect hits will not be called again. No need to average
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
