@@ -445,11 +445,12 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE collect_map(map, nosubpix)
+  SUBROUTINE collect_map(map, nosubpix, inplace)
     !
     ! locmap->map
     integer, intent(in) :: nosubpix
     real(dp), intent(inout) :: map(nmap, nosubpix, nosubmaps)
+    logical, optional :: inplace
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0
     real(dp) :: buffer(nmap, nosubpix)
     integer :: ierr, ind, id_thread, num_threads
@@ -462,21 +463,40 @@ CONTAINS
             MPI_DOUBLE_PRECISION, MPI_SUM, comm, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect map with allreduce')
-       m = 0
-       k = 0
        if (ndegrade == 1) then
+          !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
+          !$OMP     PRIVATE(i, j, k, m, id_thread) &
+          !$OMP     SHARED(ksubmap_table, id_submap, id, nosubmaps_tot, &
+          !$OMP         nosubpix, locmap, map, nthreads)
+          id_thread = omp_get_thread_num()
+          m = 0
+          k = 0
           do i = 0, nosubmaps_tot-1
              if (ksubmap_table(i, 0)) k = k + 1
              if (id == id_submap(i)) m = m + 1
+             if (nthreads > 1) then
+                if (modulo(m, nthreads) /= id_thread) cycle
+             end if
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 j = (k-1) * nosubpix
                 map(:, :, m) = locmap(:, j:j+nosubpix-1)
              end if
           end do
+          !$OMP END PARALLEL
        else
+          !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
+          !$OMP     PRIVATE(i, j, k, m, n, id_thread) &
+          !$OMP     SHARED(ksubmap_table, id_submap, id, nosubmaps_tot, &
+          !$OMP         nosubpix, locmap, map, nthreads, ndegrade)
+          id_thread = omp_get_thread_num()
+          m = 0
+          k = 0
           do i = 0, nosubmaps_tot-1
              if (ksubmap_table(i, 0)) k = k + 1
              if (id == id_submap(i)) m = m + 1
+             if (nthreads > 1) then
+                if (modulo(m, nthreads) /= id_thread) cycle
+             end if
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 n = 0
                 do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, ndegrade
@@ -485,9 +505,16 @@ CONTAINS
                 end do
              end if
           end do
+          !$OMP END PARALLEL
        end if
        ! Replace locmap values with an average so subsequent calls won't fail
-       locmap = locmap / ntasks
+       if (.not. present(inplace)) then
+          !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(i) SHARED(locmap, ntasks)
+          do i = 0, nsize_locmap
+             locmap(:, i) = locmap(:, i) / ntasks
+          end do
+          !$OMP END PARALLEL DO
+       end if
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
@@ -598,24 +625,42 @@ CONTAINS
        call mpi_allreduce(MPI_IN_PLACE, loccc, &
             nmap*nmap*nosubpix_max*nolocmaps, MPI_DOUBLE_PRECISION, MPI_SUM, &
             comm, ierr)
-            
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect cc with allreduce')
-       m = 0
-       k = 0
        if (ndegrade == 1) then
+          !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
+          !$OMP     PRIVATE(i, j, k, m, id_thread) &
+          !$OMP     SHARED(ksubmap_table, id_submap, id, nosubmaps_tot, &
+          !$OMP         nosubpix, loccc, cc, nthreads)
+          id_thread = omp_get_thread_num()
+          m = 0
+          k = 0
           do i = 0, nosubmaps_tot-1
              if (ksubmap_table(i, 0)) k = k + 1
              if (id == id_submap(i)) m = m + 1
+             if (nthreads > 1) then
+                if (modulo(m, nthreads) /= id_thread) cycle
+             end if
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 j = (k-1) * nosubpix
                 cc(:, :, :, m) = loccc(:, :, j:j+nosubpix-1)
              end if
           end do
+          !$OMP END PARALLEL
        else
+          !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
+          !$OMP     PRIVATE(i, j, k, m, n, col, id_thread) &
+          !$OMP     SHARED(ksubmap_table, id_submap, id, nosubmaps_tot, &
+          !$OMP         nosubpix, loccc, cc, nthreads, ndegrade, nmap)
+          id_thread = omp_get_thread_num()
+          m = 0
+          k = 0
           do i = 0, nosubmaps_tot-1
              if (ksubmap_table(i, 0)) k = k + 1
              if (id == id_submap(i)) m = m + 1
+             if (nthreads > 1) then
+                if (modulo(m, nthreads) /= id_thread) cycle
+             end if
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 do col = 1, nmap
                    n = 0
@@ -627,9 +672,14 @@ CONTAINS
                 end do
              end if
           end do
+          !$OMP END PARALLEL
        end if
-       ! Replace locmap values with an average so subsequent calls won't fail
-       loccc = loccc / ntasks
+       ! scale back the value of loccc after allreduce
+       !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(i) SHARED(loccc, ntasks)
+       do i = 0, nsize_locmap
+          loccc(:, :, i) = loccc(:, :, i) / ntasks
+       end do
+       !$OMP END PARALLEL DO
     else if (concatenate_messages) then
        ! use alltoallv to reduce the local maps into global
 
