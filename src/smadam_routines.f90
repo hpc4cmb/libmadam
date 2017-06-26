@@ -705,14 +705,14 @@ CONTAINS
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
     real(dp) :: alpha, beta, pw, apn, bf, detweight
     integer :: i, j, k, n, m, ip, istep, idet, first, last, order, i0, m0
-    integer :: order2, ichunk, noba, kstart, ipsd, itask
+    integer :: order2, ichunk, noba, kstart, ipsd
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
     integer :: ierr, imap
-    real(dp), allocatable, target :: locmap_all_threads(:, :, :)
+    integer(i8b) :: npix_thread, firstpix, lastpix, itask
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
-    real(dp), pointer :: locmap_thread(:, :), ap_thread(:, :, :)
+    real(dp), pointer :: ap_thread(:, :, :)
 
     if (info > 4) write(*,idf) ID,'Begin iteration...'
 
@@ -837,15 +837,14 @@ CONTAINS
        return
     end if
 
-    allocate(locmap_all_threads(nmap, 0:nsize_locmap, 0:nthreads-1), stat=ierr)
-    if (ierr /= 0) stop 'iterate_a: no room for locmap_all_threads'
+    npix_thread = ceiling(dble(nsize_locmap) / nthreads)
 
     allocate( &
          ap_all_threads(0:basis_order, noba_short, nodetectors, 0:nthreads-1), &
          stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for ap_all_threads'
 
-    call reset_time(99) ! -RK
+    call reset_time(99)
 
     istep = 0
     do
@@ -857,7 +856,6 @@ CONTAINS
        ! From baseline to map
 
        locmap = 0
-       locmap_all_threads = 0
 
        if (basis_order == 0) then
           if (nmap == 1) then
@@ -874,8 +872,6 @@ CONTAINS
              call baseline_to_map_general()
           end if
        end if
-
-       locmap = sum(locmap_all_threads, dim=3)
 
        ! Communicate maps between processes
        call wait_mpi
@@ -974,7 +970,7 @@ CONTAINS
 
     end do
 
-    deallocate(locmap_all_threads, ap_all_threads)
+    deallocate(ap_all_threads)
 
     deallocate(r, p, ap, z)
 
@@ -995,15 +991,15 @@ CONTAINS
 
     subroutine baseline_to_map_order0_nopol()
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
-      !$OMP          isubchunk,subchunk,pixels,dummy_pixel) &
-      !$OMP   PRIVATE(itask,id_thread,locmap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,pw,m,ip)
-      itask = -1
+      !$OMP          isubchunk,subchunk,pixels,dummy_pixel,locmap) &
+      !$OMP   PRIVATE(id_thread,idet,ichunk,noba,kstart,&
+      !$OMP          ipsd,detweight,k,pw,m,ip,firstpix,lastpix)
       id_thread = omp_get_thread_num()
-      locmap_thread => locmap_all_threads(:, :, id_thread)
+      firstpix = id_thread * npix_thread
+      lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
@@ -1013,20 +1009,14 @@ CONTAINS
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
 
-            itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk
-            end if
-
             loop_baseline : do k = kstart+1, kstart+noba
                pw = p(0, k, idet) * detweight
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
-                  ip = ip + 1 ! Start locmap indexing from 1
-
-                  locmap_thread(1, ip) = locmap_thread(1, ip) + pw
+                  if (ip < firstpix .or. ip > lastpix) cycle
+                  locmap(1, ip) = locmap(1, ip) + pw
                end do
             end do loop_baseline
          end do loop_chunk
@@ -1039,17 +1029,15 @@ CONTAINS
     subroutine baseline_to_map_order0_pol()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,locmap,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights) &
-      !$OMP   PRIVATE(itask,id_thread,locmap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,pw,m,ip)
-
-      itask = -1
+      !$OMP   PRIVATE(id_thread,idet,ichunk,noba,kstart,&
+      !$OMP          ipsd,detweight,k,pw,m,ip,firstpix,lastpix)
       id_thread = omp_get_thread_num()
-      locmap_thread => locmap_all_threads(:, :, id_thread)
-
+      firstpix = id_thread * npix_thread
+      lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
@@ -1059,25 +1047,16 @@ CONTAINS
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
 
-            itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk
-            end if
-
             loop_baseline : do k = kstart+1, kstart+noba
                pw = p(0, k, idet) * detweight
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
-                  ip = ip + 1 ! Start locmap indexing from 1
-
-                  locmap_thread(1, ip) = locmap_thread(1, ip) &
-                       + weights(1, m, idet) * pw
-                  locmap_thread(2, ip) = locmap_thread(2, ip) &
-                       + weights(2, m, idet) * pw
-                  locmap_thread(3, ip) = locmap_thread(3, ip) &
-                       + weights(3, m, idet) * pw
+                  if (ip < firstpix .or. ip > lastpix) cycle
+                  locmap(1, ip) = locmap(1, ip) + weights(1, m, idet) * pw
+                  locmap(2, ip) = locmap(2, ip) + weights(2, m, idet) * pw
+                  locmap(3, ip) = locmap(3, ip) + weights(3, m, idet) * pw
                end do
             end do loop_baseline
          end do loop_chunk
@@ -1091,15 +1070,15 @@ CONTAINS
     subroutine baseline_to_map_order0_general()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
-      !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights) &
-      !$OMP   PRIVATE(itask,id_thread,locmap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,pw,m,ip)
-      itask = -1
+      !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap) &
+      !$OMP   PRIVATE(id_thread,idet,ichunk,noba,kstart,&
+      !$OMP          ipsd,detweight,k,pw,m,ip,firstpix,lastpix)
       id_thread = omp_get_thread_num()
-      locmap_thread => locmap_all_threads(:, :, id_thread)
+      firstpix = id_thread * npix_thread
+      lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
@@ -1109,21 +1088,14 @@ CONTAINS
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
 
-            itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk
-            end if
-
             loop_baseline : do k = kstart+1, kstart+noba
                pw = p(0, k, idet) * detweight
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
-                  ip = ip + 1 ! Start locmap indexing from 1
-
-                  locmap_thread(:, ip) = locmap_thread(:, ip) &
-                       + weights(:, m, idet) * pw
+                  if (ip < firstpix .or. ip > lastpix) cycle
+                  locmap(:, ip) = locmap(:, ip) + weights(:, m, idet)*pw
                end do
             end do loop_baseline
          end do loop_chunk
@@ -1136,16 +1108,16 @@ CONTAINS
     subroutine baseline_to_map_nopol()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
       !$OMP          basis_functions,basis_order,isubchunk,subchunk,pixels,&
-      !$OMP          dummy_pixel) &
-      !$OMP   PRIVATE(itask,id_thread,locmap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,m0,basis_function,m,ip)
-      itask = -1
+      !$OMP          dummy_pixel,locmap) &
+      !$OMP   PRIVATE(id_thread,idet,ichunk,noba,kstart,&
+      !$OMP          ipsd,detweight,k,m0,basis_function,m,ip,firstpix,lastpix)
       id_thread = omp_get_thread_num()
-      locmap_thread => locmap_all_threads(:, :, id_thread)
+      firstpix = id_thread * npix_thread
+      lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
@@ -1155,11 +1127,6 @@ CONTAINS
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
 
-            itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk
-            end if
-
             loop_baseline : do k = kstart+1, kstart+noba
                m0 = baselines_short_start(k)
                basis_function => basis_functions(k)%arr
@@ -1167,9 +1134,8 @@ CONTAINS
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
-                  ip = ip + 1 ! Start locmap indexing from 1
-
-                  locmap_thread(1, ip) = locmap_thread(1, ip) + detweight &
+                  if (ip < firstpix .or. ip > lastpix) cycle
+                  locmap(1, ip) = locmap(1, ip) + detweight &
                        * dot_product(basis_function(:, m-m0), p(:, k, idet))
                end do
             end do loop_baseline
@@ -1183,16 +1149,17 @@ CONTAINS
     subroutine baseline_to_map_general()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(locmap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
       !$OMP          basis_functions,basis_order,isubchunk,subchunk,pixels,&
-      !$OMP          dummy_pixel,nmap,weights) &
-      !$OMP   PRIVATE(itask,id_thread,locmap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,m0,basis_function,m,ip,pw)
-      itask = -1
+      !$OMP          dummy_pixel,nmap,weights,locmap) &
+      !$OMP   PRIVATE(id_thread,idet,ichunk,noba,kstart,&
+      !$OMP          ipsd,detweight,k,m0,basis_function,m,ip,pw,&
+      !$OMP          firstpix,lastpix)
       id_thread = omp_get_thread_num()
-      locmap_thread => locmap_all_threads(:, :, id_thread)
+      firstpix = id_thread * npix_thread
+      lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
@@ -1202,11 +1169,6 @@ CONTAINS
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle
 
-            itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk
-            end if
-
             loop_baseline : do k = kstart+1, kstart+noba
                m0 = baselines_short_start(k)
                basis_function => basis_functions(k)%arr
@@ -1214,11 +1176,10 @@ CONTAINS
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
                   if (ip == dummy_pixel) cycle
-                  ip = ip + 1 ! Start locmap indexing from 1
-
+                  if (ip < firstpix .or. ip > lastpix) cycle
                   pw = dot_product(basis_function(:, m-m0), &
                        p(:, k, idet)) * detweight
-                  locmap_thread(1:nmap, ip) = locmap_thread(1:nmap, ip) &
+                  locmap(1:nmap, ip) = locmap(1:nmap, ip) &
                        + weights(1:nmap, m, idet)*pw
                end do
             end do loop_baseline

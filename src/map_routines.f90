@@ -25,34 +25,40 @@ CONTAINS
   SUBROUTINE ccmultiply(cc, map, nopix)
     ! Multiply a map by the inverse of the pixel matrix
 
-    real(dp),intent(in)    :: cc(nmap,nmap,nopix)
-    real(dp),intent(inout) :: map(nmap,nopix)
-    integer, intent(in)    :: nopix
-    integer                :: ip
-    real(dp)               :: tm, qm, um
-
-    !!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(ip)
-    !!$OMP DO SCHEDULE(STATIC,100)
+    real(dp),intent(in) :: cc(nmap, nmap, nopix)
+    real(dp),intent(inout) :: map(nmap, nopix)
+    integer, intent(in) :: nopix
+    integer :: ip
+    real(dp) :: tm, qm, um
 
     if (nmap == 1) then
-       map(1,:) = cc(1,1,:) * map(1,:)
+       !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) PRIVATE(ip)
+       do ip = 1, nopix
+          if (cc(1, 1, ip) == 0) cycle
+          map(1, ip) = cc(1, 1, ip) * map(1, ip)
+       end do
+       !$OMP END PARALLEL DO
     else if (nmap == 3) then
-       do ip = 1,nopix
+       !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) &
+       !$OMP     PRIVATE(ip, tm, qm, um)
+       do ip = 1, nopix
+          if (cc(1, 1, ip) == 0) cycle
           tm = cc(1,1,ip)*map(1,ip) + cc(2,1,ip)*map(2,ip) + cc(3,1,ip)*map(3,ip)
           qm = cc(2,1,ip)*map(1,ip) + cc(2,2,ip)*map(2,ip) + cc(3,2,ip)*map(3,ip)
           um = cc(3,1,ip)*map(1,ip) + cc(3,2,ip)*map(2,ip) + cc(3,3,ip)*map(3,ip)
-          map(1,ip) = tm
-          map(2,ip) = qm
-          map(3,ip) = um
+          map(1, ip) = tm
+          map(2, ip) = qm
+          map(3, ip) = um
        end do
+       !$OMP END PARALLEL DO
     else
+       !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) PRIVATE(ip)
        do ip = 1,nopix
+          if (cc(1, 1, ip) == 0) cycle
           map(:,ip) = matmul( cc(:,:,ip), map(:,ip) )
        end do
+       !$OMP END PARALLEL DO
     end if
-
-    !!$OMP END DO
-    !!$OMP END PARALLEL
 
   END SUBROUTINE ccmultiply
 

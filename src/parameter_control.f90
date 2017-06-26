@@ -880,7 +880,7 @@ CONTAINS
     integer :: i, j, k, m, n0, n, ierr
     integer(i8b) :: nsamp, order, my_offset
     integer(i8b) :: sublen, suboffset, sub_start, sub_end, isub
-    real(dp) :: dn, dn0, ninv, r
+    real(dp) :: dn, dn0, r, dr, rstart, ninv
     real(dp), pointer :: basis_function(:,:)
     real(sp) :: memsum, mem_min, mem_max
 
@@ -1004,12 +1004,13 @@ CONTAINS
                + (basis_order+1)*nsamp*8
           basis_function => basis_functions(k)%arr
           if (nsamp < 1) cycle
-          ninv = 1 / dble(nsamp-1) * 2
+          dr = 2. / nsamp
+          rstart = 0.5*dr - 1
           select case (basis_func)
           case (basis_poly)
              ! Simple polynomial basis
              do i = 0,nsamp-1
-                r = i * ninv - 1
+                r = rstart + i*dr
                 do order = 0,basis_order
                    basis_function(order, i) = r**order
                 end do
@@ -1030,7 +1031,7 @@ CONTAINS
           case (basis_cheby)
              ! use recursive formula for Chebyshev polynomials of the second kind
              do i = 0,nsamp-1
-                r = i * ninv - 1
+                r = rstart + i*dr
                 do order = 0,basis_order
                    if (order == 0) basis_function(order, i) = 1
                    if (order == 1) basis_function(order, i) = 2 * r
@@ -1045,13 +1046,13 @@ CONTAINS
           case (basis_legendre)
              ! use recursive formula for Legendre polynomials
              do i = 0,nsamp-1
-                r = i * ninv - 1
+                r = rstart + i*dr
                 do order = 0,basis_order
                    if (order == 0) basis_function(order, i) = 1
                    if (order == 1) basis_function(order, i) = r
                    if (order > 1) basis_function(order, i) = &
                         ((2*order-1)*r*basis_function(order-1, i) &
-                        - (order-1)*basis_function(order-2, i))/order
+                        - (order-1)*basis_function(order-2, i)) / order
                 end do
              end do
           case default
