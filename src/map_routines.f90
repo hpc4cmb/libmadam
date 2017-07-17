@@ -34,28 +34,43 @@ CONTAINS
     if (nmap == 1) then
        !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) PRIVATE(ip)
        do ip = 1, nopix
-          if (cc(1, 1, ip) == 0) cycle
-          map(1, ip) = cc(1, 1, ip) * map(1, ip)
+          if (cc(1, 1, ip) == 0) then
+             map(:, ip) = 0
+          else
+             map(1, ip) = cc(1, 1, ip) * map(1, ip)
+          end if
        end do
        !$OMP END PARALLEL DO
     else if (nmap == 3) then
        !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) &
        !$OMP     PRIVATE(ip, tm, qm, um)
        do ip = 1, nopix
-          if (cc(1, 1, ip) == 0) cycle
-          tm = cc(1,1,ip)*map(1,ip) + cc(2,1,ip)*map(2,ip) + cc(3,1,ip)*map(3,ip)
-          qm = cc(2,1,ip)*map(1,ip) + cc(2,2,ip)*map(2,ip) + cc(3,2,ip)*map(3,ip)
-          um = cc(3,1,ip)*map(1,ip) + cc(3,2,ip)*map(2,ip) + cc(3,3,ip)*map(3,ip)
-          map(1, ip) = tm
-          map(2, ip) = qm
-          map(3, ip) = um
+          if (cc(1, 1, ip) == 0) then
+             map(:, ip) = 0
+          else
+             tm = cc(1, 1, ip)*map(1, ip) + &
+                  cc(2, 1, ip)*map(2, ip) + &
+                  cc(3, 1, ip)*map(3, ip)
+             qm = cc(2, 1, ip)*map(1, ip) + &
+                  cc(2, 2, ip)*map(2, ip) + &
+                  cc(3, 2, ip)*map(3, ip)
+             um = cc(3, 1, ip)*map(1, ip) + &
+                  cc(3, 2, ip)*map(2, ip) + &
+                  cc(3, 3, ip)*map(3, ip)
+             map(1, ip) = tm
+             map(2, ip) = qm
+             map(3, ip) = um
+          end if
        end do
        !$OMP END PARALLEL DO
     else
        !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) PRIVATE(ip)
        do ip = 1,nopix
-          if (cc(1, 1, ip) == 0) cycle
-          map(:,ip) = matmul( cc(:,:,ip), map(:,ip) )
+          if (cc(1, 1, ip) == 0) then
+             map(:, ip) = 0
+          else
+             map(:, ip) = matmul(cc(:, :, ip), map(:, ip))
+          end if
        end do
        !$OMP END PARALLEL DO
     end if
@@ -112,7 +127,7 @@ CONTAINS
           select case (pixmode_cross)
           case (0)  !absolute determinant
              call invert_LU(cc(:,:,ip), cdet, sing, nmap)
-             
+
              if (cdet < pixlim_cross .or. sing) then
                 cc(:,:,ip) = 0
              else
@@ -129,9 +144,9 @@ CONTAINS
              else
                 tracen = (nmap/trace)**nmap
              end if
-             
+
              call invert_LU(cc(:,:,ip), cdet, sing, nmap)
-             
+
              if (cdet*tracen < pixlim_cross .or. sing) then
                 cc(:,:,ip) = 0
              else
@@ -157,7 +172,7 @@ CONTAINS
              end if
           case (4) ! invert the non-singular part
              call invert_eig_s(cc(:,:,ip), cdet, rcnd, noeig, pixlim_cross, nmap)
-             
+
              if (noeig == nmap) then
                 covn = covn + 1
              else
@@ -247,25 +262,25 @@ CONTAINS
              do imap = 1,nmap
                 trace = trace + cc(imap,imap,ip)
              end do
-             
+
              if (abs(trace) < 1.e-30) then
                 tracen = 0
              else
                 tracen = (nmap/trace)**nmap
              endif
-             
+
              call invert_LU(cc(:,:,ip), cdet, sing, nmap)
-             
+
              pcrit = cdet*tracen
-             
+
           case(2) ! rcond
              call invert_eig(cc(:,:,ip), cdet, rcnd, sing, nmap)
-             
-             pcrit = rcnd             
+
+             pcrit = rcnd
           case default
              stop 'Unknown pixmode_map'
           end select
-          
+
           if (pcrit < pixlim_map .or. sing) then
              cc(:,:,ip) = 0
              mask(ip) = 0
@@ -273,9 +288,9 @@ CONTAINS
              mask(ip) = 1
              cover = cover + 1
           end if
-          
+
           if (do_mask) crit(ip) = pcrit
-          
+
        end do
 !!$OMP END DO
     end if
