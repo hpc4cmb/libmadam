@@ -443,7 +443,6 @@ CONTAINS
     real(dp), allocatable :: buf(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
-    map = 0
 
     if (allreduce) then
        allocate(buf(nmap, nosubpix, nolocmaps), stat=ierr)
@@ -593,7 +592,6 @@ CONTAINS
     real(dp), allocatable :: buf(:, :, :, :)
 
     ndegrade = nosubpix_max / nosubpix
-    cc = 0
 
     if (allreduce) then
        allocate(buf(nmap, nmap, nosubpix, nolocmaps), stat=ierr)
@@ -744,7 +742,6 @@ CONTAINS
     integer, allocatable :: buf(:, :)
 
     ndegrade = nosubpix_max / nosubpix
-    hits = 0
 
     if (allreduce) then
        allocate(buf(nosubpix, nolocmaps), stat=ierr)
