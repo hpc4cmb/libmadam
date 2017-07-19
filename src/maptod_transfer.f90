@@ -509,7 +509,8 @@ CONTAINS
        end if
        ! Replace locmap values with an average so subsequent calls won't fail
        if (.not. present(inplace)) then
-          !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(i) SHARED(locmap, ntasks)
+          !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(i) &
+          !$OMP     SHARED(locmap, ntasks, nsize_locmap)
           do i = 0, nsize_locmap
              locmap(:, i) = locmap(:, i) / ntasks
           end do
@@ -675,7 +676,8 @@ CONTAINS
           !$OMP END PARALLEL
        end if
        ! scale back the value of loccc after allreduce
-       !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(i) SHARED(loccc, ntasks)
+       !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(i) &
+       !$OMP     SHARED(loccc, ntasks, nsize_locmap)
        do i = 0, nsize_locmap
           loccc(:, :, i) = loccc(:, :, i) / ntasks
        end do
