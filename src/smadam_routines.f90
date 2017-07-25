@@ -709,7 +709,7 @@ CONTAINS
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
-    integer :: ierr, imap
+    integer :: ierr, imap, num_threads
     integer(i8b) :: npix_thread, firstpix, lastpix, itask
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
@@ -1198,23 +1198,24 @@ CONTAINS
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,locmap) &
       !$OMP   PRIVATE(itask,id_thread,ap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,apn,i,ip)
+      !$OMP          ipsd,detweight,k,apn,i,ip,num_threads)
       itask = -1
       id_thread = omp_get_thread_num()
       ap_thread => ap_all_threads(:, :, :, id_thread)
+      num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
-            if (ipsd < 0) cycle
+            if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk_ap
+            if (num_threads > 1) then
+               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
             end if
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
@@ -1244,24 +1245,25 @@ CONTAINS
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap) &
       !$OMP   PRIVATE(itask,id_thread,ap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,apn,i,ip)
+      !$OMP          ipsd,detweight,k,apn,i,ip,num_threads)
 
       itask = -1
       id_thread = omp_get_thread_num()
       ap_thread => ap_all_threads(:, :, :, id_thread)
+      num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
-            if (ipsd < 0) cycle
+            if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk_ap
+            if (num_threads > 1) then
+               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
             end if
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
@@ -1295,23 +1297,24 @@ CONTAINS
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap,nmap) &
       !$OMP   PRIVATE(itask,id_thread,ap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,apn,i,ip)
+      !$OMP          ipsd,detweight,k,apn,i,ip,num_threads)
       itask = -1
       id_thread = omp_get_thread_num()
       ap_thread => ap_all_threads(:, :, :, id_thread)
+      num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
-            if (ipsd < 0) cycle
+            if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk_ap
+            if (num_threads > 1) then
+               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
             end if
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
@@ -1345,23 +1348,24 @@ CONTAINS
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap) &
       !$OMP   PRIVATE(itask,id_thread,ap_thread,idet,ichunk,noba,kstart,ipsd,&
-      !$OMP          detweight,k,apnv,i0,basis_function,i,ip)
+      !$OMP          detweight,k,apnv,i0,basis_function,i,ip,num_threads)
       itask = -1
       id_thread = omp_get_thread_num()
       ap_thread => ap_all_threads(:, :, :, id_thread)
+      num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
-            if (ipsd < 0) cycle
+            if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (nthreads > 1 ) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk_ap
+            if (num_threads > 1) then
+               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
             end if
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
@@ -1396,23 +1400,24 @@ CONTAINS
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap,nmap) &
       !$OMP   PRIVATE(itask,id_thread,ap_thread,idet,ichunk,noba,kstart,&
-      !$OMP          ipsd,detweight,k,apnv,i0,basis_function,i,ip)
+      !$OMP          ipsd,detweight,k,apnv,i0,basis_function,i,ip,num_threads)
       itask = -1
       id_thread = omp_get_thread_num()
       ap_thread => ap_all_threads(:, :, :, id_thread)
+      num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
          loop_chunk_ap : do ichunk = first_chunk, last_chunk
             noba = noba_short_pp(ichunk)
             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
-            if (ipsd < 0) cycle
+            if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (nthreads > 1) then
-               if (modulo(itask, nthreads) /= id_thread) cycle loop_chunk_ap
+            if (num_threads > 1) then
+               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
             end if
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
