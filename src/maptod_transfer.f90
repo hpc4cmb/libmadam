@@ -574,20 +574,15 @@ CONTAINS
           map(1:nmap, :, m) = map(1:nmap, :, m) + submaps_recv(1:nmap, :, i)
        end do
        !$OMP END PARALLEL
-
     else
        mrecv = 0
+       m = 0
        do i = 0, nosubmaps_tot-1
-
           id_map = id_submap(i)
           if (ID == id_map) mrecv = mrecv + 1
-
           do id_tod = 0, ntasks-1
-
              if (.not. ksubmap_table(i, id_tod)) cycle
-
              if (ID == id_tod) then ! prepare send buffer
-
                 buffer = 0.0
                 do k = 1, nosubpix
                    do j = 1, ndegrade
@@ -596,11 +591,8 @@ CONTAINS
                    end do
                 end do
              end if
-
              call send_mpi_vec_dp(buffer, nmap*nosubpix, id_tod, id_map)
-
              if (ID == id_map) map(:, :, mrecv) = map(:, :, mrecv) + buffer
-
           end do
        end do
     end if
@@ -746,17 +738,13 @@ CONTAINS
        end do
     else
        mrecv = 0
+       m = 0
        do i = 0, nosubmaps_tot-1
-
           id_map = id_submap(i)
           if (ID == id_map) mrecv = mrecv + 1
-
           do id_tod = 0, ntasks-1
-
              if (.not. ksubmap_table(i, id_tod)) cycle
-
              if (ID == id_tod) then  ! prepare send buffer
-
                 buffer = 0.0
                 do k = 1, nosubpix
                    do j = 1, ndegrade
@@ -765,11 +753,8 @@ CONTAINS
                    end do
                 end do
              end if
-
              call send_mpi_vec_dp(buffer, nmap**2*nosubpix, id_tod, id_map)
-
              if (ID == id_map) cc(:, :, :, mrecv) = cc(:, :, :, mrecv) + buffer
-
           end do
        end do
     end if
@@ -878,17 +863,13 @@ CONTAINS
 
     else
        mrecv = 0
+       m = 0
        do i = 0, nosubmaps_tot-1
-
           id_map = id_submap(i)
           if (ID == id_map) mrecv = mrecv + 1
-
           do id_tod = 0, ntasks-1
-
              if (.not. ksubmap_table(i, id_tod)) cycle
-
              if (ID == id_tod) then ! prepare send buffer
-
                 buffer = 0
                 do k = 1, nosubpix
                    do j = 1, ndegrade
@@ -897,11 +878,8 @@ CONTAINS
                    end do
                 end do
              end if
-
              call send_mpi(buffer, nosubpix, id_tod, id_map)
-
              if (ID == id_map) hits(:, mrecv) = hits(:, mrecv) + buffer
-
           end do
        end do
     end if
@@ -1047,20 +1025,16 @@ CONTAINS
        !$OMP END PARALLEL
     else
        msend = 0
+       m = 0
        do i = 0, nosubmaps_tot-1
           id_map = id_submap(i)
-
           if (ID == id_map) then
              msend = msend + 1
              buffer = map(:, :, msend)
           end if
-
           do id_tod = 0, ntasks-1
-
              if (.not. ksubmap_table(i, id_tod)) cycle
-
              call send_mpi_vec_dp(buffer, nmap*nosubpix, id_map, id_tod)
-
              if (ID == id_tod) then
                 do k = 1, nosubpix
                    do j = 1, ndegrade
@@ -1069,10 +1043,8 @@ CONTAINS
                    end do
                 end do
              end if
-
           end do
        end do
-
     end if
 
   END SUBROUTINE scatter_map
@@ -1214,20 +1186,16 @@ CONTAINS
        !$OMP END PARALLEL
     else
        msend = 0
+       m = 0
        do i = 0, nosubmaps_tot-1
           id_map = id_submap(i)
-
           if (ID == id_map) then
              msend = msend + 1
              buffer = mask(:, msend)
           end if
-
           do id_tod = 0, ntasks-1
-
              if (.not. ksubmap_table(i, id_tod)) cycle
-
              call send_mpi(buffer, nosubpix, id_map, id_tod)
-
              if (ID == id_tod) then
                 do k = 1, nosubpix
                    do j = 1, ndegrade
@@ -1236,7 +1204,6 @@ CONTAINS
                    end do
                 end do
              end if
-
           end do
        end do
     end if

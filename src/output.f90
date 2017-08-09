@@ -55,7 +55,6 @@ CONTAINS
     ! output flags
     do_binmap  = (len_trim(file_binmap) > 0)
     do_hits    = (len_trim(file_hit) > 0)
-    do_dethits = .false. ! (do_hits .and. nodetectors < 100)
     do_mask    = (len_trim(file_mask) > 0)
 
     if ( binary_output ) then
@@ -977,35 +976,19 @@ CONTAINS
        call write_header_simulation(out)
 
        if (write_cut) then
-          if (do_dethits) then
-             allocate(columns(nodetectors+2))
-          else
-             allocate(columns(2))
-          end if
+          allocate(columns(2))
           columns(1)%repcount = repeat
           columns(1)%name = 'Pixel index'
           columns(1)%type = fits_int8
           coloffset = 1
        else
-          if (do_dethits) then
-             allocate(columns(nodetectors+1))
-          else
-             allocate(columns(1))
-          end if
+          allocate(columns(1))
           coloffset = 0
        end if
 
        columns(1+coloffset)%repcount = repeat ! map_repcount
        columns(1+coloffset)%name='Total hits'
        columns(1+coloffset)%type=fits_int4
-
-       if (do_dethits) then
-          do idet = 1,nodetectors
-             columns(idet+1+coloffset)%repcount = repeat ! map_repcount
-             columns(idet+1+coloffset)%name=detectors(idet)%name
-             columns(idet+1+coloffset)%type=fits_int4
-          end do
-       end if
 
        call fits_insert_bintab(out, columns)
        deallocate(columns)

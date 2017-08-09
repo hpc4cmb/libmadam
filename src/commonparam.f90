@@ -39,7 +39,7 @@ MODULE commonparam
   logical :: noise_weights_from_psd = .false. ! integrate noise weights internally
   ! Assume well-behaved noise spectrum without low pass filtering
   logical :: radiometers = .true.
-  integer(i8b) :: read_buffer_len = 1e6, psd_downsample=10
+  integer(i8b) :: psd_downsample=10
   integer (i8b) :: psdlen=1e6
   ! Enable sub ring map making
   integer(i2b) :: nsubchunk=0
@@ -95,7 +95,6 @@ MODULE commonparam
   logical :: bin_subsets = .false.
   logical :: mcmode = .false., cached = .false.
 
-  integer :: nread_concurrent=-1
   real(dp) :: good_baseline_fraction=0 ! default acceps all baselines
   ! monte Carlo mode
   integer(idp) :: mc_increment=1e7, mc_loops=1, mc_id=0, rng_base=0
@@ -194,7 +193,7 @@ MODULE commonparam
   logical :: do_map=.true., do_binmap=.false., do_hits=.false.
   logical :: do_mask=.false., do_matrix=.false., do_wcov=.false.
   logical :: do_base=.false., do_leakmatrix=.false.
-  logical :: do_wnmap=.false., do_dethits=.false.
+  logical :: do_wnmap=.false.
   logical :: use_inmask
 
   integer :: noiter = 0

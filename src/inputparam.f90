@@ -202,8 +202,6 @@ CONTAINS
        read(value, *, iostat=ierr) info
     case ('runfile')
        file_simulation = trim(value)
-    case ('read_buffer_len')
-       read(value, * ,iostat=ierr) read_buffer_len
     case ('nthreads')
        read(value, *, iostat=ierr) nthreads
     case ('nsubchunk')
@@ -224,8 +222,6 @@ CONTAINS
        read(value, *, iostat=ierr) nside_cross
     case ('nside_submap')
        read(value, *, iostat=ierr) nside_submap
-    case ('nread_concurrent')
-       read(value, *, iostat=ierr) nread_concurrent
     case ('good_baseline_fraction')
        read(value, *, iostat=ierr) good_baseline_fraction
     case ('concatenate_messages')

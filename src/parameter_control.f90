@@ -162,14 +162,6 @@ CONTAINS
 
     if (isubchunk > nsubchunk) call abort_mpi('ERROR: isubchunk > nsubchunk')
 
-    if (nread_concurrent < 1 .or. nread_concurrent > ntasks) &
-         nread_concurrent = ntasks
-
-    if (info > 0) then
-       if (id == 0) write (*,'(" nread_concurrent == ",i0)') nread_concurrent
-       if (id == 0) write (*,'(" read_buffer_len == ",i0)') read_buffer_len
-    end if
-
     if (len_trim(file_covmat) > 0) kwrite_covmat = .true.
     if (kwrite_covmat) then
        kfilter = .true.
@@ -904,6 +896,9 @@ CONTAINS
          stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short')
 
+    basis_functions%copy = .true.
+    basis_functions%nsamp = 0
+
     memory_baselines = memory_baselines + noba_short_max*(4+4+17)
 
     !Split the pointing period into short baselines of length int(dnshort)
@@ -980,86 +975,89 @@ CONTAINS
             + baselines_short(k) - 1
     end do
 
-    ! Set up the basis function arrays.
+    if (kfirst) then
+       ! Set up the basis function arrays.
 
-    do k = 1,noba_short
-       basis_functions(k)%copy = .false.
-       basis_functions(k)%nsamp = baselines_short(k)
-       basis_functions(k)%arr => NULL()
-       do j = 1, k-1
-          if (basis_functions(j)%nsamp == basis_functions(k)%nsamp) then
-             ! we already have a basis function of this length stored.
-             basis_functions(k)%arr => basis_functions(j)%arr
-             basis_functions(k)%copy = .true.
-             exit
+       do k = 1,noba_short
+          basis_functions(k)%copy = .false.
+          basis_functions(k)%nsamp = baselines_short(k)
+          basis_functions(k)%arr => NULL()
+          loop_previous: do j = 1, k-1
+             if (basis_functions(j)%nsamp == basis_functions(k)%nsamp) then
+                ! we already have a basis function of this length stored.
+                basis_functions(k)%arr => basis_functions(j)%arr
+                basis_functions(k)%copy = .true.
+                exit loop_previous
+             end if
+          end do loop_previous
+          if (.not. basis_functions(k)%copy) then
+             ! Allocate and initialize the basis function array for
+             ! this baseline length
+             nsamp = basis_functions(k)%nsamp
+             allocate(basis_functions(k)%arr(0:basis_order, 0:nsamp-1), stat=ierr)
+             if (ierr /= 0) stop 'No room for basis function'
+             memory_basis_functions = memory_basis_functions &
+                  + (basis_order+1)*nsamp*8
+             basis_function => basis_functions(k)%arr
+             if (nsamp < 1) cycle
+             dr = 2. / nsamp
+             rstart = 0.5*dr - 1
+             select case (basis_func)
+             case (basis_poly)
+                ! Simple polynomial basis
+                do i = 0,nsamp-1
+                   r = rstart + i*dr
+                   do order = 0,basis_order
+                      basis_function(order, i) = r**order
+                   end do
+                end do
+             case (basis_fourier)
+                ! Real Fourier basis
+                ninv = pi / nsamp
+                do i = 0,nsamp-1
+                   r = i * ninv
+                   do order = 0,basis_order
+                      if (modulo(order, 2) == 0) then
+                         basis_function(order, i) = cos(order * r)
+                      else
+                         basis_function(order, i) = sin((order + 1) * r)
+                      end if
+                   end do
+                end do
+             case (basis_cheby)
+                ! use recursive formula for Chebyshev polynomials
+                ! of the second kind
+                do i = 0,nsamp-1
+                   r = rstart + i*dr
+                   do order = 0,basis_order
+                      if (order == 0) basis_function(order, i) = 1
+                      if (order == 1) basis_function(order, i) = 2 * r
+                      if (order > 1) basis_function(order, i) = &
+                           2*r*basis_function(order-1, i) &
+                           - basis_function(order-2, i)
+                   end do
+                   ! normalize, Chebyshev polynomials are not orthogonal
+                   ! wrt the L2 norm
+                   basis_function(:, i) = basis_function(:, i) * (1 - r**2)**.25
+                end do
+             case (basis_legendre)
+                ! use recursive formula for Legendre polynomials
+                do i = 0,nsamp-1
+                   r = rstart + i*dr
+                   do order = 0,basis_order
+                      if (order == 0) basis_function(order, i) = 1
+                      if (order == 1) basis_function(order, i) = r
+                      if (order > 1) basis_function(order, i) = &
+                           ((2*order-1)*r*basis_function(order-1, i) &
+                           - (order-1)*basis_function(order-2, i)) / order
+                   end do
+                end do
+             case default
+                call abort_mpi('Unknown function basis')
+             end select
           end if
        end do
-       if (.not. basis_functions(k)%copy) then
-          ! Allocate and initialize the basis function array for
-          ! this baseline length
-          nsamp = basis_functions(k)%nsamp
-          allocate(basis_functions(k)%arr(0:basis_order, 0:nsamp-1), stat=ierr)
-          if (ierr /= 0) stop 'No room for basis function'
-          memory_basis_functions = memory_basis_functions &
-               + (basis_order+1)*nsamp*8
-          basis_function => basis_functions(k)%arr
-          if (nsamp < 1) cycle
-          dr = 2. / nsamp
-          rstart = 0.5*dr - 1
-          select case (basis_func)
-          case (basis_poly)
-             ! Simple polynomial basis
-             do i = 0,nsamp-1
-                r = rstart + i*dr
-                do order = 0,basis_order
-                   basis_function(order, i) = r**order
-                end do
-             end do
-          case (basis_fourier)
-             ! Real Fourier basis
-             ninv = pi / nsamp
-             do i = 0,nsamp-1
-                r = i * ninv
-                do order = 0,basis_order
-                   if (modulo(order, 2) == 0) then
-                      basis_function(order, i) = cos(order * r)
-                   else
-                      basis_function(order, i) = sin((order + 1) * r)
-                   end if
-                end do
-             end do
-          case (basis_cheby)
-             ! use recursive formula for Chebyshev polynomials of the second kind
-             do i = 0,nsamp-1
-                r = rstart + i*dr
-                do order = 0,basis_order
-                   if (order == 0) basis_function(order, i) = 1
-                   if (order == 1) basis_function(order, i) = 2 * r
-                   if (order > 1) basis_function(order, i) = &
-                        2*r*basis_function(order-1, i) &
-                        - basis_function(order-2, i)
-                end do
-                ! normalize, Chebyshev polynomials are not orthogonal
-                ! wrt the L2 norm
-                basis_function(:, i) = basis_function(:, i) * (1 - r**2)**.25
-             end do
-          case (basis_legendre)
-             ! use recursive formula for Legendre polynomials
-             do i = 0,nsamp-1
-                r = rstart + i*dr
-                do order = 0,basis_order
-                   if (order == 0) basis_function(order, i) = 1
-                   if (order == 1) basis_function(order, i) = r
-                   if (order > 1) basis_function(order, i) = &
-                        ((2*order-1)*r*basis_function(order-1, i) &
-                        - (order-1)*basis_function(order-2, i)) / order
-                end do
-             end do
-          case default
-             call abort_mpi('Unknown function basis')
-          end select
-       end if
-    end do
+    end if ! if (kfirst)
 
     memsum = memory_basis_functions / 2**20
     mem_min = memsum

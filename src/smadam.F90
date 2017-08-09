@@ -566,7 +566,7 @@ contains
        if (allocated(pntperiods)) &
             deallocate(pntperiods, pntperiod_id, noba_short_pp)
        if (allocated(baselines_short)) &
-            deallocate(baselines_short, base_pntid_short, basis_functions)
+            deallocate(baselines_short, base_pntid_short)
        if (allocated(baselines_short_start)) &
             deallocate(baselines_short_start, baselines_short_stop)
        if (allocated(prec_diag)) deallocate(prec_diag)
@@ -933,7 +933,7 @@ contains
     if (allocated(pntperiods)) &
          deallocate(pntperiods, pntperiod_id, noba_short_pp)
     if (allocated(baselines_short)) &
-         deallocate(baselines_short, base_pntid_short, basis_functions)
+         deallocate(baselines_short, base_pntid_short)
     if (allocated(baselines_short_start)) &
          deallocate(baselines_short_start, baselines_short_stop)
     if (allocated(prec_diag)) deallocate(prec_diag)

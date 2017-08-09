@@ -3,8 +3,11 @@ MODULE maps_and_baselines
   ! This module defines some allocatable arrays needed by Madam
   !  and provides routines for the (de)allocation of them.
 
-  use commonparam
-  use mpi_wrappers
+  use planck_config, only : sp, dp, i4b, i8b
+  use commonparam, only : basis_functions, basis_order, id, info, kfirst, &
+       noba_short_max, noba_short, nodetectors, do_binmap, do_hits, do_mask, &
+       ndetset, nmap, nopix_cross, nopix_map, nsurvey, use_inmask
+  use mpi_wrappers, only : min_mpi, max_mpi, sum_mpi
   use memory_and_time, only : check_stat
 
   implicit none
@@ -60,13 +63,8 @@ CONTAINS
     end if
 
     if (do_hits) then
-       if (do_dethits) then
-          allocate(nohits(0:nopix_map-1, nodetectors), stat=allocstat)
-          memory_maps = memory_maps + nopix_map*nodetectors*4
-       else
-          allocate(nohits(0:nopix_map-1, 1), stat=allocstat)
-          memory_maps = memory_maps + nopix_map*4
-       end if
+       allocate(nohits(0:nopix_map-1, 1), stat=allocstat)
+       memory_maps = memory_maps + nopix_map*4
        call check_stat(allocstat, 'nohits')
        nohits = 0
     else
@@ -193,10 +191,20 @@ CONTAINS
 
   SUBROUTINE free_baselines
 
+    integer :: k
+
     if (allocated(yba)) deallocate(yba)
     if (allocated(aa)) deallocate(aa)
     if (allocated(nna)) deallocate(nna)
     if (allocated(nna_inv)) deallocate(nna_inv)
+    if (allocated(basis_functions)) then
+       do k = 1, noba_short
+          if (.not. basis_functions(k)%copy) then
+             deallocate(basis_functions(k)%arr)
+          end if
+       end do
+       deallocate(basis_functions)
+    end if
 
   END SUBROUTINE free_baselines
 

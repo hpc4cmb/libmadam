@@ -363,7 +363,7 @@ CONTAINS
        !$OMP   SHARED(nodetectors,first_chunk,last_chunk,noba_short_pp,&
        !$OMP          baselines_short_time,baselines_short_start,&
        !$OMP          baselines_short_stop,isubchunk,subchunkpp,surveyflags,&
-       !$OMP          lochits,dummy_pixel,do_dethits,nohits,nosubpix_map,idet,&
+       !$OMP          lochits,dummy_pixel,nohits,nosubpix_map,idet,&
        !$OMP          nsize_locmap,nthreads,detectors,pixels,id,nopix_map) &
        !$OMP   PRIVATE(ichunk,noba,kstart,ipsd,detweight,k,i,ip,firstpix,&
        !$OMP          lastpix,id_thread)
@@ -402,14 +402,9 @@ CONTAINS
        end do
 
        !$OMP END PARALLEL
-
-       if (do_dethits) then
-          call collect_hits(nohits(0, idet), nosubpix_map)
-          lochits = 0
-       end if
     end do
 
-    if (.not. do_dethits) call collect_hits(nohits(0,1), nosubpix_map)
+    call collect_hits(nohits(0, 1), nosubpix_map)
 
     cputime_count_hits = cputime_count_hits + get_time(10)
 
