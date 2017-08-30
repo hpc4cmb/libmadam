@@ -272,8 +272,8 @@ contains
        subchunkpp => subchunk(1:nosamples_proc)
 
        call tic
-       call reduce_pixels_buff
-       if (id == 0) call toc('reduce_pixels_buff')
+       call reduce_pixels
+       if (id == 0) call toc('reduce_pixels')
 
        call tic
        call update_maptod_transfer(ksubmap)
@@ -314,10 +314,6 @@ contains
 
        call time_stamp
 
-       call tic
-       call restore_pixels_buff
-       if (id == 0) call toc('restore_pixels_buff')
-
        !  First destriping
 
        if (kfirst) then
@@ -327,10 +323,6 @@ contains
              write(*,*) 'Destriping TOD'
           endif
           call time_stamp
-
-          call tic
-          call reduce_pixels_a
-          if (id == 0) call toc('reduce_pixels_a')
 
           if (use_inmask) then
              if (isubchunk == subchunk_start) then
@@ -437,9 +429,7 @@ contains
           if (id == 0) call toc('clean_tod')
        end if
 
-       if (kfirst) then
-          call restore_pixels_a
-       end if
+       call restore_pixels
 
        if (.not. mcmode) then
           if (isubchunk == nsubchunk) then
@@ -718,8 +708,8 @@ contains
     subchunkpp => subchunk(1:nosamples_proc)
 
     call tic
-    call reduce_pixels_buff
-    if (id == 0) call toc('reduce_pixels_buff')
+    call reduce_pixels
+    if (id == 0) call toc('reduce_pixels')
 
     call tic
     call update_maptod_transfer(ksubmap)
@@ -749,10 +739,6 @@ contains
 
     call time_stamp
 
-    call tic
-    call restore_pixels_buff
-    if (id == 0) call toc('restore_pixels_buff')
-
     !  First destriping
 
     if (kfirst) then
@@ -762,10 +748,6 @@ contains
           write(*,*) 'First destriping phase'
        endif
        call time_stamp
-
-       call tic
-       call reduce_pixels_a
-       if (id == 0) call toc('reduce_pixels_a')
 
        call tic
        call initialize_a(yba, nna, wamap, cca, tod_stored)
@@ -821,7 +803,7 @@ contains
        if (id == 0) call toc('clean_tod')
     end if
 
-    call restore_pixels_a
+    call restore_pixels
 
     call wait_mpi
     call time_stamp

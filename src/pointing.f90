@@ -29,9 +29,7 @@ MODULE pointing
 
   integer, public :: dummy_pixel = -1
 
-  public init_pointing, close_pointing, &
-       reduce_pixels_buff, restore_pixels_buff, reduce_pixels_a, &
-       restore_pixels_a
+  public init_pointing, close_pointing, reduce_pixels, restore_pixels
 
 CONTAINS
 
@@ -115,98 +113,10 @@ CONTAINS
   END SUBROUTINE close_pointing
 
 
-  !--------------------------------------------------------------------------
-
-
-  SUBROUTINE reduce_pixels_buff
-    ! Reduce pixel numbers so that they point to locmap
-    !
-    integer :: i, k, ip, idet, ierr
-
-    if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
-
-    ksubmap = .false.
-
-    do idet = 1, nodetectors
-       if (.not. detflags(idet)) cycle
-       do i = 1, nosamples_proc
-          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
-          if (.not. surveyflags(i)) cycle
-          ip = pixels(i, idet) / nosubpix_max
-          ksubmap(ip) = .true.
-       end do
-    end do
-    ksubmap(nosubmaps_tot) = .true. ! always allocate the dummy pixel
-
-    if (allreduce) then
-       ! Flag all hit submaps on every process
-       call mpi_allreduce(MPI_IN_PLACE, ksubmap, nosubmaps_tot, MPI_LOGICAL, &
-            MPI_LOR, comm, ierr)
-       if (ierr /= 0) call abort_mpi('Reducing ksubmaps failed.')
-    end if
-
-    subtable1 = -1
-    subtable2 = -1
-    k = -1
-    do i = 0, nosubmaps_tot
-       if (ksubmap(i)) then
-          k = k + 1
-          subtable1(i) = i - k
-          subtable2(k) = i - k
-       end if
-    end do
-
-    do idet = 1, nodetectors
-       if (.not. detflags(idet)) cycle
-       do i = 1, nosamples_proc
-          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
-          if (.not. surveyflags(i)) cycle
-          ip = pixels(i, idet) / nosubpix_max
-          pixels(i, idet) = pixels(i, idet) - subtable1(ip)*nosubpix_max
-       end do
-    end do
-
-    dummy_pixel = (nosubmaps_tot - subtable1(nosubmaps_tot)) * nosubpix_max
-
-    if (info > 4) write(*,idf) id, 'Done'
-
-  END SUBROUTINE reduce_pixels_buff
-
-
-  !-------------------------------------------------------------------------
-
-
-  SUBROUTINE restore_pixels_buff
-    ! restore original pixel numbers
-    !
-    integer :: i, ip, idet
-
-    if (info > 4) write(*,idf) id, 'Restore pixel numbers...'
-
-    do idet = 1, nodetectors
-       if (.not. detflags(idet)) cycle
-       do i = 1, nosamples_proc
-          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
-          if (.not. surveyflags(i)) cycle
-          ip = pixels(i, idet) / nosubpix_max
-          pixels(i, idet) = pixels(i, idet) + subtable2(ip)*nosubpix_max
-       end do
-    end do
-
-    ksubmap = .true.
-    subtable1 = 0
-    subtable2 = 0
-    dummy_pixel = 12*nside_max**2
-
-    if (info > 4) write(*, idf) id, 'Done'
-
-  END SUBROUTINE restore_pixels_buff
-
-
   !------------------------------------------------------------------------
 
 
-  SUBROUTINE reduce_pixels_a
+  SUBROUTINE reduce_pixels
     ! Reduce pixel numbers so that they point to locmap
     !
     integer :: i, idet, k, ip, ierr
@@ -254,12 +164,12 @@ CONTAINS
 
     if (info > 4) write(*,idf) id, 'Done'
 
-  END SUBROUTINE reduce_pixels_a
+  END SUBROUTINE reduce_pixels
 
 
   !---------------------------------------------------------------------------
 
-  SUBROUTINE restore_pixels_a
+  SUBROUTINE restore_pixels
     ! restore original pixel numbers
     !
     integer :: i, idet, ip
@@ -281,7 +191,7 @@ CONTAINS
 
     if (info > 4) write(*,idf) id, 'Done'
 
-  END SUBROUTINE restore_pixels_a
+  END SUBROUTINE restore_pixels
 
 
   !---------------------------------------------------------------------------
