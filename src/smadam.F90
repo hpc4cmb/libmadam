@@ -349,6 +349,8 @@ contains
              if (id == 0) call toc('construct_preconditioner')
           end if
 
+          call wait_mpi          
+
           if (kwrite_covmat) then
 
              call write_covmat(file_covmat) ! pixels must be reduced

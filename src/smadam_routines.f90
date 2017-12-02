@@ -735,7 +735,8 @@ CONTAINS
     r = yba(:, 1:noba_short, 1:nodetectors)
 
     if (basis_order == 0) then
-       call preconditioning_band(z(0, :, :), r(0, :, :))
+       !call preconditioning_band(z(0, :, :), r(0, :, :))
+       call preconditioning_band(z, r)
     else
        do idet = 1,nodetectors
           do i = 1,noba_short

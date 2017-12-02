@@ -12,8 +12,7 @@ MODULE noise_routines
   use simulation, only : fsample
 
   implicit none
-  !private -RK
-  public ! -RK
+  public
 
   include "fftw3.f03"
 
@@ -125,7 +124,8 @@ CONTAINS
     real(dp) :: starttime
     integer :: ipsdtot
 
-    if (.not. allocated(detectors(idet)%psds) .and. detectors(idet)%npsd == 1) then
+    if (.not. allocated(detectors(idet)%psds) &
+         .and. detectors(idet)%npsd == 1) then
        ipsd = 1
        return
     end if
@@ -160,17 +160,19 @@ CONTAINS
     nofilter = (filter_time*fsample+.5) / nshort
     notail   = (tail_time*fsample+.5) / nshort
 
-    !if (nofilter > .noba_short_max) nofilter = noba_short_max
+    !if (nofilter > noba_short_max) nofilter = noba_short_max
     if (notail > nofilter) notail = nofilter
 
     nof_min = nofilter + 2*notail
+    ! Ensure that the filter is long enough for the preconditioner
+    if (precond_width > nof_min-1) nof_min = precond_width+1
 
     nof = 1
     do
        if (nof >= nof_min) exit
        nof = 2*nof
     enddo
-    if (ID==0) write(*,*) 'FFT length =',nof
+    if (ID == 0) write(*,*) 'FFT length =', nof
 
     allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
     if (ierr /= 0) stop 'No room for fx and xx'
@@ -209,7 +211,7 @@ CONTAINS
 
   SUBROUTINE build_filter()
     ! Build the noise filter
-    integer,parameter :: kmax = 2
+    integer, parameter :: kmax = 2
     integer :: i, k, idet, nolines, nocols
     real(dp) :: fa, x
     real(dp) :: slope, fmin, fknee, sigma
@@ -232,7 +234,7 @@ CONTAINS
 
     ! Construct and store the filters
     if (allocated(fcov)) deallocate(fcov)
-    allocate(fcov(nof/2+1, npsdtot), &    ! Fourier inverse of the noise filter
+    allocate(fcov(nof/2+1, npsdtot), & ! Fourier inverse of the noise filter
          psddet(npsdtot), psdind(npsdtot), psdstart(npsdtot), psdstop(npsdtot), &
          stat=ierr)
     if (ierr /= 0) stop 'No room for fcov'
@@ -263,7 +265,7 @@ CONTAINS
              psdstop(ipsdtot) = 1e30
           end if
 
-          aspec = 0.0
+          aspec = 0
           do k = 0, kmax
 
              do i = 1, nof
@@ -300,7 +302,7 @@ CONTAINS
 
           end do
 
-          aspec  = 1.d0/(fa*aspec)
+          aspec = 1.d0 / (fa*aspec)
           ! Madam/TOAST edit: do not constrain baseline mean
           if (.not. filter_mean) aspec(1) = 0
           fcov(:, ipsdtot) = aspec
@@ -310,12 +312,6 @@ CONTAINS
              if (isnan(abs(fcov(i, ipsdtot)))) &
                   call abort_mpi('NaN in fcov. Check input PSD and sigma.')
           end do
-
-          !if (id == 0) then
-          !   do i=1,nof/2+1
-          !      write (200+idet,*) fcov(i, idet)
-          !   end do
-          !end if
 
        end do ! ipsd
     end do ! idet
@@ -353,11 +349,11 @@ CONTAINS
       !
 
       integer :: ierr, icol
-      real(dp), allocatable :: dtemp(:,:), sigmas(:)
+      real(dp), allocatable :: dtemp(:, :), sigmas(:)
       character(len=SLEN), allocatable :: stemp(:)
 
       if (id == 0) then
-         open(unit=17, file=file_spectrum,status='old')
+         open(unit=17, file=file_spectrum, status='old')
 
          read (17, *, iostat=ierr) nolines, nocols
          if (ierr /= 0) then
@@ -418,14 +414,14 @@ CONTAINS
          call broadcast_mpi(detectors(idet)%sigmas, detectors(idet)%npsd, 0)
          detectors(idet)%weights = 1 / detectors(idet)%sigmas**2
       end do
-      !if (id == 1) write (100,*) detectors%sigma ! check results
 
       if (id /= 0) then
-         allocate(ftable(nolines), spectrum_table(nolines, nodetectors), stat=ierr)
+         allocate(ftable(nolines), spectrum_table(nolines, nodetectors), &
+              stat=ierr)
          if (ierr /= 0) stop 'No room for ftable'
       endif
+
       call broadcast_mpi(ftable, nolines, 0)
-      !if (id == 1) write (1000,'(es20.10)') exp(ftable) ! check results
       nocols = nodetectors
       do idet = 1, nodetectors
          call broadcast_mpi(spectrum_table(:, idet), nolines, 0)
@@ -461,7 +457,7 @@ CONTAINS
          if (p < 0) p = 0
          if (p > 1) p = 1
 
-         logspec = (1-p)*spectrum_table(k, icol) + p*spectrum_table(k+1, icol)
+         logspec = (1.d0-p)*spectrum_table(k, icol) + p*spectrum_table(k+1, icol)
          spectrum(i) = exp(logspec) ! *sigma*sigma/fsample  -RK
       enddo
 
@@ -571,7 +567,7 @@ CONTAINS
   SUBROUTINE cinvmul(ca, aa)
 
     real(dp), intent(out) :: ca(noba_short, nodetectors)
-    real(dp), intent(in)  :: aa(noba_short, nodetectors)
+    real(dp), intent(in) :: aa(noba_short, nodetectors)
 
     if (kfilter) then
        call convolve_pp(ca, aa, fcov, 2)
@@ -608,7 +604,8 @@ CONTAINS
     ! Compiler bug workaround:
     ! GCC 4.7 up to at least 4.8.0 segfaults when compiling
     ! openMP pragmas that declare type(C_PTR) variables private
-    ! We allocate enough pointers for every thread to use a separate (but shared) one
+    ! We allocate enough pointers for every thread to use a separate
+    ! (but shared) one
 
     !$OMP PARALLEL DEFAULT(SHARED) NUM_THREADS(nthreads) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, x0, m, no, xx, fx, &
@@ -708,7 +705,7 @@ CONTAINS
 
     real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
     integer :: i, j, k, kstart, n, noba, pid, idet, ichunk, ipsd, ierr, nbandmin
-    real(dp),allocatable :: invcov(:, :), blockm(:, :)
+    real(dp), allocatable :: invcov(:, :), blockm(:, :)
     logical :: neg
 
     if (precond_width < 1) return
@@ -727,7 +724,7 @@ CONTAINS
        end if
        memory_precond = noba_short_max*nodetectors*8.
 
-       prec_diag = 0.0
+       prec_diag = 0
        do idet = 1, nodetectors
           do ichunk = first_chunk, last_chunk
              noba = noba_short_pp(ichunk)
@@ -752,39 +749,47 @@ CONTAINS
        return
     end if
 
-    ! if kfilter == .true. then basis_order == 0
-
     use_diagonal = .false.
     nband = precond_width
-    if (.not.allocated(bandprec)) then
-       allocate(bandprec(nband+1,noba_short_max,nodetectors), stat=ierr)
+    if (.not. allocated(bandprec)) then
+       allocate(bandprec(nband+1, noba_short_max, nodetectors), stat=ierr)
        if (ierr /= 0) stop 'No room for bandprec'
     end if
-    if (.not.allocated(prec_diag)) then
-       allocate(prec_diag(noba_short_max,nodetectors), stat=ierr)
+    if (.not. allocated(prec_diag)) then
+       allocate(prec_diag(noba_short_max, nodetectors), stat=ierr)
        if (ierr /= 0) stop 'No room for prec_diag'
     end if
 
-    bandprec = 0.0
-    prec_diag = 0.0
+    bandprec = 0
+    prec_diag = 0
     memory_precond = noba_short_max*nodetectors*(nband*4.+8.)
 
     allocate(invcov(nof, npsdtot), stat=ierr)
     if (ierr /= 0) stop 'No room for invcov'
 
-    do ipsd = 1,npsdtot
+    do ipsd = 1, npsdtot
        call dfftinv(xx, fcov(:, ipsd)) ! C_a inverse into real domain
        invcov(:, ipsd) = xx
     end do
 
     !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
-    !$OMP     DEFAULT(SHARED) &
+    !$OMP     DEFAULT(NONE) &
+    !$OMP     SHARED(nodetectors, first_chunk, last_chunk, noba_short_pp, &
+    !$OMP         baselines_short_time, pntperiod_id, nband, invcov, id, &
+    !$OMP         sampletime, nof, baselines_short_start, &
+    !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
+    !$OMP         detectors) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, pid, blockm, &
     !$OMP         i, j, k, n, neg, ierr, nbandmin)
     do idet = 1,nodetectors
 
        !$OMP PARALLEL DO IF (nodetectors < nthreads) &
-       !$OMP     DEFAULT(SHARED) &
+       !$OMP     DEFAULT(NONE) &
+       !$OMP     SHARED(idet, nodetectors, first_chunk, last_chunk, &
+       !$OMP         noba_short_pp, baselines_short_time, pntperiod_id, nband, &
+       !$OMP         invcov, id, sampletime, nof, baselines_short_start, &
+       !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
+       !$OMP         detectors) &
        !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, pid, blockm, &
        !$OMP         i, j, k, n, neg, ierr, nbandmin)
        do ichunk = first_chunk, last_chunk
@@ -795,13 +800,19 @@ CONTAINS
           pid = pntperiod_id(ichunk)
 
           if (noba < nband) then
-             ! This should never happen
-             print *, id,' : WARNING : noba < nband : ', noba, ' < ', nband, &
-                  ' : ichunk = ', ichunk,&
-                  ', pid = ', pid, ', tstart = ', &
-                  sampletime(baselines_short_start(kstart+1)),&
-                  ', tstop = ', sampletime(baselines_short_stop(kstart+noba))
-             !call abort_mpi('noba < nband, reduce preconditioner width')
+             ! This chunk (pointing period) has fewer baselines than
+             ! the width of the preconditioner.  This should be a very
+             ! infrequent issue unless the user has chosen a too wide
+             ! preconditioner.
+             if (idet == 1 .and. omp_get_thread_num() == 0) then
+                write(*,*) id, ' : WARNING : noba < nband : ', noba, ' < ', &
+                     nband, ' : ichunk = ', ichunk, ', pid = ', pid, &
+                     ', tstart = ', &
+                     sampletime(baselines_short_start(kstart+1)), &
+                     ', length = ', &
+                     sampletime(baselines_short_stop(kstart+noba)) &
+                     - sampletime(baselines_short_start(kstart+1))
+             end if
              nbandmin = noba
           else
              nbandmin = nband
@@ -813,32 +824,38 @@ CONTAINS
              cycle
           end if
 
-          !Rows from kstart+1 to kstart+noba for one band-diagonal submatrix
-          !Do the computation in double precision
+          ! Rows from kstart+1 to kstart+noba for one band-diagonal
+          ! submatrix.  Do the computation in double precision
           allocate(blockm(nbandmin+1, noba), stat=ierr)
           if (ierr /= 0) stop 'No room for blockm'
           blockm = 0
 
+          ! For one reason or another, ifort 17.0.3 sometimes segfaults
+          ! executing this spread() when there are multiple threads:
           blockm = spread(invcov(1:nbandmin+1, ipsd), 2, noba)
+          ! so we write the spread explicitly:
+          !do i = 1, noba
+          !   blockm(:, i) = invcov(1:nbandmin+1, ipsd)
+          !end do
           blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
 
-          !Cholesky decompose
+          ! Cholesky decompose
 
           call DPBTRF('L', noba, nbandmin, blockm, nbandmin+1, ierr)
 
           if (ierr /= 0) then
              if (ierr < 0) then
-                print *, id,' : failed to cholesky decompose. argument # ', &
-                     -ierr,' had an illegal value'
+                print *, id, ' : failed to cholesky decompose. argument # ', &
+                     -ierr, ' had an illegal value'
              end if
              print *, id, ' : Preconditioner was not positive definite. ', &
-                  'Will use C_a preconditioner for ',&
+                  'Will use C_a preconditioner for ', &
                   'det = ', idet, ' = ', trim(detectors(idet)%name), &
                   ' : chunk = ', ichunk, ', ipsd = ', ipsd
-             bandprec(1:nbandmin+1,kstart+1:kstart+noba, idet) = 0
+             bandprec(1:nbandmin+1, kstart+1:kstart+noba, idet) = 0
              prec_diag(kstart+1:kstart+noba, idet) = 0
           else
-             bandprec(1:nbandmin+1,kstart+1:kstart+noba, idet) = blockm(:, :)
+             bandprec(1:nbandmin+1, kstart+1:kstart+noba, idet) = blockm(:, :)
              prec_diag(kstart+1:kstart+noba, idet) = 1 / blockm(1, :)
           end if
 
@@ -864,6 +881,9 @@ CONTAINS
   SUBROUTINE preconditioning_band(z, r)
     !Apply the preconditioner
 
+    ! z and r and may 3-dimensional arrays in the calling code but
+    ! here we collapse the first dimension.  The band preconditioner
+    ! only works for basis_order == 0.
     real(dp), intent(out), target :: z(noba_short, nodetectors)
     real(dp), intent(in), target :: r(noba_short, nodetectors)
     integer :: i, j, k, idet, kstart, noba, ichunk, ierr, ipsd, ipsddet
@@ -883,11 +903,15 @@ CONTAINS
 
     if (use_diagonal) then
        !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
-       !$OMP     DEFAULT(SHARED) PRIVATE(idet,k)
-       do idet = 1,nodetectors
+       !$OMP     DEFAULT(NONE) &
+       !$OMP     SHARED(nodetectors, noba_short, z, r, prec_diag) &
+       !$OMP     PRIVATE(idet, k)
+       do idet = 1, nodetectors
           !$OMP PARALLEL DO IF (nodetectors < nthreads) &
-          !$OMP     DEFAULT(SHARED) PRIVATE(k)
-          do k = 1,noba_short
+          !$OMP     DEFAULT(NONE) &
+          !$OMP     SHARED(nodetectors, z, noba_short, r, prec_diag, idet) &
+          !$OMP     PRIVATE(k)
+          do k = 1, noba_short
              z(k, idet) = r(k, idet) * prec_diag(k, idet)
           end do
           !$OMP END PARALLEL DO
@@ -895,12 +919,22 @@ CONTAINS
        !$OMP END PARALLEL DO
     else
        !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
-       !$OMP     DEFAULT(SHARED) PRIVATE(idet, ichunk, kstart, noba, j, k, &
+       !$OMP     DEFAULT(NONE) &
+       !$OMP     SHARED(noba_short_pp, first_chunk, nband, prec_diag, &
+       !$OMP         bandprec, baselines_short_time, pfx, pxx, z, r, &
+       !$OMP         nodetectors, last_chunk, id, nof, nofilter, notail, &
+       !$OMP         fcov, nshort, detectors) &
+       !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, &
        !$OMP         ierr, ipsd, x0, m, no, xx, fx, id_thread, ipsddet, &
        !$OMP         nbandmin)
-       do idet = 1,nodetectors
+       do idet = 1, nodetectors
           !$OMP PARALLEL DO IF (nodetectors < nthreads) &
-          !$OMP     DEFAULT(SHARED) PRIVATE(ichunk, kstart, noba, j, k, ierr, &
+          !$OMP     DEFAULT(NONE) &
+          !$OMP     SHARED(idet, noba_short_pp, first_chunk, nband, prec_diag, &
+          !$OMP         bandprec, baselines_short_time, pfx, pxx, z, &
+          !$OMP         r, nodetectors, last_chunk, id, nof, nofilter, notail, &
+          !$OMP         fcov, nshort, detectors) &
+          !$OMP     PRIVATE(ichunk, kstart, noba, j, k, ierr, &
           !$OMP         ipsd, x0, m, no, xx, fx, id_thread, ipsddet, nbandmin)
           do ichunk = first_chunk, last_chunk
 
@@ -918,12 +952,12 @@ CONTAINS
                 ! Use the precomputed Cholesky decomposition
 
                 z(kstart+1:kstart+noba, idet) = r(kstart+1:kstart+noba, idet)
-                call DPBTRS('L', noba, nbandmin, 1,&
-                     bandprec(1:nbandmin+1,kstart+1:kstart+noba, idet), &
+                call DPBTRS('L', noba, nbandmin, 1, &
+                     bandprec(1:nbandmin+1, kstart+1:kstart+noba, idet), &
                      nbandmin+1, z(kstart+1:kstart+noba, idet), noba, ierr)
                 if (ierr /= 0) then
-                   print *, id,' : failed to cholesky decompose. argument # ', &
-                        -ierr,' had an illegal value'
+                   print *, id, ' : failed to cholesky decompose. argument # ', &
+                        -ierr, ' had an illegal value'
                    call abort_mpi('bad preconditioner2')
                 end if
              else

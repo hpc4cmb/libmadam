@@ -104,7 +104,7 @@ MODULE commonparam
   integer :: ntasks = 1
 
   character(len=*), parameter :: version = '3.7'
-  character(len=*), parameter :: idf = '(i3,": ",a,1x,i0,2x,i0)'
+  character(len=*), parameter :: idf = '(i4,": ",a,1x,i0,2x,i0)'
 
   ! Input parameters
   integer :: info=2
