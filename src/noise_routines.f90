@@ -778,7 +778,7 @@ CONTAINS
     !$OMP         baselines_short_time, pntperiod_id, nband, invcov, id, &
     !$OMP         sampletime, nof, baselines_short_start, &
     !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
-    !$OMP         detectors) &
+    !$OMP         detectors, nthreads) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, pid, blockm, &
     !$OMP         i, j, k, n, neg, ierr, nbandmin)
     do idet = 1,nodetectors
@@ -904,7 +904,7 @@ CONTAINS
     if (use_diagonal) then
        !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
        !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(nodetectors, noba_short, z, r, prec_diag) &
+       !$OMP     SHARED(nodetectors, noba_short, z, r, prec_diag, nthreads) &
        !$OMP     PRIVATE(idet, k)
        do idet = 1, nodetectors
           !$OMP PARALLEL DO IF (nodetectors < nthreads) &
@@ -923,7 +923,7 @@ CONTAINS
        !$OMP     SHARED(noba_short_pp, first_chunk, nband, prec_diag, &
        !$OMP         bandprec, baselines_short_time, pfx, pxx, z, r, &
        !$OMP         nodetectors, last_chunk, id, nof, nofilter, notail, &
-       !$OMP         fcov, nshort, detectors) &
+       !$OMP         fcov, nshort, detectors, nthreads) &
        !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, &
        !$OMP         ierr, ipsd, x0, m, no, xx, fx, id_thread, ipsddet, &
        !$OMP         nbandmin)
