@@ -610,7 +610,7 @@ CONTAINS
                 nna(:, :, k, idet) = 0
                 yba(:, k, idet) = 0
                 cycle
-             else if (minval(eigenvalues) / maxval(eigenvalues) < 1e-6) then
+             else if (minval(eigenvalues) / maxval(eigenvalues) < 1e-12) then
                 ! Degenerate basis functions
                 print *,id,' : rcond too small: ',eigenvalues
                 print *,id,' : hits : ',nna(0, 0, k, idet),' / ', &
