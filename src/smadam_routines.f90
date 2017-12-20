@@ -612,40 +612,17 @@ CONTAINS
                 cycle
              else if (minval(eigenvalues) / maxval(eigenvalues) < 1e-12) then
                 ! Degenerate basis functions
-                print *,id,' : rcond too small: ',eigenvalues
-                print *,id,' : hits : ',nna(0, 0, k, idet),' / ', &
-                     baselines_short(k)
-                print *,id,' : ',nna(:, :, k, idet)
-                nna(:, :, k, idet) = 0
-                yba(:, k, idet) = 0
+                print *,id,' : WARNING: baseline rcond too small: ', &
+                     minval(eigenvalues) / maxval(eigenvalues), &
+                     ', no preconditioner'
+                !nna(:, :, k, idet) = 0
+                !yba(:, k, idet) = 0
+                do j = 0, basis_order
+                   nna_inv(j, j, k, idet) = 1
+                end do
                 nbad = nbad + 1
              else
                 bad_baseline = .false.
-             end if
-
-             if (bad_baseline) then
-                if (.not. kfilter) then
-                   call abort_mpi('Masking bad baselines not implemented. ' &
-                        // 'Increase good_baseline_fraction')
-                   ! There will be no baseline for this segment, subtract the
-                   ! corresponding binned signal
-                   do i = baselines_short_start(k), baselines_short_stop(k)
-                      ip = pixels(i, idet)
-                      if (ip == dummy_pixel) cycle
-                      if (nmap == 1) then
-                         locmap(1, ip) = locmap(1, ip) &
-                              - tod_stored(i, idet) * detweight
-                         loccc(1, 1, ip) = loccc(1, 1, ip) - detweight
-                      else
-                         locmap(:, ip) = locmap(:, ip) - weights(:, i, idet) &
-                              * tod_stored(i, idet) * detweight
-                         call dsyr('U', nmap, detweight, weights(:, i, idet), &
-                              -1, loccc(:, :, ip), nmap)
-                      end if
-                      if (do_hits) lochits(ip) = lochits(ip) - 1
-                   end do
-                end if
-                cycle
              end if
 
              eigenvectorsT = transpose(eigenvectors)
