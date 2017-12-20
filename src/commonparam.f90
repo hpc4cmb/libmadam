@@ -28,9 +28,6 @@ MODULE commonparam
 
   ! TOAST additions -RK
   integer(dp), allocatable :: chunk_offsets(:), chunk_sizes(:)
-  integer(i4b) :: n_chunkset, n_chunkset_tot, n_channel, n_chunk, n_chunk_tot
-  integer(i4b) :: n_chunk_max, n_sky_nonzero
-  integer(i4b) :: first_chunk, last_chunk ! starts from 1
   logical, allocatable :: use_toast_channel(:)
   character(len=256) :: telescope_name, sky_name
   logical :: flag_by_horn=.false., force_pol=.false.
@@ -134,7 +131,6 @@ MODULE commonparam
   ! Input files
   character(len=SLEN) :: file_param='', file_simulation='', &
        file_inmask='', file_spectrum='', file_gap='', &
-       file_pntperiod='', file_objectsize='', &
        file_fpdb_supplement=''
 
   ! Output files
@@ -177,12 +173,11 @@ MODULE commonparam
   integer(i4b), allocatable :: baselines_short_start(:)
   integer(i4b), allocatable :: baselines_short_stop(:)
   real(i8b), allocatable :: baselines_short_time(:)
-  integer(i4b), allocatable :: base_pntid_short(:)
 
   ! Number of pointing periods and their duration as a number of samples
-  integer(i4b) :: nopntperiods = -1
-  integer(i8b), allocatable :: pntperiods(:)
-  integer(i4b), allocatable :: pntperiod_id(:)
+  integer(i4b) :: ninterval = -1, ninterval_tot = -1
+  integer(i8b), allocatable :: intervals(:)
+  integer(i4b), allocatable :: interval_id(:)
 
   ! Baselines per pointing period (only used in case use_pntperiods=T)
   integer(i4b), allocatable :: noba_short_pp(:)

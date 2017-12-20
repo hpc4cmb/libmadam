@@ -121,7 +121,7 @@ CONTAINS
     loccc = 0
 
     !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-    !$OMP   SHARED(nodetectors,nmap,first_chunk,last_chunk,noba_short_pp,&
+    !$OMP   SHARED(nodetectors,nmap,noba_short_pp,ninterval,&
     !$OMP          baselines_short_time,detectors,baselines_short_start,&
     !$OMP          baselines_short_stop,isubchunk,subchunkpp,pixels,id,npsdtot,&
     !$OMP          dummy_pixel,loccc,weights,nthreads,nsize_locmap,detflags,&
@@ -140,9 +140,9 @@ CONTAINS
     do idet = 1,nodetectors
        if (.not. detflags(idet)) cycle ! not included in this subset
        if (nmap == 1) then
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) then
                 print *, id,' : WARNING: there is no PSD for det # ', idet, &
@@ -165,9 +165,9 @@ CONTAINS
              end do
           end do
        else if (nmap == 3) then
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) then
                 print *, id,' : WARNING: there is no PSD for det # ', idet, &
@@ -197,9 +197,9 @@ CONTAINS
              end do
           end do
        else
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) then
                 print *, id,' : WARNING: there is no PSD for det # ', idet, &
@@ -263,8 +263,8 @@ CONTAINS
     !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
     !$OMP     PRIVATE(i,ip,id_thread,idet,detweight,ierr,&
     !$OMP             ichunk,noba,kstart,ipsd,k,firstpix,lastpix) &
-    !$OMP     SHARED(nsize_locmap,nodetectors,detflags,nmap,first_chunk,&
-    !$OMP            last_chunk,noba_short_pp,detectors,baselines_short_start,&
+    !$OMP     SHARED(nsize_locmap,nodetectors,detflags,nmap,ninterval,&
+    !$OMP            noba_short_pp,detectors,baselines_short_start,&
     !$OMP            baselines_short_stop,isubchunk,subchunkpp,pixels,&
     !$OMP            dummy_pixel,baselines_short_time,surveyflags,&
     !$OMP            tod_stored,weights,nthreads,locmap,id,nosamples_proc)
@@ -280,9 +280,9 @@ CONTAINS
     do idet = 1,nodetectors
        if (.not. detflags(idet)) cycle ! not included in this subset
        if (nmap == 1) then
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) cycle
              detweight = detectors(idet)%weights(ipsd)
@@ -299,9 +299,9 @@ CONTAINS
              end do
           end do
        else
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) cycle
              detweight = detectors(idet)%weights(ipsd)
@@ -360,7 +360,7 @@ CONTAINS
        if (.not. detflags(idet)) cycle ! not included in this subset
 
        !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-       !$OMP   SHARED(nodetectors,first_chunk,last_chunk,noba_short_pp,&
+       !$OMP   SHARED(nodetectors,noba_short_pp,ninterval,&
        !$OMP          baselines_short_time,baselines_short_start,&
        !$OMP          baselines_short_stop,isubchunk,subchunkpp,surveyflags,&
        !$OMP          lochits,dummy_pixel,nohits,nosubpix_map,idet,&
@@ -376,9 +376,9 @@ CONTAINS
        firstpix = id_thread * nsize_locmap / omp_get_num_threads()
        lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
 
-       do ichunk = first_chunk, last_chunk
+       do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+          kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) then
              print *, id,' : WARNING: there is no PSD for det # ', idet, &
@@ -446,9 +446,9 @@ CONTAINS
 
     if (checknan) then
        loop_idet : do idet = 1,nodetectors
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) then
                 print *, id, ' : WARNING: there is no PSD for det # ', idet, &
@@ -495,7 +495,7 @@ CONTAINS
     !$OMP PARALLEL DEFAULT(NONE) &
     !$OMP    PRIVATE(idet,ichunk,noba,kstart,ipsd,detweight,&
     !$OMP            k,i0,basis_function,i,ip,order,bf) &
-    !$OMP    SHARED(nodetectors,first_chunk,last_chunk,noba_short_pp,detectors,&
+    !$OMP    SHARED(nodetectors,noba_short_pp,detectors,ninterval,&
     !$OMP           yba,nna,baselines_short_start,basis_functions,&
     !$OMP           baselines_short_stop,isubchunk,subchunk,pixels,dummy_pixel,&
     !$OMP           locmap,basis_order,tod_stored,nmap,baselines_short_time,&
@@ -503,9 +503,9 @@ CONTAINS
     !$OMP DO SCHEDULE(DYNAMIC,1)
     do idet = 1,nodetectors
 
-       do ichunk = first_chunk, last_chunk
+       do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+          kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
@@ -578,9 +578,9 @@ CONTAINS
        allocate(eigenvalues(n), eigenvectors(n, n), eigenvectorsT(n, n), &
             workspace(workspace_length), stat=ierr)
        if (ierr /= 0) stop 'No room to invert F^T F'
-       do ichunk = first_chunk, last_chunk
+       do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+          kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
@@ -987,7 +987,7 @@ CONTAINS
 
     subroutine baseline_to_map_order0_nopol()
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,locmap) &
@@ -997,9 +997,9 @@ CONTAINS
       firstpix = id_thread * npix_thread
       lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
-         loop_chunk : do ichunk = first_chunk, last_chunk
+         loop_chunk : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1025,7 +1025,7 @@ CONTAINS
     subroutine baseline_to_map_order0_pol()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,locmap,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights) &
@@ -1035,9 +1035,9 @@ CONTAINS
       firstpix = id_thread * npix_thread
       lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
-         loop_chunk : do ichunk = first_chunk, last_chunk
+         loop_chunk : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1066,7 +1066,7 @@ CONTAINS
     subroutine baseline_to_map_order0_general()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap) &
@@ -1076,9 +1076,9 @@ CONTAINS
       firstpix = id_thread * npix_thread
       lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
-         loop_chunk : do ichunk = first_chunk, last_chunk
+         loop_chunk : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1104,7 +1104,7 @@ CONTAINS
     subroutine baseline_to_map_nopol()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
       !$OMP          basis_functions,basis_order,isubchunk,subchunk,pixels,&
@@ -1115,9 +1115,9 @@ CONTAINS
       firstpix = id_thread * npix_thread
       lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
-         loop_chunk : do ichunk = first_chunk, last_chunk
+         loop_chunk : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1145,7 +1145,7 @@ CONTAINS
     subroutine baseline_to_map_general()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(npix_thread,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(npix_thread,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,p,&
       !$OMP          baselines_short_start,baselines_short_stop,&
       !$OMP          basis_functions,basis_order,isubchunk,subchunk,pixels,&
@@ -1157,9 +1157,9 @@ CONTAINS
       firstpix = id_thread * npix_thread
       lastpix = firstpix + npix_thread - 1
       loop_detector : do idet = 1, nodetectors
-         loop_chunk : do ichunk = first_chunk, last_chunk
+         loop_chunk : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
@@ -1189,7 +1189,7 @@ CONTAINS
     subroutine map_to_baseline_order0_nopol()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(ap_all_threads,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,locmap) &
@@ -1201,9 +1201,9 @@ CONTAINS
       num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
-         loop_chunk_ap : do ichunk = first_chunk, last_chunk
+         loop_chunk_ap : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
@@ -1236,7 +1236,7 @@ CONTAINS
     subroutine map_to_baseline_order0_pol()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(ap_all_threads,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap) &
@@ -1249,9 +1249,9 @@ CONTAINS
       num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
-         loop_chunk_ap : do ichunk = first_chunk, last_chunk
+         loop_chunk_ap : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
@@ -1288,7 +1288,7 @@ CONTAINS
     subroutine map_to_baseline_order0_general()
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(ap_all_threads,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
       !$OMP          isubchunk,subchunk,pixels,dummy_pixel,weights,locmap,nmap) &
@@ -1300,9 +1300,9 @@ CONTAINS
       num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
-         loop_chunk_ap : do ichunk = first_chunk, last_chunk
+         loop_chunk_ap : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
@@ -1338,7 +1338,7 @@ CONTAINS
       real(dp) :: apnv(0:basis_order)
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(ap_all_threads,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&
       !$OMP          basis_order,basis_functions,&
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
@@ -1351,9 +1351,9 @@ CONTAINS
       num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
-         loop_chunk_ap : do ichunk = first_chunk, last_chunk
+         loop_chunk_ap : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
@@ -1390,7 +1390,7 @@ CONTAINS
       real(dp) :: apnv(0:basis_order)
 
       !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
-      !$OMP   SHARED(ap_all_threads,nodetectors,first_chunk,last_chunk,&
+      !$OMP   SHARED(ap_all_threads,nodetectors,ninterval,&
       !$OMP          noba_short_pp,baselines_short_time,detectors,nthreads,&
       !$OMP          basis_order,basis_functions,&
       !$OMP          nna,p,baselines_short_start,baselines_short_stop,&
@@ -1403,9 +1403,9 @@ CONTAINS
       num_threads = omp_get_num_threads()
 
       loop_detector_ap : do idet = 1, nodetectors
-         loop_chunk_ap : do ichunk = first_chunk, last_chunk
+         loop_chunk_ap : do ichunk = 1, ninterval
             noba = noba_short_pp(ichunk)
-            kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+            kstart = sum(noba_short_pp(1:ichunk-1))
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
@@ -1459,9 +1459,9 @@ CONTAINS
     locmap = 0
 
     do idet = 1,nodetectors
-       do ichunk = first_chunk, last_chunk
+       do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+          kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)

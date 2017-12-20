@@ -43,57 +43,6 @@ CONTAINS
     logical :: tod_only, flush
 
     stop 'I/O should now be handled externally'
-    
-
-  contains
-
-
-    subroutine merge_horn_flags
-      ! This routine is Planck-specific
-
-      integer(i4b) :: adet, bdet
-      character(len=5) :: ahorn, bhorn
-
-      do adet = 1, n_channel-1
-         ahorn = detectors(adet)%name(1:5)
-         do bdet = adet+1, n_channel
-            bhorn = detectors(bdet)%name(1:5)
-            if (ahorn == bhorn) then
-               where(pixels(:, adet) == dummy_pixel) &
-                    pixels(:, bdet) = dummy_pixel
-               where(pixels(:, bdet) == dummy_pixel) &
-                    pixels(:, adet) = dummy_pixel
-            end if
-         end do
-      end do
-
-    end subroutine merge_horn_flags
-
-
-
-    subroutine check_pixel_numbers(pixels, n_bad, badpix, pixelflags, ndet)
-      integer(i8b), allocatable, intent(inout) :: pixels(:,:)
-      integer(i8b), allocatable, intent(in) :: pixelflags(:)
-      integer(i4b), intent(in) :: badpix, ndet
-      integer(i8b), intent(out) :: n_bad
-
-      integer(i4b) :: idet
-
-      where(pixels == -1) pixels = badpix
-
-      n_bad = 0
-      do idet = 1,ndet
-         n_bad = n_bad + count((pixels(:,idet) < 0 .or. pixels(:,idet) > badpix) .and. pixelflags == 0)
-      end do
-
-      if (n_bad > 0) then
-         write(*,'(a,i0,a)') 'Warning: flagging ',n_bad,' bad pixel values'
-         where(pixels < 0 .or. pixels > badpix) pixels = badpix
-      end if
-
-    end subroutine check_pixel_numbers
-
-
 
   end subroutine toast_read_pointing_and_tod
 
@@ -305,12 +254,12 @@ CONTAINS
     integer(c_long), intent(in) :: nsamp
 
     integer :: ierr, isend
-    integer(i8b) :: my_n_samp, n, len
+    integer(i8b) :: ninterval_max, n, len
     character(len=256) :: name
 
     integer :: iperiod, idet
     integer, parameter :: N_PERIOD_MAX=1e6
-    integer(i8b) :: my_lengths(N_PERIOD_MAX), i, days, hours, minutes
+    integer(i8b) :: i, days, hours, minutes
     integer(i8b) :: ngood, nflag, nzeroweight
     real(dp) :: seconds
     real(c_double) :: overlap
@@ -319,11 +268,9 @@ CONTAINS
 
     call reset_time(12)
 
-    ! count the number of samples and intervals
-
-    n_chunk = nperiod
-    my_n_samp = nsamp
-    overlap = 0
+    ninterval = nperiod
+    allocate(intervals(ninterval), stat=ierr)
+    if (ierr /= 0) call abort_mpi('Failed to allocate intervals')
 
     ! count the periods and their lengths
 
@@ -343,57 +290,15 @@ CONTAINS
                ' samples long but basis_order = ', basis_order
           call abort_mpi('Too short period')
        end if
-       my_lengths(iperiod) = len
+       intervals(iperiod) = len
     end do
-
-    ! perform a cumulative sum to get a running index on the chunks
-
-    first_chunk = 1
-    do isend = 0, ntasks-1
-       n = n_chunk
-       call broadcast_mpi(n, isend)
-       if (isend < id) first_chunk = first_chunk + n
-    end do
-    last_chunk = first_chunk + n_chunk - 1
-
-    if (info > 5) write (*, '(i4,a,i6,a,i6,a,i0,a)') &
-         id, ' : first_chunk, last_chunk, n_chunk : ', &
-         first_chunk, ' -- ', last_chunk, ' (', n_chunk, ')'
-
-    n_chunk_tot = n_chunk
-    call sum_mpi(n_chunk_tot)
-
-    ! get a global array of pointing period lengths
-
-    nopntperiods = n_chunk_tot
-    allocate(pntperiods(nopntperiods), pntperiod_id(nopntperiods), stat=ierr)
-    if (ierr /= 0) call abort_mpi('Failed to allocate pntperiods')
-    pntperiods = 0
-
-    pntperiods(first_chunk:last_chunk) = my_lengths(1:n_chunk)
-    call sum_mpi(pntperiods, nopntperiods)
-
-    pntperiod_id = (/ (i, i=1,nopntperiods) /)
-
-    if (id == 0 .and. info > 5) then
-       write (*,'(a)') 'Lengths of the pointing periods:'
-       write (*,'(a8,a15,a6,a4,":",a2,":",a5)') &
-            'ID', 'samples', 'days','hh','mm','ss.ss'
-       do i=1,nopntperiods
-          seconds = pntperiods(i) / fsample
-          days = seconds / 80400; seconds = seconds - days * 80400
-          hours = seconds / 3600; seconds = seconds - hours * 3600
-          minutes = seconds / 60; seconds = seconds - minutes * 60
-          write (*,'(i8,i15,i6,2x,i2.2,":",i2.2,":",f5.2)') &
-               pntperiod_id(i), pntperiods(i), days, hours, minutes, seconds
-       end do
-    end if
 
     ! Count the flagged and unflagged samples
     nzeroweight = 0
     do idet = 1,nodetectors
        do i = 1, nsamp
-          if (all(weights(:,i,idet) == 0) .and. .not. pixels(i,idet) < 0) then
+          if (all(weights(:, i, idet) == 0) .and. &
+               .not. pixels(i, idet) < 0) then
              nzeroweight = nzeroweight + 1
              pixels(i,idet) = -1
           end if
@@ -405,7 +310,7 @@ CONTAINS
     nflag = 0
     do idet = 1,nodetectors
        do i = 1, nsamp
-          if (pixels(i,idet) < 0) then
+          if (pixels(i, idet) < 0) then
              nflag = nflag + 1
           else
              ngood = ngood + 1
@@ -415,28 +320,32 @@ CONTAINS
     call sum_mpi(ngood)
     call sum_mpi(nflag)
 
-    ! longest data span per task
-
-    nosamples_proc = my_n_samp
+    nosamples_proc = nsamp
     nosamples_proc_max = nosamples_proc
     call max_mpi(nosamples_proc_max)
 
-    n_chunk_max = n_chunk
-    call max_mpi(n_chunk_max)
+    ninterval_max = ninterval
+    call max_mpi(ninterval_max)
+
+    ninterval_tot = ninterval
+    call sum_mpi(ninterval_tot)
 
     nosamples_tot = nosamples_proc
     call sum_mpi(nosamples_tot)
 
     if (id == 0 .and. info > 0) then
-       write (*,'(a,i0)') 'Total number of samples (single detector): ', nosamples_tot
-       write (*,'(a,f7.3," %")') 'Zero-weight fraction (all detectors): ', nzeroweight*100. / (ngood+nflag)
-       write (*,'(a,f7.3," %")') 'Flagged fraction (all detectors): ', nflag*100. / (ngood+nflag)
-       write (*,'(a,i0)') 'Total number of pointing periods: ', nopntperiods
+       write (*,'(a,i0)') 'Total number of samples (single detector): ', &
+            nosamples_tot
+       write (*,'(a,f7.3," %")') 'Zero-weight fraction (all detectors): ', &
+            nzeroweight*100. / (ngood+nflag)
+       write (*,'(a,f7.3," %")') 'Flagged fraction (all detectors): ', &
+            nflag*100. / (ngood+nflag)
+       write (*,'(a,i0)') 'Total number of intervals: ', ninterval_tot
        write (*,'(a,i0)') 'Max number of samples per task: ', nosamples_proc_max
     end if
 
-    cputime_read_pointing_periods = cputime_read_pointing_periods + get_time_and_reset(12)
-
+    cputime_read_pointing_periods = cputime_read_pointing_periods &
+         + get_time_and_reset(12)
 
   END SUBROUTINE check_files
 
