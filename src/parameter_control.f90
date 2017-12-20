@@ -324,28 +324,28 @@ CONTAINS
 
     ! Data divided by pointing periods
 
-    if (nopntperiods <= 0) then
-       if (id == 0) write(*, *) 'ERROR: Pointing periods not known.'
+    if (ninterval_tot <= 0) then
+       if (id == 0) write(*, *) 'ERROR: intervals not known.'
        call exit_with_status(1)
     end if
 
     ! Store the number of baselines per pointing period
     ! Most loops now iterate over baselines, even whenno destriping is done
     !if (kfirst) then
-    allocate(noba_short_pp(nopntperiods), stat=ierr)
+    allocate(noba_short_pp(ninterval), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for noba_short_pp')
-    memory_baselines = memory_baselines + nopntperiods*4
+    memory_baselines = memory_baselines + ninterval*4
     noba_short_pp = 0
 
-    do i = 1,nopntperiods
+    do i = 1, ninterval
        if (id == 0 .and. info > 3) then
-          if (pntperiods(i) < dnshort) &
+          if (intervals(i) < dnshort) &
                write (*,'(a,i0,a,i0,a,i0,a)') &
-               'WARNING: pointing period ',pntperiod_id(i),' is ', &
-               pntperiods(i), ' samples long but the baseline length is ', &
+               'WARNING: interval ', i,' is ', &
+               intervals(i), ' samples long but the baseline length is ', &
                int(dnshort, i8b), ' samples. Baseline truncated.'
        endif
-       noba_short_pp(i) = (pntperiods(i)-1) / dnshort + 1
+       noba_short_pp(i) = (intervals(i)-1) / dnshort + 1
     end do
     !end if
 
@@ -565,16 +565,11 @@ CONTAINS
     noba_short_max = 0
     noba_short_tot = 0
 
-    nba = sum(noba_short_pp(first_chunk:last_chunk))
+    nba = sum(noba_short_pp)
     noba_short_max = nba
     call max_mpi(noba_short_max)
     noba_short_tot = nba
     call sum_mpi(noba_short_tot)
-
-    ! set Madam parameters describing load balancing
-
-    nosamples_proc_max = sum(pntperiods(first_chunk:last_chunk))
-    call max_mpi(nosamples_proc_max)
 
     ! Distribute submaps
 
@@ -696,13 +691,6 @@ CONTAINS
        use_inmask = .true.
     end if
 
-    if (len_trim(file_pntperiod) > 0)  &
-         write (*,fs) 'file_pntperiod',trim(file_pntperiod)
-    if (len_trim(file_objectsize) > 0) then
-       write (*,fs) 'file_objectsize',trim(file_objectsize)
-       write (*,*) 'Warning: file check suppressed.'
-    end if
-
     write (*,*)
     write (*,fi) 'nside_map', nside_map, 'Healpix resolution (output map)'
     write (*,fi) 'nside_cross', nside_cross, 'Healpix resolution (destriping)'
@@ -810,9 +798,9 @@ CONTAINS
     else
        write (*,fs) 'time_unit','          pp','Time unit = pointing period'
     end if
-    write (*,fi) 'mission_time', n_chunk_tot, 'Mission length in time units'
-    write (*,fi) 'nosamples_tot',nosamples_tot,'Total samples'
-    write (*,ff) '',nosamples_tot/fsample/3600.,'hours'
+    write (*,fi) 'mission_time', ninterval_tot, 'Mission length in time units'
+    write (*,fi) 'nosamples_tot', nosamples_tot, 'Total samples'
+    write (*,ff) '', nosamples_tot/fsample/3600., 'hours'
 
     write (*,*)
     write (*,*) 'Detectors available on the FIRST process and noise ' &
@@ -880,20 +868,18 @@ CONTAINS
 
     ! Samples handled by the current process
 
-    istart_proc = sum(pntperiods(1:first_chunk-1))
-    nosamples_proc = sum(pntperiods(first_chunk:last_chunk))
+    istart_proc = 1
 
     ! Short baselines handled by the current process.
 
     ! most loops iterate over baselines when there is no destriping
-    kshort_start = sum(noba_short_pp(1:first_chunk-1))
-    noba_short = sum(noba_short_pp(first_chunk:last_chunk))
+    kshort_start = 0
+    noba_short = sum(noba_short_pp)
 
     ! Store the baseline lengths for first destriping
 
     allocate(baselines_short(noba_short_max), &
-         base_pntid_short(noba_short_max), basis_functions(noba_short_max), &
-         stat=ierr)
+         basis_functions(noba_short_max), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short')
 
     basis_functions%copy = .true.
@@ -901,12 +887,11 @@ CONTAINS
 
     memory_baselines = memory_baselines + noba_short_max*(4+4+17)
 
-    !Split the pointing period into short baselines of length int(dnshort)
+    !Split the interval into short baselines of length int(dnshort)
     ! or int(dnshort+1).
     m = 0
     baselines_short = 0
-    base_pntid_short = 0
-    do i = first_chunk, last_chunk
+    do i = 1, ninterval
        dn = 0.0
        n = 0
        do k = 1, noba_short_pp(i) - 1 ! Loop over all but the last
@@ -916,35 +901,33 @@ CONTAINS
           n = int(dn + .5)
           m = m + 1
           baselines_short(m) = n - n0
-          base_pntid_short(m) = pntperiod_id(i)
        end do
        m = m + 1
-       baselines_short(m) = pntperiods(i) - n ! Last baseline takes the rest
-       base_pntid_short(m) = pntperiod_id(i)
+       baselines_short(m) = intervals(i) - n ! Last baseline takes the rest
 
        if (kfirst) then
           if (baselines_short(m) < 0 &
                .or. baselines_short(m) > int(dnshort, i8b) + 1) then
              write (*,*) id, ' : ERROR in start_timeloop: ' &
                   // 'Lengths do not match., dnshort = ', dnshort
-             write (*,*) id, ' : i, pntperiods(i), noba_short_max =', i, &
-                  pntperiods(i), noba_short_max
+             write (*,*) id, ' : i, intervals(i), noba_short_max =', i, &
+                  intervals(i), noba_short_max
              write (*,*) id, ' : last baseline =', baselines_short(m)
              print *,id, ' : noba_short_pp(i) = ', noba_short_pp(i)
              do k=1,noba_short_pp(i)
-                print *, k, baselines_short(m-k+1), base_pntid_short(m-k+1)
+                print *, k, baselines_short(m-k+1)
              end do
              call exit_with_status(1)
           end if
        end if
     end do
 
-    ! Split the pointing period into subchunks
+    ! Split the interval into subchunks
 
     if (nsubchunk > 0) then
        my_offset = 0
-       do i = first_chunk, last_chunk
-          n = pntperiods(i)
+       do i = 1, ninterval
+          n = intervals(i)
           sublen = n / nsubchunk
           do isub = 1, nsubchunk
              suboffset = sublen * (isub - 1)

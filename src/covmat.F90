@@ -47,7 +47,7 @@ contains
   subroutine write_covmat(outroot)
     character(len=*) :: outroot
 
-    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, pid, ierr
+    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr
     integer(i4b) :: imap, ipix, ibase, jmap, jpix, jbase, k, i, j, ip, kstart, noba
 
     real(dp) :: detweight, mm, ptf1
@@ -89,17 +89,15 @@ contains
 
        call tic(555)
 
-       loop_chunk : do ichunk = first_chunk, last_chunk ! global indices
+       loop_chunk : do ichunk = 1, ninterval ! global indices
           noba = noba_short_pp(ichunk) ! baselines on this pointing period
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1)) ! first baseline, local index
+          kstart = sum(noba_short_pp(1:ichunk-1)) ! first baseline, local index
           ipsd = psd_index( idet, baselines_short_time(kstart+1) )
           ipsd_det = psd_index_det( idet, baselines_short_time(kstart+1) )
           if ( ipsd_det < 0 ) cycle loop_chunk
           ! ALWAYS use the optimal weights, even if the map has some other weighting scheme
           detweight = 1 / detectors(idet)%sigmas(ipsd_det)**2
           if (detweight == 0) cycle loop_chunk
-
-          pid = pntperiod_id(ichunk)
 
           call get_ptf( idet, kstart, noba, detweight )
 

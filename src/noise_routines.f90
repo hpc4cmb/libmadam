@@ -627,9 +627,9 @@ CONTAINS
     !$OMP DO SCHEDULE(DYNAMIC,1)
     do idet = 1, nodetectors
 
-       do ichunk = first_chunk, last_chunk
+       do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+          kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
           if (ipsd == -1) then
@@ -704,7 +704,7 @@ CONTAINS
   SUBROUTINE construct_preconditioner(nna)
 
     real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
-    integer :: i, j, k, kstart, n, noba, pid, idet, ichunk, ipsd, ierr, nbandmin
+    integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin
     real(dp), allocatable :: invcov(:, :), blockm(:, :)
     logical :: neg
 
@@ -726,9 +726,9 @@ CONTAINS
 
        prec_diag = 0
        do idet = 1, nodetectors
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) then
                 ! No PSD available
@@ -774,30 +774,28 @@ CONTAINS
 
     !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
     !$OMP     DEFAULT(NONE) &
-    !$OMP     SHARED(nodetectors, first_chunk, last_chunk, noba_short_pp, &
-    !$OMP         baselines_short_time, pntperiod_id, nband, invcov, id, &
+    !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
+    !$OMP         baselines_short_time, nband, invcov, id, &
     !$OMP         sampletime, nof, baselines_short_start, &
     !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
     !$OMP         detectors, nthreads) &
-    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, pid, blockm, &
+    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
     !$OMP         i, j, k, n, neg, ierr, nbandmin)
     do idet = 1,nodetectors
 
        !$OMP PARALLEL DO IF (nodetectors < nthreads) &
        !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(idet, nodetectors, first_chunk, last_chunk, &
-       !$OMP         noba_short_pp, baselines_short_time, pntperiod_id, nband, &
+       !$OMP     SHARED(idet, nodetectors, ninterval, &
+       !$OMP         noba_short_pp, baselines_short_time, nband, &
        !$OMP         invcov, id, sampletime, nof, baselines_short_start, &
        !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
        !$OMP         detectors) &
-       !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, pid, blockm, &
+       !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, blockm, &
        !$OMP         i, j, k, n, neg, ierr, nbandmin)
-       do ichunk = first_chunk, last_chunk
+       do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+          kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index(idet, baselines_short_time(kstart+1))
-
-          pid = pntperiod_id(ichunk)
 
           if (noba < nband) then
              ! This chunk (pointing period) has fewer baselines than
@@ -806,7 +804,7 @@ CONTAINS
              ! preconditioner.
              if (idet == 1 .and. omp_get_thread_num() == 0) then
                 write(*,*) id, ' : WARNING : noba < nband : ', noba, ' < ', &
-                     nband, ' : ichunk = ', ichunk, ', pid = ', pid, &
+                     nband, ' : ichunk = ', ichunk, &
                      ', tstart = ', &
                      sampletime(baselines_short_start(kstart+1)), &
                      ', length = ', &
@@ -920,9 +918,9 @@ CONTAINS
     else
        !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
        !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(noba_short_pp, first_chunk, nband, prec_diag, &
+       !$OMP     SHARED(noba_short_pp, ninterval, nband, prec_diag, &
        !$OMP         bandprec, baselines_short_time, pfx, pxx, z, r, &
-       !$OMP         nodetectors, last_chunk, id, nof, nofilter, notail, &
+       !$OMP         nodetectors, id, nof, nofilter, notail, &
        !$OMP         fcov, nshort, detectors, nthreads) &
        !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, &
        !$OMP         ierr, ipsd, x0, m, no, xx, fx, id_thread, ipsddet, &
@@ -930,17 +928,17 @@ CONTAINS
        do idet = 1, nodetectors
           !$OMP PARALLEL DO IF (nodetectors < nthreads) &
           !$OMP     DEFAULT(NONE) &
-          !$OMP     SHARED(idet, noba_short_pp, first_chunk, nband, prec_diag, &
+          !$OMP     SHARED(idet, noba_short_pp, ninterval, nband, prec_diag, &
           !$OMP         bandprec, baselines_short_time, pfx, pxx, z, &
-          !$OMP         r, nodetectors, last_chunk, id, nof, nofilter, notail, &
+          !$OMP         r, nodetectors, id, nof, nofilter, notail, &
           !$OMP         fcov, nshort, detectors) &
           !$OMP     PRIVATE(ichunk, kstart, noba, j, k, ierr, &
           !$OMP         ipsd, x0, m, no, xx, fx, id_thread, ipsddet, nbandmin)
-          do ichunk = first_chunk, last_chunk
+          do ichunk = 1, ninterval
 
              noba = noba_short_pp(ichunk)
              if (noba == 0) cycle
-             kstart = sum(noba_short_pp(first_chunk:ichunk-1))
+             kstart = sum(noba_short_pp(1:ichunk-1))
 
              if (noba < nband) then
                 nbandmin = noba
@@ -981,7 +979,7 @@ CONTAINS
                 call c_f_pointer(pxx(id_thread), xx, [nof])
                 !$OMP END CRITICAL
 
-                !Remove the PID average first.
+                !Remove the interval average first.
                 !This ensures that solution is independent of a constant
                 ! offset/pointing period
                 x0 = sum(r(kstart+1:kstart+noba, idet)) / noba

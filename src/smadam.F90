@@ -365,10 +365,6 @@ contains
              call subtract_baselines_a(map, aa)
              if (id == 0) call toc('subtract_baselines_a')
 
-             call tic
-             call write_baselines_a(aa)
-             if (id == 0) call toc('write_baselines_a')
-
           end if
 
        endif
@@ -555,10 +551,9 @@ contains
 
     if (.not. mcmode) then
 
-       if (allocated(pntperiods)) &
-            deallocate(pntperiods, pntperiod_id, noba_short_pp)
-       if (allocated(baselines_short)) &
-            deallocate(baselines_short, base_pntid_short)
+       if (allocated(intervals)) &
+            deallocate(intervals, noba_short_pp)
+       if (allocated(baselines_short)) deallocate(baselines_short)
        if (allocated(baselines_short_start)) &
             deallocate(baselines_short_start, baselines_short_stop)
        if (allocated(prec_diag)) deallocate(prec_diag)
@@ -763,10 +758,6 @@ contains
        call subtract_baselines_a(map, aa)
        if (id == 0) call toc('subtract_baselines_a')
 
-       call tic
-       call write_baselines_a(aa)
-       if (id == 0) call toc('write_baselines_a')
-
     endif
 
     call wait_mpi
@@ -914,10 +905,9 @@ contains
     call free_maps
     call free_locmaps
 
-    if (allocated(pntperiods)) &
-         deallocate(pntperiods, pntperiod_id, noba_short_pp)
-    if (allocated(baselines_short)) &
-         deallocate(baselines_short, base_pntid_short)
+    if (allocated(intervals)) &
+         deallocate(intervals, noba_short_pp)
+    if (allocated(baselines_short)) deallocate(baselines_short)
     if (allocated(baselines_short_start)) &
          deallocate(baselines_short_start, baselines_short_stop)
     if (allocated(prec_diag)) deallocate(prec_diag)
