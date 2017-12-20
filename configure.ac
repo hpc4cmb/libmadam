@@ -4,7 +4,7 @@ dnl
 dnl +------------------------
 dnl | Initialize package info
 dnl +------------------------
-AC_INIT([libmadam], [0.2.4], [github:hpc4cmb/libmadam])
+AC_INIT([libmadam], [0.2.5], [github:hpc4cmb/libmadam])
 AC_CONFIG_SRCDIR([Makefile.am])
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config.h)
@@ -18,7 +18,7 @@ dnl | current, and set revision to 0.  If any interfaces have been added
 dnl | since the last public release, then increment age.  If any interfaces 
 dnl | have been removed since the last public release, then set age to 0.
 dnl +-------------------------
-LIBMADAM_LT_VERSION="1:2:0"
+LIBMADAM_LT_VERSION="1:3:0"
 AC_SUBST(LIBMADAM_LT_VERSION)
 
 dnl +---------------------
