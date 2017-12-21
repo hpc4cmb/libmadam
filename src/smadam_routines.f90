@@ -242,14 +242,14 @@ CONTAINS
   !----------------------------------------------------------------------------
 
 
-  SUBROUTINE bin_tod(map, binmap, wamap, tod_stored)
+  SUBROUTINE bin_tod(map, binmap, wamap, tod)
     !
     ! Bin TOD onto map
     !
     real(dp), intent(inout) :: map(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: binmap(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod_stored(nosamples_proc, nodetectors)
+    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
     integer :: i, n, ip, m, ierr, firstpix, lastpix, idet, ival, noba, kstart
     integer :: ipsd, k
     real(dp) :: pw, detweight
@@ -267,7 +267,7 @@ CONTAINS
     !$OMP            noba_short_pp, detectors, baselines_short_start, &
     !$OMP            baselines_short_stop, isubchunk, subchunkpp, pixels, &
     !$OMP            dummy_pixel, baselines_short_time, surveyflags, &
-    !$OMP            tod_stored, weights, nthreads, locmap, id, nosamples_proc)
+    !$OMP            tod, weights, nthreads, locmap, id, nosamples_proc)
 
     if (id == 0 .and. nthreads /= omp_get_num_threads()) &
          print *,'WARNING : binning TOD with only ', omp_get_num_threads(), &
@@ -294,7 +294,7 @@ CONTAINS
                    ip = pixels(i, idet)
                    !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
-                   locmap(1, ip) = locmap(1, ip) + tod_stored(i, idet) * detweight
+                   locmap(1, ip) = locmap(1, ip) + tod(i, idet) * detweight
                 end do
              end do
           end do
@@ -314,7 +314,7 @@ CONTAINS
                    !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    locmap(:, ip) = locmap(:, ip) &
-                        + weights(:, i, idet) * tod_stored(i, idet) * detweight
+                        + weights(:, i, idet) * tod(i, idet) * detweight
                 end do
              end do
           end do
@@ -417,14 +417,14 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE initialize_a(yba, nna, wamap, cca, tod_stored)
+  SUBROUTINE initialize_a(yba, nna, wamap, cca, tod)
 
     real(dp), intent(inout) :: yba(0:basis_order, noba_short_max, nodetectors)
     real(dp), intent(out) :: &
          nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod_stored(nosamples_proc, nodetectors)
+    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
     real(dp) :: detweight, bf
     integer(i8b) :: i, k, ip, j, order, order2, i0, imap, n, workspace_length
     integer(i8b) :: ntot, nbad, ngood
@@ -463,7 +463,7 @@ CONTAINS
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunk(i) /= isubchunk) cycle
-                   do order = 0,basis_order
+                   do order = 0, basis_order
                       if (isnan(yba(order, k, idet))) then
                          print *,id,' : NaN in uninitialized yba'
                          exit loop_idet
@@ -499,7 +499,7 @@ CONTAINS
     !$OMP    SHARED(nodetectors, noba_short_pp, detectors, ninterval, &
     !$OMP        yba, nna, baselines_short_start, basis_functions, &
     !$OMP        baselines_short_stop, isubchunk, subchunk, pixels, &
-    !$OMP        dummy_pixel, locmap, basis_order, tod_stored, nmap, &
+    !$OMP        dummy_pixel, locmap, basis_order, tod, nmap, &
     !$OMP        baselines_short_time, weights, order2, checknan, id, &
     !$OMP        noba_short_max, nosamples_proc)
 
@@ -532,16 +532,16 @@ CONTAINS
                 end if
                 !if (use_inmask .and. locmask(ip) == 0) cycle
 
-                do order = 0,basis_order
+                do order = 0, basis_order
                    bf = basis_function(order, i-i0)
                    yba(order, k, idet) = yba(order, k, idet) &
-                        + bf*tod_stored(i, idet)
+                        + bf*tod(i, idet)
                    nna(:, order, k, idet) = nna(:, order, k, idet) &
                         + bf*basis_function(:, i-i0)
                 end do
 
                 ! This loop implicitly applies the locmap==0 (loccc==0) criterion
-                do order = 0,basis_order
+                do order = 0, basis_order
                    bf = basis_function(order, i-i0)
                    if (nmap == 1) then
                       yba(order, k, idet) = yba(order, k, idet) &
@@ -663,7 +663,7 @@ CONTAINS
   !-------------------------------------------------------------------------
 
 
-  SUBROUTINE iterate_a(aa, yba, nna, wamap, cca, tod_stored)
+  SUBROUTINE iterate_a(aa, yba, nna, wamap, cca, tod)
     !
     ! Solution of the destriping equation by conjugate gradient algorithm
     ! This routine uses tables pixel,weights directly to speed up the computation.
@@ -673,7 +673,7 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
     real(dp), intent(inout):: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod_stored(nosamples_proc, nodetectors)
+    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
 
     real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :)
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit

@@ -146,7 +146,7 @@ contains
     call c_f_pointer(timestamps, sampletime, (/nsamp/))
     call c_f_pointer(pix, pixels, (/nsamp, ndet/))
     call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/))
-    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/))
+    call c_f_pointer(signal, tod, (/nsamp, ndet/))
 
     ! Do a basic check for pointing
 
@@ -202,7 +202,6 @@ contains
        detflags = .true.
 
        if (nsubchunk > 1) then
-          baseline_open = .false. ! from output.f90
           if (id == 0 .and. info > 0) then
              write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
           endif
@@ -309,7 +308,7 @@ contains
        if (id == 0) call toc('count_hits')
 
        call tic
-       call bin_tod(map, binmap, wamap, tod_stored)
+       call bin_tod(map, binmap, wamap, tod)
        if (id == 0) call toc('bin_tod')
 
        call time_stamp
@@ -340,7 +339,7 @@ contains
           if (id == 0) call toc('invert_pixelmatrix_cross')
 
           call tic
-          call initialize_a(yba, nna, wamap, cca, tod_stored)
+          call initialize_a(yba, nna, wamap, cca, tod)
           if (id == 0) call toc('initialize_a')
 
           if (basis_order == 0) then
@@ -358,7 +357,7 @@ contains
           else
 
              call tic
-             call iterate_a(aa, yba, nna, wamap, cca, tod_stored)
+             call iterate_a(aa, yba, nna, wamap, cca, tod)
              if (id == 0) call toc('iterate_a')
 
              call tic
@@ -423,7 +422,7 @@ contains
           ! subtract the baselines to return the destriped TOD.
           ! If the baselines were already subtracted, the call has no effect.
           call tic
-          call clean_tod(tod_stored, aa)
+          call clean_tod(tod, aa)
           if (id == 0) call toc('clean_tod')
        end if
 
@@ -642,7 +641,7 @@ contains
     call c_f_pointer(timestamps, sampletime, (/nsamp/))
     call c_f_pointer(pix, pixels, (/nsamp, ndet/))
     call c_f_pointer(pixweights, weights, (/nnz, nsamp, ndet/))
-    call c_f_pointer(signal, tod_stored, (/nsamp, ndet/))
+    call c_f_pointer(signal, tod, (/nsamp, ndet/))
 
     subchunk_file_map = file_map
     subchunk_file_binmap = file_binmap
@@ -658,7 +657,6 @@ contains
     detflags = .true.
 
     if (nsubchunk > 1) then
-       baseline_open = .false. ! from output.f90
        if (id == 0 .and. info > 0) then
           write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
        endif
@@ -731,7 +729,7 @@ contains
     end if
 
     call tic
-    call bin_tod(map, binmap, wamap, tod_stored)
+    call bin_tod(map, binmap, wamap, tod)
     if (id == 0) call toc('bin_tod')
 
     call time_stamp
@@ -747,11 +745,11 @@ contains
        call time_stamp
 
        call tic
-       call initialize_a(yba, nna, wamap, cca, tod_stored)
+       call initialize_a(yba, nna, wamap, cca, tod)
        if (id == 0) call toc('initialize_a')
 
        call tic
-       call iterate_a(aa, yba, nna, wamap, cca, tod_stored)
+       call iterate_a(aa, yba, nna, wamap, cca, tod)
        if (id == 0) call toc('iterate_a')
 
        call tic
@@ -792,7 +790,7 @@ contains
        ! subtract the baselines to return the destriped TOD.
        ! If the baselines were already subtracted, the call has no effect.
        call tic
-       call clean_tod(tod_stored, aa)
+       call clean_tod(tod, aa)
        if (id == 0) call toc('clean_tod')
     end if
 
@@ -976,7 +974,7 @@ contains
        if (pass == npass .and. do_map) then
           ! subtract the baselines
           call tic
-          call clean_tod(tod_stored, aa)
+          call clean_tod(tod, aa)
           if (id == 0) call toc('clean_tod')
        end if
 
@@ -1146,7 +1144,7 @@ contains
              end if
 
              call bin_tod(map(1:nmap, :), binmap(1:nmap, :), wamap(1:nmap, :), &
-                  tod_stored)
+                  tod)
 
              if (pass == 1) then
                 call reset_time(10)
@@ -1185,7 +1183,7 @@ contains
        if (pass == npass .and. do_map .and. nsubchunk > 1) then
           ! add the baselines back
           call tic
-          call unclean_tod(tod_stored, aa)
+          call unclean_tod(tod, aa)
           if (id == 0) call toc('unclean_tod')
        end if
 

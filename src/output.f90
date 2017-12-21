@@ -13,16 +13,14 @@ MODULE output
   private
 
   real(sp), parameter :: Healpix_undef = -1.6375e30
-  real(sp), save      :: cputime_output = 0.0
-  integer, save      :: map_repcount = 1
-  !logical, save      :: baseline_open = .false.
-  logical, save, public :: baseline_open = .false. ! -RK
+  real(sp), save :: cputime_output = 0
+  integer, save :: map_repcount = 1
 
   ! for binary output
 
   integer :: comm_bin, ntasks_bin, id_bin, writegroup, groupsize
 
-  public init_output, write_destriped_tod, write_matrix, &
+  public init_output, write_matrix, &
        write_map, write_binmap, write_mask, write_leakmatrix, &
        write_hits, close_output, addi, addi2
 
@@ -57,18 +55,20 @@ CONTAINS
     do_hits    = (len_trim(file_hit) > 0)
     do_mask    = (len_trim(file_mask) > 0)
 
-    if ( binary_output ) then
+    if (binary_output) then
 
-       if ( nwrite_binary > 1 ) then
+       if (nwrite_binary > 1) then
 
           groupsize = ntasks / nwrite_binary
           writegroup = id / groupsize
 
-          call mpi_comm_split( MPI_COMM_WORLD, writegroup, id, comm_bin, ierr )
-          if ( ierr /= 0 ) call abort_mpi( 'Failed to split the communicator for output' )
+          call mpi_comm_split(MPI_COMM_WORLD, writegroup, id, comm_bin, ierr)
+          if (ierr /= 0) then
+             call abort_mpi('Failed to split the communicator for output')
+          end if
 
-          call mpi_comm_size( comm_bin, ntasks_bin, ierr )
-          call mpi_comm_rank( comm_bin , id_bin, ierr )
+          call mpi_comm_size(comm_bin, ntasks_bin, ierr)
+          call mpi_comm_rank(comm_bin , id_bin, ierr)
 
        else
 
@@ -84,10 +84,10 @@ CONTAINS
 
     !--------------------------------------------------------------------
 
-    SUBROUTINE addpath(path,filename)
+    SUBROUTINE addpath(path, filename)
 
-      character(len=SLEN) :: path,filename
-      integer             :: n
+      character(len=SLEN) :: path, filename
+      integer :: n
 
       n = len_trim(path)
       if (n==0) return
@@ -116,15 +116,15 @@ CONTAINS
     !
     ! Write the destriped output map into file.
     !
-    real(dp),intent(in)  :: map(nmap,nosubpix_map,nosubmaps)
-    integer, intent(in)  :: mask(nosubpix_map,nosubmaps)
-    integer              :: idwr, imap, isubmap, skycover, coloffset
-    integer(idp)         :: offset, nhit, writeoffset, i
-    real(sp),allocatable :: sbuffer(:)
-    integer,allocatable  :: ibuffer(:)
-    integer(i8b),allocatable :: i8buffer(:)
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
+    real(dp), intent(in) :: map(nmap, nosubpix_map, nosubmaps)
+    integer, intent(in) :: mask(nosubpix_map, nosubmaps)
+    integer :: idwr, imap, isubmap, skycover, coloffset
+    integer(idp) :: offset, nhit, writeoffset, i
+    real(sp), allocatable :: sbuffer(:)
+    integer, allocatable :: ibuffer(:)
+    integer(i8b), allocatable :: i8buffer(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
 
     real(sp), allocatable :: mapbuffer(:,:)
     character(len=SLEN) :: file_map_bin, file_map_txt
@@ -143,28 +143,28 @@ CONTAINS
 
     skycover = count(mask > 0)
     call sum_mpi(skycover)
-    
+
     idwr = 1
-    if (ntasks==1) idwr=0    
-    
+    if (ntasks==1) idwr=0
+
     if (ID == idwr) then
        if (info > 1) write(*,*) 'Writing destriped map...'
 
-       inquire( file=trim(file_map), exist=there )
+       inquire(file=trim(file_map), exist=there)
 
-       if ( there .and. binary_output .and. concatenate_binary ) then
+       if (there .and. binary_output .and. concatenate_binary) then
           print *,'Skipping existing header file and concatenating binary maps'
        else
-       
+
           call check_outfile(file_map)
-       
+
           call fits_create(out,file_map)
-       
+
           call write_header_code(out)
           call write_header_simulation(out)
           call write_header_destriping(out)
-       
-       
+
+
           if (write_cut) then
              allocate(columns(nmap+1))
              columns(1)%repcount = map_repcount
@@ -175,7 +175,7 @@ CONTAINS
              allocate(columns(nmap))
              coloffset = 0
           end if
-       
+
           do imap = 1,nmap
              columns(imap+coloffset)%repcount = map_repcount
              columns(imap+coloffset)%unit = trim(unit_tod)
@@ -192,10 +192,10 @@ CONTAINS
                 columns(imap+coloffset)%name = addi('COMP', imap)
              end if
           enddo
-          
+
           call fits_insert_bintab(out, columns)
           deallocate(columns)
-       
+
           call fits_add_key(out, 'objtype', 'madam.map', 'Object type')
           call write_header_healpix(out, nside_map)
           call write_header_sky(out, skycover)
@@ -204,48 +204,51 @@ CONTAINS
        endif
 
     end if
-       
-    if ( binary_output ) then
+
+    if (binary_output) then
 
        file_map_bin = trim(adjustl(file_map)) // '.bin'
        file_map_txt = trim(adjustl(file_map)) // '.txt'
 
-       if ( nwrite_binary > 1 ) then
+       if (nwrite_binary > 1) then
           file_map_bin = trim(file_map_bin) // '_' // addi('', writegroup)
        end if
 
-       !call mpi_info_create( fileinfo, ierr )
-       !filemode = ior( MPI_MODE_WRONLY, MPI_MODE_CREATE )
-       !call mpi_file_open( MPI_COMM_WORLD, file_map_bin, filemode, fileinfo, fh, ierr )
-       !if ( ierr /= 0 ) call abort_mpi( 'Failed to open binary map file' )
-       
+       !call mpi_info_create(fileinfo, ierr)
+       !filemode = ior(MPI_MODE_WRONLY, MPI_MODE_CREATE)
+       !call mpi_file_open(MPI_COMM_WORLD, file_map_bin, filemode, fileinfo, &
+       !    fh, ierr)
+       !if (ierr /= 0) call abort_mpi('Failed to open binary map file')
+
        !fileoffset = 0
-       !call mpi_file_set_view( fh, fileoffset, MPI_REAL4, MPI_REAL4, 'native', fileinfo, ierr )
-       !if ( ierr /= 0 ) call abort_mpi( 'Failed to set view to binary map file' )
-       
+       !call mpi_file_set_view(fh, fileoffset, MPI_REAL4, MPI_REAL4, 'native', &
+       !    fileinfo, ierr)
+       !if (ierr /= 0) call abort_mpi('Failed to set view to binary map file')
+
        ! Collect the maps to root process for writing
-       
-       allocate( recvcounts(ntasks_bin), displs(ntasks_bin), stat=ierr )
-       if ( ierr /= 0 ) call abort_mpi('No room for recvcounts')
+
+       allocate(recvcounts(ntasks_bin), displs(ntasks_bin), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for recvcounts')
 
        nsend = 0
-       do isubmap = 0,nosubmaps_tot-1
-          if ( id_submap(isubmap) == id ) nsend = nsend + nmap * nosubpix_map
+       do isubmap = 0, nosubmaps_tot-1
+          if (id_submap(isubmap) == id) nsend = nsend + nmap * nosubpix_map
        end do
-             
+
        recvcounts = 0
-       call mpi_gather( nsend, 1, MPI_INTEGER, recvcounts, 1, MPI_INTEGER, 0, comm_bin, ierr )
-          
-       allocate( sendbuffer(nsend), stat=ierr )
-       if ( ierr /= 0 ) call abort_mpi('No room for sendbuffer')
-             
+       call mpi_gather(nsend, 1, MPI_INTEGER, recvcounts, 1, MPI_INTEGER, 0, &
+            comm_bin, ierr)
+
+       allocate(sendbuffer(nsend), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for sendbuffer')
+
        mysubmap = 0
        i = 0
-       do isubmap = 0,nosubmaps_tot-1
-          if ( id_submap(isubmap) == id ) then
+       do isubmap = 0, nosubmaps_tot-1
+          if (id_submap(isubmap) == id) then
              mysubmap = mysubmap + 1
              do pix = 1, nosubpix_map
-                if ( mask(pix,mysubmap) <= 0 ) then
+                if (mask(pix,mysubmap) <= 0) then
                    do imap = 1, nmap
                       i = i + 1
                       sendbuffer(i) = Healpix_undef
@@ -259,80 +262,85 @@ CONTAINS
              end do
           end if
        end do
-             
-       if ( i /= nsend ) call abort_mpi('Did not fill sendbuffer') ! redundant check
-             
-       if ( id_bin == 0 ) then
-          nrecv = sum( recvcounts )
-                
-          allocate( recvbuffer(nrecv), stat=ierr )
-          if ( ierr /= 0 ) call abort_mpi('No room for recvbuffer')
-          
+
+       if (i /= nsend) call abort_mpi('Did not fill sendbuffer') ! redundant check
+
+       if (id_bin == 0) then
+          nrecv = sum(recvcounts)
+
+          allocate(recvbuffer(nrecv), stat=ierr)
+          if (ierr /= 0) call abort_mpi('No room for recvbuffer')
+
           displs = 0
           do i = 2, ntasks_bin
              displs(i) = recvcounts(i-1) + displs(i-1)
           end do
        end if
-             
-       call mpi_gatherv( sendbuffer, nsend, MPI_REAL4, recvbuffer, recvcounts, displs, MPI_REAL4, 0, comm_bin, ierr )
 
-       if ( id_bin == 0 ) then
-          
-          !fileoffset = count( id_submap < id ) * nosubpix_map * nmap
-          !call mpi_file_write_at( fh, fileoffset, recvbuffer, nrecv, MPI_REAL4, status, ierr )
-          
-          inquire( iolength=rec_len ) recvbuffer          
-          open( unit=55, file=trim(file_map_bin), action='readwrite', form='unformatted', access='direct', recl=rec_len )
-          !inquire( unit=55, nextrec=rec )
+       call mpi_gatherv(sendbuffer, nsend, MPI_REAL4, recvbuffer, recvcounts, &
+            displs, MPI_REAL4, 0, comm_bin, ierr)
+
+       if (id_bin == 0) then
+
+          !fileoffset = count(id_submap < id) * nosubpix_map * nmap
+          !call mpi_file_write_at(fh, fileoffset, recvbuffer, nrecv, &
+          !    MPI_REAL4, status, ierr)
+
+          inquire(iolength=rec_len) recvbuffer
+          open(unit=55, file=trim(file_map_bin), action='readwrite', &
+               form='unformatted', access='direct', recl=rec_len)
+          !inquire(unit=55, nextrec=rec)
           !print *,id,' : nextrec = ',rec ! DEBUG
-          write( 55, rec=record_number ) recvbuffer
-          close( unit=55 )
+          write(55, rec=record_number) recvbuffer
+          close(unit=55)
 
        end if
 
-       if ( id == 0 ) then
+       if (id == 0) then
 
-          ! Finally, store the submap distribution so that the map may be assembled later
+          ! Finally, store the submap distribution so that the map
+          ! may be assembled later
 
-          inquire( file=trim(file_map_txt), exist=there )
+          inquire(file=trim(file_map_txt), exist=there)
 
-          if ( .not. there ) then
+          if (.not. there) then
 
-             open( unit=55, file=trim(file_map_txt), status='replace', form='formatted' )
-             write( 55, * ) nosubmaps_tot, ntasks
-             write( 55, * ) nosubpix_map, nmap
+             open(unit=55, file=trim(file_map_txt), status='replace', &
+                  form='formatted')
+             write(55, *) nosubmaps_tot, ntasks
+             write(55, *) nosubpix_map, nmap
              do isubmap = 0, nosubmaps_tot-1
-                write( 55, * ) isubmap, id_submap( isubmap )
+                write(55, *) isubmap, id_submap(isubmap)
              end do
-             close( unit=55 )
+             close(unit=55)
 
           end if
 
        end if
-          
-       deallocate( recvcounts, displs, sendbuffer )
-       if ( id_bin == 0 ) deallocate( recvbuffer )
 
-       !call mpi_file_close( fh, ierr )
-       !if ( ierr /= 0 ) call abort_mpi( 'Failed to close binary file' )
-       
+       deallocate(recvcounts, displs, sendbuffer)
+       if (id_bin == 0) deallocate(recvbuffer)
+
+       !call mpi_file_close(fh, ierr)
+       !if (ierr /= 0) call abort_mpi('Failed to close binary file')
+
     else
-    
+
        allocate(sbuffer(nosubpix_map))
        allocate(ibuffer(nosubpix_map))
        if (write_cut) allocate(i8buffer(nosubpix_map))
-       
+
        offset = 0
        writeoffset = 0
-       do isubmap = 0,nosubmaps_tot-1
-          
+       do isubmap = 0, nosubmaps_tot-1
+
           if (sync_output) call wait_mpi
-          
+
           call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
 
           if (id == idwr .and. write_cut) then
              nhit = 0
-             do i = 1,nosubpix_map
+             do i = 1, nosubpix_map
                 if (ibuffer(i) > 0) then
                    nhit = nhit + 1
                    i8buffer(nhit) = offset + i - 1
@@ -342,17 +350,17 @@ CONTAINS
           else
              nhit = nosubpix_map
           end if
-          
+
           do imap = 1,nmap
-             
+
              call get_submap(sbuffer, nosubpix_map, map, nmap, imap, &
                   isubmap, idwr)
-             
+
              if (ID==idwr) then
                 if (write_cut) then
                    ! Pack the observed pixels to the beginning
                    nhit = 0
-                   do i = 1,nosubpix_map
+                   do i = 1, nosubpix_map
                       if (ibuffer(i) > 0) then
                          nhit = nhit + 1
                          sbuffer(nhit) = sbuffer(i)
@@ -362,16 +370,19 @@ CONTAINS
                    ! Set unobserved pixels to undefined value
                    where (ibuffer.le.0) sbuffer=Healpix_undef
                 end if
-                
-                if (nhit > 0) call fits_write_column(out, imap+coloffset, sbuffer(:nhit), writeoffset)
+
+                if (nhit > 0) then
+                   call fits_write_column(out, imap+coloffset, sbuffer(:nhit), &
+                        writeoffset)
+                end if
              end if
           end do
-          
+
           offset = offset + nosubpix_map
           writeoffset = writeoffset + nhit
        end do
 
-       deallocate(sbuffer,ibuffer)
+       deallocate(sbuffer, ibuffer)
        if (write_cut) deallocate(i8buffer)
 
     end if
@@ -379,8 +390,8 @@ CONTAINS
     if (ID==idwr) then
        call fits_close(out)
        write(*,*) 'Map written in '//trim(file_map)
-    endif    
-           
+    endif
+
     cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_map
@@ -393,15 +404,15 @@ CONTAINS
     !
     ! Write the sum map into file.
     !
-    real(dp),intent(in)  :: map(nmap,nosubpix_map,nosubmaps)
-    integer, intent(in)  :: mask(nosubpix_map,nosubmaps)
-    integer              :: idwr, imap, isubmap, skycover, coloffset
-    integer(idp)         :: offset, nhit, writeoffset, i
-    real(sp),allocatable :: sbuffer(:)
-    integer,allocatable  :: ibuffer(:)
-    integer(i8b),allocatable :: i8buffer(:)
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
+    real(dp),intent(in) :: map(nmap, nosubpix_map, nosubmaps)
+    integer, intent(in) :: mask(nosubpix_map, nosubmaps)
+    integer :: idwr, imap, isubmap, skycover, coloffset
+    integer(idp) :: offset, nhit, writeoffset, i
+    real(sp), allocatable :: sbuffer(:)
+    integer, allocatable :: ibuffer(:)
+    integer(i8b), allocatable :: i8buffer(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
 
     if (len_trim(file_map).le.0) return
 
@@ -469,7 +480,7 @@ CONTAINS
 
     offset = 0
     writeoffset = 0
-    do isubmap = 0,nosubmaps_tot-1
+    do isubmap = 0, nosubmaps_tot-1
 
        if (sync_output) call wait_mpi
 
@@ -477,7 +488,7 @@ CONTAINS
 
        if (id == idwr .and. write_cut) then
           nhit = 0
-          do i = 1,nosubpix_map
+          do i = 1, nosubpix_map
              if (ibuffer(i) > 0) then
                 nhit = nhit + 1
                 i8buffer(nhit) = offset + i - 1
@@ -496,7 +507,7 @@ CONTAINS
              if (write_cut) then
                 ! Pack the observed pixels to the beginning
                 nhit = 0
-                do i = 1,nosubpix_map
+                do i = 1, nosubpix_map
                    if (ibuffer(i) > 0) then
                       nhit = nhit + 1
                       sbuffer(nhit) = sbuffer(i)
@@ -507,7 +518,10 @@ CONTAINS
                 where (ibuffer.le.0) sbuffer=Healpix_undef
              end if
 
-             if (nhit > 0) call fits_write_column(out, imap+coloffset, sbuffer(:nhit), writeoffset)
+             if (nhit > 0) then
+                call fits_write_column(out, imap+coloffset, sbuffer(:nhit), &
+                     writeoffset)
+             end if
           end if
        end do
 
@@ -535,17 +549,17 @@ CONTAINS
     !
     ! Write the binned map into file.
     !
-    real(dp),intent(in)  :: binmap(nmap,nosubpix_map,nosubmaps)
-    integer, intent(in)  :: mask(nosubpix_map,nosubmaps)
-    integer              :: idwr, imap, isubmap, skycover, coloffset
-    integer(idp)         :: offset, writeoffset, nhit, i
-    real(sp),allocatable :: sbuffer(:)
-    integer,allocatable  :: ibuffer(:)
-    integer(i8b),allocatable :: i8buffer(:)
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
+    real(dp),intent(in) :: binmap(nmap, nosubpix_map, nosubmaps)
+    integer, intent(in) :: mask(nosubpix_map, nosubmaps)
+    integer :: idwr, imap, isubmap, skycover, coloffset
+    integer(idp) :: offset, writeoffset, nhit, i
+    real(sp), allocatable :: sbuffer(:)
+    integer, allocatable :: ibuffer(:)
+    integer(i8b), allocatable :: i8buffer(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
 
-    real(sp), allocatable :: mapbuffer(:,:)
+    real(sp), allocatable :: mapbuffer(:, :)
     character(len=SLEN) :: file_map_bin, file_map_txt
     INTEGER(i4b) :: status(MPI_STATUS_SIZE)
     INTEGER(i4b) :: fh, filemode, fileinfo, ierr, pix
@@ -556,7 +570,7 @@ CONTAINS
     INTEGER, allocatable :: recvcounts(:), displs(:)
     REAL(sp), allocatable :: sendbuffer(:), recvbuffer(:)
 
-    if (.not. do_binmap .or. len_trim(file_binmap) == 0 ) return
+    if (.not. do_binmap .or. len_trim(file_binmap) == 0) return
 
     call reset_time(10)
 
@@ -569,12 +583,12 @@ CONTAINS
     if (ID == idwr) then
        if (info > 1) write(*,*) 'Writing binned map...'
 
-       inquire( file=trim(file_binmap), exist=there )
+       inquire(file=trim(file_binmap), exist=there)
 
-       if ( there .and. binary_output .and. concatenate_binary ) then
+       if (there .and. binary_output .and. concatenate_binary) then
           print *,'Skipping existing header file and concatenating binary maps'
        else
-       
+
           call check_outfile(file_binmap)
 
           call fits_create(out,file_binmap)
@@ -592,7 +606,7 @@ CONTAINS
              allocate(columns(nmap))
              coloffset = 0
           end if
-          
+
           do imap = 1,nmap
              columns(imap+coloffset)%repcount = map_repcount
              columns(imap+coloffset)%unit = trim(unit_tod)
@@ -609,10 +623,10 @@ CONTAINS
                 columns(imap+coloffset)%name = addi('COMP', imap)
              end if
           enddo
-          
+
           call fits_insert_bintab(out, columns)
           deallocate(columns)
-          
+
           call fits_add_key(out, "objtype", "madam.binmap", 'Object type')
           call write_header_healpix(out, nside_map)
           call write_header_sky(out, skycover)
@@ -621,48 +635,51 @@ CONTAINS
        endif
 
     end if
-       
-    if ( binary_output ) then
+
+    if (binary_output) then
 
        file_map_bin = trim(adjustl(file_binmap)) // '.bin'
        file_map_txt = trim(adjustl(file_binmap)) // '.txt'
 
-       if ( nwrite_binary > 1 ) then
+       if (nwrite_binary > 1) then
           file_map_bin = trim(file_map_bin) // '_' // addi('', writegroup)
        end if
 
-       !call mpi_info_create( fileinfo, ierr )
-       !filemode = ior( MPI_MODE_WRONLY, MPI_MODE_CREATE )
-       !call mpi_file_open( mpi_comm_world, file_map_bin, filemode, fileinfo, fh, ierr )
-       !if ( ierr /= 0 ) call abort_mpi( 'Failed to open binary map file' )
-       
+       !call mpi_info_create(fileinfo, ierr)
+       !filemode = ior(MPI_MODE_WRONLY, MPI_MODE_CREATE)
+       !call mpi_file_open(mpi_comm_world, file_map_bin, filemode, fileinfo, &
+       !    fh, ierr)
+       !if (ierr /= 0) call abort_mpi('Failed to open binary map file')
+
        !fileoffset = 0
-       !call mpi_file_set_view( fh, fileoffset, MPI_REAL4, MPI_REAL4, 'native', fileinfo, ierr )
-       !if ( ierr /= 0 ) call abort_mpi( 'Failed to set view to binary map file' )
-          
+       !call mpi_file_set_view(fh, fileoffset, MPI_REAL4, MPI_REAL4, 'native', &
+       !    fileinfo, ierr)
+       !if (ierr /= 0) call abort_mpi('Failed to set view to binary map file')
+
        ! Collect the maps to root process for writing
-             
-       allocate( recvcounts(ntasks_bin), displs(ntasks_bin), stat=ierr )
-       if ( ierr /= 0 ) call abort_mpi('No room for recvcounts')
+
+       allocate(recvcounts(ntasks_bin), displs(ntasks_bin), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for recvcounts')
 
        nsend = 0
-       do isubmap = 0,nosubmaps_tot-1
-          if ( id_submap(isubmap) == id ) nsend = nsend + nmap * nosubpix_map
+       do isubmap = 0, nosubmaps_tot-1
+          if (id_submap(isubmap) == id) nsend = nsend + nmap * nosubpix_map
        end do
-             
+
        recvcounts = 0
-       call mpi_gather( nsend, 1, MPI_INTEGER, recvcounts, 1, MPI_INTEGER, 0, comm_bin, ierr )
-          
-       allocate( sendbuffer(nsend), stat=ierr )
-       if ( ierr /= 0 ) call abort_mpi('No room for sendbuffer')
-       
+       call mpi_gather(nsend, 1, MPI_INTEGER, recvcounts, 1, MPI_INTEGER, 0, &
+            comm_bin, ierr)
+
+       allocate(sendbuffer(nsend), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for sendbuffer')
+
        mysubmap = 0
        i = 0
-       do isubmap = 0,nosubmaps_tot-1
-          if ( id_submap(isubmap) == id ) then
+       do isubmap = 0, nosubmaps_tot-1
+          if (id_submap(isubmap) == id) then
              mysubmap = mysubmap + 1
              do pix = 1, nosubpix_map
-                if ( mask(pix,mysubmap) <= 0 ) then
+                if (mask(pix,mysubmap) <= 0) then
                    do imap = 1, nmap
                       i = i + 1
                       sendbuffer(i) = Healpix_undef
@@ -676,81 +693,85 @@ CONTAINS
              end do
           end if
        end do
-       
-       if ( i /= nsend ) call abort_mpi('Did not fill sendbuffer') ! redundant check
-             
-       if ( id_bin == 0 ) then
-          nrecv = sum( recvcounts )
-          
-          allocate( recvbuffer(nrecv), stat=ierr )
-          if ( ierr /= 0 ) call abort_mpi('No room for recvbuffer')
-          
+
+       if (i /= nsend) call abort_mpi('Did not fill sendbuffer') ! redundant check
+
+       if (id_bin == 0) then
+          nrecv = sum(recvcounts)
+
+          allocate(recvbuffer(nrecv), stat=ierr)
+          if (ierr /= 0) call abort_mpi('No room for recvbuffer')
+
           displs = 0
           do i = 2, ntasks_bin
              displs(i) = recvcounts(i-1) + displs(i-1)
           end do
        end if
-       
-       call mpi_gatherv( sendbuffer, nsend, MPI_REAL4, recvbuffer, recvcounts, displs, MPI_REAL4, 0, comm_bin, ierr )
 
-       if ( id_bin == 0 ) then
-                
-          !fileoffset = count( id_submap < id ) * nosubpix_map * nmap
-          !call mpi_file_write_at( fh, fileoffset, recvbuffer, nrecv, MPI_REAL4, status, ierr )
-          
-          inquire( iolength=rec_len ) recvbuffer                
-          open( unit=55, file=trim(file_map_bin), action='readwrite', form='unformatted', access='direct', recl=rec_len )
-          !inquire( unit=55, nextrec=rec )
+       call mpi_gatherv(sendbuffer, nsend, MPI_REAL4, recvbuffer, recvcounts, &
+            displs, MPI_REAL4, 0, comm_bin, ierr)
+
+       if (id_bin == 0) then
+
+          !fileoffset = count(id_submap < id) * nosubpix_map * nmap
+          !call mpi_file_write_at(fh, fileoffset, recvbuffer, nrecv, &
+          !    MPI_REAL4, status, ierr)
+
+          inquire(iolength=rec_len) recvbuffer
+          open(unit=55, file=trim(file_map_bin), action='readwrite', &
+               form='unformatted', access='direct', recl=rec_len)
+          !inquire(unit=55, nextrec=rec)
           !print *,id,' : nextrec = ',rec ! DEBUG
-          write( 55, rec=record_number ) recvbuffer
-          close( unit=55 )
-          
+          write(55, rec=record_number) recvbuffer
+          close(unit=55)
+
        end if
 
-       if ( id == 0 ) then
+       if (id == 0) then
 
-          ! Finally, store the submap distribution so that the map may be assembled later
+          ! Finally, store the submap distribution so that the map may be
+          ! assembled later
 
-          inquire( file=trim(file_map_txt), exist=there )
+          inquire(file=trim(file_map_txt), exist=there)
 
-          if ( .not. there ) then
+          if (.not. there) then
 
-             open( unit=55, file=trim(file_map_txt), status='replace', &
-                  form='formatted' )
-             write( 55, * ) nosubmaps_tot, ntasks
-             write( 55, * ) nosubpix_map, nmap
+             open(unit=55, file=trim(file_map_txt), status='replace', &
+                  form='formatted')
+             write(55, *) nosubmaps_tot, ntasks
+             write(55, *) nosubpix_map, nmap
              do isubmap = 0, nosubmaps_tot-1
-                write( 55, * ) isubmap, id_submap( isubmap )
+                write(55, *) isubmap, id_submap(isubmap)
              end do
-             close( unit=55 )
+             close(unit=55)
 
           end if
 
        end if
-          
-       deallocate( recvcounts, displs, sendbuffer )
-       if ( id_bin == 0 ) deallocate( recvbuffer )
 
-       !call mpi_file_close( fh, ierr )
-       !if ( ierr /= 0 ) call abort_mpi( 'Failed to close binary file' )
+       deallocate(recvcounts, displs, sendbuffer)
+       if (id_bin == 0) deallocate(recvbuffer)
+
+       !call mpi_file_close(fh, ierr)
+       !if (ierr /= 0) call abort_mpi('Failed to close binary file')
 
     else
-    
+
        allocate(sbuffer(nosubpix_map))
        allocate(ibuffer(nosubpix_map))
        if (write_cut) allocate(i8buffer(nosubpix_map))
-    
+
        offset = 0
        writeoffset = 0
-       do isubmap = 0,nosubmaps_tot-1
+       do isubmap = 0, nosubmaps_tot-1
 
           if (sync_output) call wait_mpi
-          
+
           call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
-          
+
           if (id == idwr .and. write_cut) then
              nhit = 0
-             do i = 1,nosubpix_map
+             do i = 1, nosubpix_map
                 if (ibuffer(i) > 0) then
                    nhit = nhit + 1
                    i8buffer(nhit) = offset + i - 1
@@ -760,18 +781,18 @@ CONTAINS
           else
              nhit = nosubpix_map
           end if
-          
+
           do imap = 1,nmap
-             
+
              !print *,id,' : getting submap ',isubmap,imap ! debug
              call get_submap(sbuffer, nosubpix_map, binmap, nmap, imap, &
                   isubmap, idwr)
-             
+
              if (ID==idwr) then
                 if (write_cut) then
                    ! Pack the observed pixels to the beginning
                    nhit = 0
-                   do i = 1,nosubpix_map
+                   do i = 1, nosubpix_map
                       if (ibuffer(i) > 0) then
                          nhit = nhit + 1
                          sbuffer(nhit) = sbuffer(i)
@@ -781,14 +802,14 @@ CONTAINS
                    ! Set unobserved pixels to undefined value
                    where (ibuffer <= 0) sbuffer = Healpix_undef
                 end if
-                
+
                 if (nhit > 0) then
                    call fits_write_column(out, imap+coloffset, sbuffer(:nhit), &
                         writeoffset)
                 end if
              endif
           end do
-          
+
           offset = offset + nosubpix_map
           writeoffset = writeoffset + nhit
        end do
@@ -816,17 +837,17 @@ CONTAINS
     ! Write into file mask and criterion use to discard badly defined
     ! pixels.
     !
-    integer, intent(in)  :: mask(nosubpix_map,nosubmaps)
-    real(sp),intent(in)  :: crit(nosubpix_map,nosubmaps)
-    integer              :: idwr, isubmap, skycover, coloffset
-    integer(idp)         :: offset, writeoffset, nhit, i
-    real(sp),allocatable :: sbuffer(:)
-    integer,allocatable  :: ibuffer(:)
+    integer, intent(in) :: mask(nosubpix_map, nosubmaps)
+    real(sp),intent(in) :: crit(nosubpix_map, nosubmaps)
+    integer :: idwr, isubmap, skycover, coloffset
+    integer(idp) :: offset, writeoffset, nhit, i
+    real(sp), allocatable :: sbuffer(:)
+    integer, allocatable  :: ibuffer(:)
     integer(i8b),allocatable :: i8buffer(:)
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
 
-    if ( .not.do_mask .or. len_trim(file_mask) == 0 ) return
+    if (.not.do_mask .or. len_trim(file_mask) == 0) return
 
     call reset_time(10)
 
@@ -879,7 +900,7 @@ CONTAINS
 
     offset = 0
     writeoffset = 0
-    do isubmap = 0,nosubmaps_tot-1
+    do isubmap = 0, nosubmaps_tot-1
 
        if (sync_output) call wait_mpi
 
@@ -887,7 +908,7 @@ CONTAINS
 
        if (id == idwr .and. write_cut) then
           nhit = 0
-          do i = 1,nosubpix_map
+          do i = 1, nosubpix_map
              if (ibuffer(i) > 0) then
                 nhit = nhit + 1
                 i8buffer(nhit) = offset + i - 1
@@ -898,14 +919,14 @@ CONTAINS
           nhit = nosubpix_map
        end if
 
-       call get_submap(sbuffer,nosubpix_map,crit,isubmap,idwr)
+       call get_submap(sbuffer, nosubpix_map, crit, isubmap, idwr)
 
        if (ID==idwr) then
 
           if (write_cut) then
              ! Pack the observed pixels to the beginning
              nhit = 0
-             do i = 1,nosubpix_map
+             do i = 1, nosubpix_map
                 if (ibuffer(i) > 0) then
                    nhit = nhit + 1
                    sbuffer(nhit) = sbuffer(i)
@@ -941,17 +962,17 @@ CONTAINS
     !
     ! Write hit map into file.
     !
-    integer, intent(in)  :: hits(nosubpix_map,nosubmaps,*)
-    integer              :: idwr, isubmap, idet, coloffset
-    integer(idp)         :: offset, nhit, buflen, i
-    integer,allocatable  :: ibuffer(:), total(:)
-    integer(i8b),allocatable :: i8buffer(:)
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
+    integer, intent(in) :: hits(nosubpix_map, nosubmaps,*)
+    integer :: idwr, isubmap, idet, coloffset
+    integer(idp) :: offset, nhit, buflen, i
+    integer, allocatable :: ibuffer(:), total(:)
+    integer(i8b), allocatable :: i8buffer(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
     integer :: npix, ierr, repeat
     integer(i8b) :: bufoffset, writeoffset
 
-    if (.not. do_hits .or. len_trim(file_hit) == 0 ) return
+    if (.not. do_hits .or. len_trim(file_hit) == 0) return
 
     repeat = max(12*1024, nosubpix_map)
     npix = nosubmaps_tot * nosubpix_map
@@ -1003,16 +1024,17 @@ CONTAINS
 
     offset = 0
     writeoffset = 0
-    do isubmap = 0,nosubmaps_tot-1
+    do isubmap = 0, nosubmaps_tot-1
 
-       if (sync_output) call wait_mpi ! clean the unexpected message buffers       
+       if (sync_output) call wait_mpi ! clean the unexpected message buffers
 
-       call get_submap_int(ibuffer, nosubpix_map, hits(1,1,1), 1, 1, isubmap, idwr)
+       call get_submap_int(ibuffer, nosubpix_map, hits(1,1,1), 1, 1, isubmap, &
+            idwr)
 
        if (ID == idwr) then
           if (write_cut) then
              nhit = 0
-             do i = 1,nosubpix_map
+             do i = 1, nosubpix_map
                 if (ibuffer(i) > 0) then
                    nhit = nhit + 1
                    i8buffer(nhit) = offset + i - 1
@@ -1054,15 +1076,15 @@ CONTAINS
     !
     ! Write the pixel matrices into file
     !
-    real(dp),intent(in)  :: cc(nmap,nmap,nosubpix_map,nosubmaps)
-    integer, intent(in), optional :: mask(nosubpix_map,nosubmaps)
-    integer              :: idwr, isubmap, imap, jmap, coloffset
-    integer(idp)         :: offset, writeoffset, i, j, nhit
-    real(dp),allocatable :: dbuffer(:)
-    integer,allocatable  :: ibuffer(:)
-    integer(i8b),allocatable :: i8buffer(:)
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
+    real(dp),intent(in) :: cc(nmap, nmap, nosubpix_map, nosubmaps)
+    integer, intent(in), optional :: mask(nosubpix_map, nosubmaps)
+    integer :: idwr, isubmap, imap, jmap, coloffset
+    integer(idp) :: offset, writeoffset, i, j, nhit
+    real(dp), allocatable :: dbuffer(:)
+    integer, allocatable :: ibuffer(:)
+    integer(i8b), allocatable :: i8buffer(:)
+    type(fitshandle) :: out
+    type(fitscolumn), pointer :: columns(:)
     character(len=SLEN) :: outfile
 
     outfile = file_matrix
@@ -1104,7 +1126,7 @@ CONTAINS
        do i = 1,nmap
           do j = i,nmap
              coloffset = coloffset + 1
-             write( columns(coloffset)%name, '("cc(",i0,",",i0,")")' ) i, j
+             write(columns(coloffset)%name, '("cc(",i0,",",i0,")")') i, j
           end do
        end do
 
@@ -1123,7 +1145,7 @@ CONTAINS
 
     offset = 0
     writeoffset = 0
-    do isubmap = 0,nosubmaps_tot-1
+    do isubmap = 0, nosubmaps_tot-1
 
        if (sync_output) call wait_mpi
 
@@ -1132,13 +1154,14 @@ CONTAINS
              call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
           else
              ibuffer = 0
-             call get_submap(dbuffer, nosubpix_map, cc, nmap, 1, 1, isubmap, idwr)
+             call get_submap(dbuffer, nosubpix_map, cc, nmap, 1, 1, isubmap, &
+                  idwr)
              where(dbuffer /= 0) ibuffer = 1
           end if
 
           if (id == idwr) then
              nhit = 0
-             do i = 1,nosubpix_map
+             do i = 1, nosubpix_map
                 if (ibuffer(i) > 0) then
                    nhit = nhit + 1
                    i8buffer(nhit) = offset + i - 1
@@ -1162,7 +1185,7 @@ CONTAINS
                 if (write_cut) then
                    ! Pack the observed pixels to the beginning
                    nhit = 0
-                   do i = 1,nosubpix_map
+                   do i = 1, nosubpix_map
                       if (ibuffer(i) > 0) then
                          nhit = nhit + 1
                          dbuffer(nhit) = dbuffer(i)
@@ -1189,7 +1212,7 @@ CONTAINS
     endif
 
     deallocate(dbuffer)
-    if (write_cut) deallocate( ibuffer, i8buffer )       
+    if (write_cut) deallocate(ibuffer, i8buffer)
 
     cputime_output = cputime_output + get_time(10)
 
@@ -1203,8 +1226,8 @@ CONTAINS
     !
     ! Write the leakage matrices into file
     !
-    real(dp),intent(in) :: cc(nmap,nmap,nosubpix_map,nosubmaps)
-    integer, intent(in) :: mask(nosubpix_map,nosubmaps)
+    real(dp),intent(in) :: cc(nmap,nmap, nosubpix_map, nosubmaps)
+    integer, intent(in) :: mask(nosubpix_map, nosubmaps)
     character(len=*), intent(in) :: detector_name
     integer :: idwr, isubmap, imap, jmap, coloffset, ncol
     integer(idp):: offset, writeoffset, i, j, nhit
@@ -1257,7 +1280,7 @@ CONTAINS
        do i = 1,nmap
           do j = 1,nmap
              coloffset = coloffset + 1
-             write( columns(coloffset)%name, '("gamma(",i0,",",i0,")")' ) i, j
+             write(columns(coloffset)%name, '("gamma(",i0,",",i0,")")') i, j
           end do
        end do
 
@@ -1276,7 +1299,7 @@ CONTAINS
 
     offset = 0
     writeoffset = 0
-    do isubmap = 0,nosubmaps_tot-1
+    do isubmap = 0, nosubmaps_tot-1
 
        if (sync_output) call wait_mpi
 
@@ -1285,7 +1308,7 @@ CONTAINS
 
           if (id == idwr) then
              nhit = 0
-             do i = 1,nosubpix_map
+             do i = 1, nosubpix_map
                 if (ibuffer(i) > 0) then
                    nhit = nhit + 1
                    i8buffer(nhit) = offset + i - 1
@@ -1310,7 +1333,7 @@ CONTAINS
                 if (write_cut) then
                    ! Pack the observed pixels to the beginning
                    nhit = 0
-                   do i = 1,nosubpix_map
+                   do i = 1, nosubpix_map
                       if (ibuffer(i) > 0) then
                          nhit = nhit + 1
                          dbuffer(nhit) = dbuffer(i)
@@ -1337,149 +1360,11 @@ CONTAINS
     endif
 
     deallocate(dbuffer)
-    if (write_cut) deallocate( ibuffer, i8buffer )       
+    if (write_cut) deallocate(ibuffer, i8buffer)
 
     cputime_output = cputime_output + get_time(10)
 
   END SUBROUTINE write_leakmatrix
-
-
-  !---------------------------------------------------------------------------
-
-
-  SUBROUTINE write_destriped_tod
-
-    integer              :: k, m, nn, idwr, idet, id_send, nrepeat, ifile
-    integer(idp)         :: offset, nbuff, n
-    integer(idp)         :: nleft_file, nleft_tot, nleft_proc
-    real(sp),allocatable :: sbuffer(:)
-    character(len=200)   :: filename
-    character(len=20)    :: ending
-    type(fitshandle)     :: out
-    type(fitscolumn),pointer :: columns(:)
-    logical              :: newobject, closeobject
-
-    if (.not.write_tod) return
-
-    idwr = 0
-
-    if (kfirst) then
-       nrepeat = nshort
-    elseif (nosamples_proc_max > 1e9) then
-       nrepeat = 100
-    else
-       nrepeat = 1
-    endif
-
-    nbuff = 100000
-    allocate(sbuffer(nbuff))
-
-    do idet = 1,nodetectors
-
-       newobject = .true.
-       closeobject = .false.
-
-       n = 0
-       ifile = 0
-       do
-          ifile = ifile+1
-          n = n+nosamples_file(ifile)
-
-          if (n > istart_mission) then
-             nleft_file = n-istart_mission
-             exit
-          endif
-       enddo
-
-       nleft_tot = nosamples_tot
-
-       do id_send = 0,ntasks-1
-
-          nleft_proc = nosamples_proc
-          call broadcast_mpi(nleft_proc,id_send)
-
-          if (sync_output) call wait_mpi
-
-          m = 0
-          do
-             n = min(nbuff,nleft_proc,nleft_file)
-
-             if (n==0) exit
-
-             if (newobject) then
-
-                if (ifile > nofiles) then
-                   if (ID==0) then
-                      write(*,*) 'ERROR in write_tod: ifile too large.'
-                      write(*,*) 'ifile, nofiles =',ifile,nofiles
-                   endif
-                   call exit_with_status(1)
-                endif
-
-                if (ID==idwr) then
-
-                   filename = trim(detectors(idet)%name) // '_destriped'
-
-                   call check_outfile(filename)
-                   call fits_create(out,trim(filename))
-
-                   allocate(columns(1))
-                   columns(1)%repcount = nrepeat
-                   columns(1)%unit = unit_tod
-                   columns(1)%type = fits_real4
-                   columns(1)%name = detectors(idet)%name
-
-                   call write_header_code(out)
-                   call write_header_simulation(out)
-                   call write_header_destriping(out)
-
-                   call fits_insert_bintab(out, columns)
-                   deallocate(columns)
-
-                   offset = 0
-                endif
-             endif
-
-             if (ID == id_send) sbuffer(1:n) = tod_stored(m+1:m+n,idet)
-
-             nn = n
-             call send_mpi(sbuffer, nn, id_send, idwr)
-
-             if (ID == idwr) then
-                call fits_write_column(out, 1, sbuffer(1:nn), offset)
-             end if
-
-             newobject = .false.
-
-             nleft_proc = nleft_proc - n
-             nleft_file = nleft_file - n
-             nleft_tot = nleft_tot - n
-             m = m + n
-             offset = offset + n
-
-             if (nleft_file==0.or.nleft_tot==0) then !time to close the object
-
-                if (ID==idwr) call fits_close(out)
-
-                if (nleft_tot > 0) then
-                   newobject = .true.
-                   ifile = ifile + 1
-                   nleft_file = nosamples_file(ifile)
-                endif
-             endif
-             if (nleft_proc==0) exit  ! next process
-
-          enddo  !loop over buffer
-
-          if (nleft_tot==0) exit
-
-       enddo  ! loop over processes
-
-    enddo  ! loop over detectors
-
-    deallocate(sbuffer)
-
-  END SUBROUTINE write_destriped_tod
 
 
   !------------------------------------------------------------------------------
@@ -1490,9 +1375,9 @@ CONTAINS
     ! Create a new filename if file exists.
     !
     character(len=*),intent(inout) :: filename
-    logical                        :: there
-    integer                        :: k, n
-    character(len=20)              :: s, ending
+    logical :: there
+    integer :: k, n
+    character(len=20) :: s, ending
 
     if (filename(1:1) == '!') return
 
@@ -1535,7 +1420,7 @@ CONTAINS
   SUBROUTINE write_header_healpix(out, nside)
 
     type(fitshandle) :: out
-    integer          :: nside
+    integer :: nside
 
     call fits_add_comment(out, '----------------------------------')
     call fits_add_comment(out, '   Healpix Map Specific Keywords  ')
@@ -1551,25 +1436,25 @@ CONTAINS
     call fits_add_key(out,'POLCONV','COSMO',   &
          'Coord. convention for polarisation (COSMO/IAU)')
     if (write_cut) then
-       call fits_update_key( out, 'EXTNAME', "'CUT SKY MAP'")
-       call fits_add_key( out, 'COMMENT', 'Cut sky data')
-       call fits_add_key( out, 'OBJECT', 'PARTIAL')
-       call fits_add_key( out, 'INDXSCHM', 'EXPLICIT', &
-            ' Indexing : IMPLICIT or EXPLICIT' )
-       call fits_add_key( out, 'GRAIN', 1, ' Grain of pixel indexing')
+       call fits_update_key(out, 'EXTNAME', "'CUT SKY MAP'")
+       call fits_add_key(out, 'COMMENT', 'Cut sky data')
+       call fits_add_key(out, 'OBJECT', 'PARTIAL')
+       call fits_add_key(out, 'INDXSCHM', 'EXPLICIT', &
+            ' Indexing : IMPLICIT or EXPLICIT')
+       call fits_add_key(out, 'GRAIN', 1, ' Grain of pixel indexing')
     else
-       call fits_update_key( out, 'EXTNAME', "'FULL SKY MAP'")
-       call fits_add_key( out, 'COMMENT', 'Full sky data')
-       call fits_add_key( out, 'OBJECT', 'FULLSKY')
-       call fits_add_key( out, 'INDXSCHM', 'IMPLICIT', &
-            ' Indexing : IMPLICIT or EXPLICIT' )
-       call fits_add_key( out, 'GRAIN', 0, ' Grain of pixel indexing')
+       call fits_update_key(out, 'EXTNAME', "'FULL SKY MAP'")
+       call fits_add_key(out, 'COMMENT', 'Full sky data')
+       call fits_add_key(out, 'OBJECT', 'FULLSKY')
+       call fits_add_key(out, 'INDXSCHM', 'IMPLICIT', &
+            ' Indexing : IMPLICIT or EXPLICIT')
+       call fits_add_key(out, 'GRAIN', 0, ' Grain of pixel indexing')
     end if
-    call fits_add_key( out, 'COMMENT', &
+    call fits_add_key(out, 'COMMENT', &
          'GRAIN=0 : no indexing of pixel data                         (IMPLICIT)')
-    call fits_add_key( out, 'COMMENT', &
+    call fits_add_key(out, 'COMMENT', &
          'GRAIN=1 : 1 pixel index -> 1 pixel data                     (EXPLICIT)')
-    call fits_add_key( out, 'COMMENT', &
+    call fits_add_key(out, 'COMMENT', &
          'GRAIN>1 : 1 pixel index -> data of GRAIN consecutive pixels (EXPLICIT)')
 
   END SUBROUTINE write_header_healpix
@@ -1606,8 +1491,8 @@ CONTAINS
 
   SUBROUTINE write_header_sky(out, skycover)
 
-    type(fitshandle)   :: out
-    integer,intent(in) :: skycover
+    type(fitshandle) :: out
+    integer, intent(in) :: skycover
 
     call fits_add_comment(out, '----------------------------------')
     call fits_add_comment(out, '         Sky coverage             ')
@@ -1628,8 +1513,8 @@ CONTAINS
   SUBROUTINE write_header_simulation(out)
 
     type(fitshandle) :: out
-    real(dp)         :: samples_to_d
-    integer          :: i, j, k
+    real(dp) :: samples_to_d
+    integer :: i, j, k
 
     samples_to_d = 1.d0/fsample/24.d0/3600.d0
 
@@ -1660,7 +1545,7 @@ CONTAINS
     call fits_add_key(out, 'NODET', nodetectors, 'Number of detectors')
     call fits_add_key(out, 'MDETW', mode_detweight, 'Detector weighting mode')
 
-    do i = 1,nodetectors
+    do i = 1, nodetectors
        call fits_add_key(out, addi('DETNAM',i), detectors(i)%name, &
             'Detector name')
        call fits_add_key(out, addi('PSIPOL',i), degs(detectors(i)%psipol), &
@@ -1685,7 +1570,7 @@ CONTAINS
   SUBROUTINE write_header_destriping(out)
 
     type(fitshandle) :: out
-    integer          :: i
+    integer :: i
 
     call fits_add_comment(out, '---------------------------')
     call fits_add_comment(out, '     Data distribution     ')
@@ -1746,7 +1631,7 @@ CONTAINS
        call fits_add_key(out, 'TAILTIM', real(tail_time), 'Overlap/seconds')
 
        if (len_trim(file_spectrum) >= 0) then
-          do i = 1,nodetectors
+          do i = 1, nodetectors
              call fits_add_comment(out, detectors(i)%name)
              call fits_add_key(out, addi('SIGMA', i), &
                   real(detectors(i)%sigmas(1)), 'White noise std')
@@ -1773,15 +1658,15 @@ CONTAINS
 
     integer :: ierr
 
-    if ( binary_output ) then
+    if (binary_output) then
 
-       if ( nwrite_binary > 1 ) then
-          call mpi_comm_free( comm_bin, ierr )
-          if ( ierr /= 0 ) then
-             call abort_mpi( 'Failed to close binary output communicator' )
+       if (nwrite_binary > 1) then
+          call mpi_comm_free(comm_bin, ierr)
+          if (ierr /= 0) then
+             call abort_mpi('Failed to close binary output communicator')
           end if
        end if
-       
+
     end if
 
     return
@@ -1813,7 +1698,7 @@ CONTAINS
     ! remove path from a file name
     character(len=68) :: ftrim
     character(len=*)  :: filename
-    integer           :: n
+    integer :: n
 
     n = index(filename, '/', .true.)
 
@@ -1829,7 +1714,7 @@ CONTAINS
 
     character(len=*) :: key_in
     character(len=8) :: key
-    integer          :: i, ilen
+    integer :: i, ilen
 
     write(key, '(i0)') i
     ilen = len_trim(key)
@@ -1847,7 +1732,7 @@ CONTAINS
 
     character(len=*) :: key_in
     character(len=24) :: key
-    integer          :: i, ilen
+    integer :: i, ilen
 
     write(key, '(i0)') i
     ilen = len_trim(key)
