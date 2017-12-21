@@ -13,10 +13,9 @@ MODULE tod_storage
 
   real(c_double), pointer, public :: tod(:, :)
 
-  real(sp), save, public :: memory_tod = 0.0
+  real(sp), save, public :: memory_tod = 0
 
   real(c_double), pointer, public :: sampletime(:)
-  integer, allocatable, target, public :: qualityFlag(:,:)
 
   character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")', &
        mstr3='(x,a,t32,3(f10.1," MB"))'
