@@ -99,7 +99,9 @@ CONTAINS
 
        ! Improve noise weighting in case we have full PSDs from TOAST
 
-       if (id == 0) write (*,*) 'Adjusting noise weights using noise spectra '
+       if (id == 0 .and. info > 0) then
+          write (*,*) 'Adjusting noise weights using noise spectra '
+       end if
 
        if (radiometers) then
 
@@ -204,7 +206,7 @@ CONTAINS
 
     if (nodet_pol == 0 .or. nmap == 1) then
 
-       if (id == 0 .and. info >= 1) then
+       if (id == 0 .and. info > 0) then
           if (nodet_pol == 0) &
                write(*,*) 'Only unpolarized detectors.'
           if (nmap == 1) &
@@ -217,13 +219,13 @@ CONTAINS
        temperature_only = .true.
        nmap = 1
     elseif (temperature_only) then
-       if (id == 0 .and. info >= 1) then
+       if (id == 0 .and. info > 0) then
           write(*,*) 'Temperature_only = T:' // &
                ' Only temperature map will be produced'
        end if
        nmap = 1
     else
-       if (id == 0 .and. info >= 1) then
+       if (id == 0 .and. info > 0) then
           write(*,*) 'Polarized detectors present: ' // &
                ' Will produce polarization maps'
        end if
@@ -555,7 +557,7 @@ CONTAINS
 
     fi = '(x,a,t24,"= ",i12,   2x,a)'
 
-    if (id == 0 .and. info >= 3) write(*,*) 'Initializing parallelization'
+    if (id == 0 .and. info > 2) write(*,*) 'Initializing parallelization'
     if (info > 4) write(*,idf) id, 'Initializing parallelization'
 
     ! Compute the total number of short baselines (first destriping)
