@@ -617,12 +617,11 @@ CONTAINS
                 print *,id,' : WARNING: baseline rcond too small: ', &
                      minval(eigenvalues) / maxval(eigenvalues), &
                      ', no preconditioner'
-                !nna(:, :, k, idet) = 0
-                !yba(:, k, idet) = 0
                 do j = 0, basis_order
-                   nna_inv(j, j, k, idet) = 1
+                   nna_inv(j, j, k, idet) = 1 / nna(j, j, k, idet)
                 end do
                 nbad = nbad + 1
+                cycle
              else
                 bad_baseline = .false.
              end if
