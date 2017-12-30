@@ -1,6 +1,5 @@
 MODULE output
 
-  use simulation
   use commonparam
   use submap_transfer
   use mpi_wrappers
@@ -1522,7 +1521,6 @@ CONTAINS
     call fits_add_comment(out, '          Simulation           ')
     call fits_add_comment(out, '-------------------------------')
 
-    call fits_add_comment(out, simcomment)
     call fits_add_key(out, 'FSAMPLE', real(fsample),'Sampling frequency (Hz)')
     call fits_add_key(out, 'TMISSION', real(nosamples_tot*samples_to_d), &
          'Mission duration/days')

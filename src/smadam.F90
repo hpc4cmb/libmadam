@@ -8,7 +8,6 @@ module smadam
 
   use commonparam
   use inputparam
-  use simulation
   use parameter_control
   use pointing
   use maptod_transfer
@@ -457,6 +456,7 @@ contains
           call write_memory('Basis functions',    memory_basis_functions)
           call write_memory('Noise filter',       memory_filter)
           call write_memory('Preconditioner',     memory_precond)
+          call write_memory('Submap table',       memory_ksubmap)
           call write_memory('Temporary maps',     memory_locmap)
           call write_memory('All2All buffers',    memory_all2all)
           call write_memory('CG work space',      memory_cg)
@@ -815,6 +815,7 @@ contains
        call write_memory('Basis functions',    memory_basis_functions)
        call write_memory('Noise filter',       memory_filter)
        call write_memory('Preconditioner',     memory_precond)
+       call write_memory('Submap table',       memory_ksubmap)
        call write_memory('Temporary maps',     memory_locmap)
        call write_memory('All2All buffers',    memory_all2all)
        call write_memory('CG work space',      memory_cg)

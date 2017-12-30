@@ -2,7 +2,6 @@ MODULE inputparam
   ! Read input parameters from file
 
   use commonparam
-  use simulation
   use mpi_wrappers
 
   implicit none
