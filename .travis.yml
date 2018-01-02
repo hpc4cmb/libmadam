@@ -21,7 +21,7 @@ matrix:
             - libtool
             - libmpich-dev
             - fftw3-dev
-	    - cfitsio
+            - cfitsio
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc) && export CXX=$(which g++)"
@@ -44,7 +44,7 @@ matrix:
             - libtool
             - libmpich-dev
             - fftw3-dev
-	    - cfitsio
+            - cfitsio
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-4.9) && export CXX=$(which g++-4.9)"
@@ -67,7 +67,7 @@ matrix:
             - libtool
             - libmpich-dev
             - fftw3-dev
-	    - cfitsio
+            - cfitsio
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-5) && export CXX=$(which g++-5)"
@@ -90,7 +90,7 @@ matrix:
             - libtool
             - libmpich-dev
             - fftw3-dev
-	    - cfitsio
+            - cfitsio
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-6) && export CXX=$(which g++-6)"
@@ -113,7 +113,7 @@ matrix:
             - libtool
             - libmpich-dev
             - fftw3-dev
-	    - cfitsio
+            - cfitsio
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-7) && export CXX=$(which g++-7)"
