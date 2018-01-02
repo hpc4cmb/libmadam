@@ -160,7 +160,8 @@ before_install:
 install:
     # build
     - ./autogen.sh
-    - export FCFLAGS="-O3 -g -fPIC"
+    - export FCFLAGS="-O0 -g -fbounds-check -fPIC"
+    - export CFLAGS="-O0 -g -fPIC"
     - ./configure --prefix=$HOME/miniconda
     - make
     - make install
