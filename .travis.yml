@@ -22,6 +22,7 @@ matrix:
             - libmpich-dev
             - fftw3-dev
             - cfitsio-dev
+            - libatlas-base-dev
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc) && export FC=$(which gfortran)"
@@ -45,6 +46,7 @@ matrix:
             - libmpich-dev
             - fftw3-dev
             - cfitsio-dev
+            - libatlas-base-dev
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-4.9) && export FC=$(which gfortran-4.9)"
@@ -68,6 +70,7 @@ matrix:
             - libmpich-dev
             - fftw3-dev
             - cfitsio-dev
+            - libatlas-base-dev
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-5) && export FC=$(which gfortran-5)"
@@ -91,6 +94,7 @@ matrix:
             - libmpich-dev
             - fftw3-dev
             - cfitsio-dev
+            - libatlas-base-dev
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-6) && export FC=$(which gfortran-6)"
@@ -114,6 +118,7 @@ matrix:
             - libmpich-dev
             - fftw3-dev
             - cfitsio-dev
+            - libatlas-base-dev
             - pkg-config
       env:
         - MATRIX_EVAL="export CC=$(which gcc-7) && export FC=$(which gfortran-7)"
