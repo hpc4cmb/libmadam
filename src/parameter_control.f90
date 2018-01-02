@@ -2,7 +2,6 @@ MODULE parameter_control
 
   use iso_c_binding
 
-  use simulation
   use commonparam
   use mpi_wrappers
   use noise_routines, only : interpolate_psd
@@ -332,8 +331,7 @@ CONTAINS
     end if
 
     ! Store the number of baselines per pointing period
-    ! Most loops now iterate over baselines, even whenno destriping is done
-    !if (kfirst) then
+    ! Most loops now iterate over baselines, even when no destriping is done
     allocate(noba_short_pp(ninterval), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for noba_short_pp')
     memory_baselines = memory_baselines + ninterval*4
@@ -349,7 +347,6 @@ CONTAINS
        endif
        noba_short_pp(i) = (intervals(i)-1) / dnshort + 1
     end do
-    !end if
 
     ! Resolution
     nosubpix_max = nside_max**2 / nside_submap**2

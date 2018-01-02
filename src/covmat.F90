@@ -21,7 +21,6 @@ MODULE covmat
   USE fourier
   USE pointing
   USE covmat_util, ONLY : tic, toc
-  USE simulation
   USE mpi_wrappers
   USE noise_routines
   USE maps_and_baselines

@@ -4,23 +4,19 @@ MODULE read_data
   ! Routines for reading input data:
   ! TOD, pointing, input mask
 
-  use simulation
   use commonparam
   use submap_transfer
   use fitsmod2
   use pointing
   use maps_and_baselines
-  !use coordinate_conversion
   use healpix_routines
-  use satellite
-  !use tod_storage
   use timing
   use mpi_wrappers
 
   implicit none
   private
 
-  real(sp), public :: cputime_read_tod=0,  cputime_read_detpointing=0, &
+  real(sp), public :: cputime_read_tod=0, cputime_read_detpointing=0, &
        cputime_read_timestamps=0, cputime_postprocess_tod, memory_sat=0, &
        cputime_read_pointing_periods=0
 

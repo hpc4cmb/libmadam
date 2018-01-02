@@ -8,7 +8,7 @@ MODULE commonparam
   ! TOAST additions end -RK
 
   use planck_config
-  use simulation, only : detector_data, pointing_data, tod_component
+  !use simulation, only : detector_data, pointing_data, tod_component
 
   implicit none
   public
@@ -16,20 +16,38 @@ MODULE commonparam
   integer, parameter :: SLEN  = 150
 
   integer, parameter :: idp = i8b
+  integer, parameter :: byte = 1 ! 1-byte logical kind
 
   real(dp), parameter :: deg2rad = pi/180.d0
 
   integer, parameter :: UNIT_POINTING_PERIOD=-5
+
+  ! From simulation.f90
+
+  TYPE detector_data
+     integer :: idet = 0
+     integer :: ipoint = 0
+     real(dp) :: slope = 0
+     real(dp) :: fknee = 0
+     real(dp) :: fmin = 0
+     real(dp) :: psipol = 0
+     character(len=20) :: name = ''
+     logical :: kpolar = .false.
+     integer :: npsd
+     real(dp), allocatable :: psdstarts(:)
+     real(dp), allocatable :: psdfreqs(:)
+     real(dp), allocatable :: psds(:,:)
+     real(dp), allocatable :: sigmas(:), weights(:)
+  END TYPE detector_data
+
+  real(dp) :: fsample = 1 ! Sampling frequency
+  character(len=30) :: unit_tod = 'unknown'
 
   ! OpenMP
   integer :: nthreads_max=1, nthreads=1, id_thread=0
   integer, external :: omp_get_num_procs, omp_get_max_threads, &
        omp_get_thread_num, omp_get_num_threads
 
-  ! TOAST additions -RK
-  integer(dp), allocatable :: chunk_offsets(:), chunk_sizes(:)
-  logical, allocatable :: use_toast_channel(:)
-  character(len=256) :: telescope_name, sky_name
   logical :: flag_by_horn=.false., force_pol=.false.
   logical :: concatenate_messages = .true., allreduce = .false.
   logical :: reassign_submaps = .true.
@@ -87,7 +105,7 @@ MODULE commonparam
   end type survey_type
   type(survey_type) :: surveys(0:NSURVEYMAX)
   integer(i4b) :: nsurvey
-  logical, allocatable :: surveyflags(:)
+  logical(byte), allocatable :: surveyflags(:)
 
   logical :: bin_subsets = .false.
   logical :: mcmode = .false., cached = .false.

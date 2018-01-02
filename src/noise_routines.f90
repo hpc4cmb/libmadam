@@ -9,7 +9,6 @@ MODULE noise_routines
   use timing
 
   use tod_storage, only : sampletime
-  use simulation, only : fsample
 
   implicit none
   public

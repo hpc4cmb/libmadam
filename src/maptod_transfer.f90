@@ -37,7 +37,8 @@ MODULE maptod_transfer
        scatter_map, scatter_mask, free_locmaps, initialize_alltoallv, &
        assign_submaps
 
-  real(sp), save, public :: memory_locmap = 0, memory_all2all = 0
+  real(sp), save, public :: memory_locmap = 0, memory_all2all = 0, &
+       memory_ksubmap = 0
 
 CONTAINS
 
@@ -58,14 +59,26 @@ CONTAINS
     nolocpix = nolocmaps * nosubpix_max
 
     if (.not. allocated(ksubmap_table)) then
-       allocate(ksubmap_table(0:nosubmaps_tot-1, 0:ntasks-1), stat=ierr)
+       ! Default Fortran logical is 32 bits (!)
+       if (allreduce) then
+          allocate(ksubmap_table(0:nosubmaps_tot-1, 0:0), stat=ierr)
+          memory_ksubmap = nosubmaps_tot*4
+       else
+          allocate(ksubmap_table(0:nosubmaps_tot-1, 0:ntasks-1), stat=ierr)
+          memory_ksubmap = nosubmaps_tot*ntasks*4
+       end if
        if (ierr /= 0) call abort_mpi('No room for ksubmap_table')
        ksubmap_table = .false.
+       if (ID==0 .and. info > 0) then
+          memsum = memory_ksubmap / 2**20
+          write(*,mstr3) 'Allocated memory for submap table:', &
+               memsum, memsum, memsum
+       end if
     end if
 
     if (allreduce) then
        ! All processes share ksubmap
-       ksubmap_table = spread(ksubmap(0:nosubmaps_tot-1), 2, ntasks)
+       ksubmap_table(:, 0) = ksubmap(0:nosubmaps_tot-1)
     else
        call mpi_allgather(ksubmap, nosubmaps_tot, MPI_LOGICAL, &
             ksubmap_table, nosubmaps_tot, MPI_LOGICAL, comm, ierr)
@@ -138,6 +151,7 @@ CONTAINS
        if (allocated(displs_gather)) deallocate(displs_gather)
        allocate(recvcounts_gather(ntasks), displs_gather(ntasks), stat=ierr)
        if (ierr /= 0) stop 'No room for allgatherv counts'
+       memory_all2all = ntasks*2*4.
 
        call mpi_allgather(nsend_gather, 1, MPI_INTEGER, recvcounts_gather, &
             1, MPI_INTEGER, comm, ierr)
@@ -150,7 +164,18 @@ CONTAINS
           displs_gather(itask) = displs_gather(itask-1) &
                + recvcounts_gather(itask-1)
        end do
+
+       memsum = memory_all2all / 2**20
+       mem_min = memsum; mem_max = memsum
+       call min_mpi(mem_min); call max_mpi(mem_max)
+       call sum_mpi(memsum)
+       if (ID == 0 .and. info > 0) then
+          write(*,'(x,a,t32,3(f9.1," MB"))') &
+               'Allocated memory for allreduce:', memsum, mem_min, mem_max
+       end if
     end if
+
+    ! allreduce implies concatenate_messages = .false.
 
     if (.not. concatenate_messages) return
 
@@ -226,7 +251,7 @@ CONTAINS
     allocate(sendcounts(0:ntasks-1), sendoffs(0:ntasks-1), &
          recvcounts(0:ntasks-1), recvoffs(0:ntasks-1), stat=ierr)
     if (ierr /= 0) stop 'No room to concatenate messages (2)'
-    memory_all2all = memory_all2all + ntasks*4*4.0
+    memory_all2all = memory_all2all + ntasks*4*4.
 
     offset = 0
     ioffset = 0
@@ -268,7 +293,7 @@ CONTAINS
        offset = offset + nrecv
     end do
 
-    memsum = memory_all2all / 1024. / 1024.
+    memsum = memory_all2all / 2**20
     mem_min = memsum; mem_max = memsum
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
@@ -302,7 +327,7 @@ CONTAINS
     if (.not. allocated(ksubmap_table)) &
          call abort_mpi('assign_submaps: ksubmap_table not allocated')
 
-    allocate(ksubmap(0:nosubmaps_tot-1,0:ntasks-1), &
+    allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
          nosubmaps_task(0:ntasks-1), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room to assign submaps')
 

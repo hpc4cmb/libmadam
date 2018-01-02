@@ -10,8 +10,6 @@ MODULE pointing
   implicit none
   private
 
-  logical, allocatable, public :: kpolarized(:)
-
   integer(c_long), pointer, public :: pixels(:, :)
   real(c_double), pointer, public :: weights(:, :, :)
 
@@ -22,7 +20,7 @@ MODULE pointing
 
   integer :: buffersize = 0
 
-  real(sp),public :: memory_pointing = 0.0
+  real(sp), public :: memory_pointing = 0
 
   logical, allocatable, public :: ksubmap(:)
   integer, allocatable, public :: subtable1(:), subtable2(:)
@@ -45,9 +43,6 @@ CONTAINS
     real(sp) :: memory, mem_min, mem_max
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
-
-    allocate(kpolarized(nodetectors), stat=allocstat)
-    call check_stat(allocstat, 'kpolarized')
 
     if (temperature_only) detectors%kpolar = .false.
 
@@ -86,8 +81,6 @@ CONTAINS
   SUBROUTINE close_pointing
 
     integer :: k
-
-    if (allocated(kpolarized)) deallocate(kpolarized)
 
     if (allocated(ksubmap)) deallocate(ksubmap)
     if (allocated(subtable1)) deallocate(subtable1)
