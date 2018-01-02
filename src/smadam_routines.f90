@@ -614,9 +614,9 @@ CONTAINS
                 cycle
              else if (minval(eigenvalues) / maxval(eigenvalues) < 1e-12) then
                 ! Degenerate basis functions
-                print *,id,' : WARNING: baseline rcond too small: ', &
-                     minval(eigenvalues) / maxval(eigenvalues), &
-                     ', no preconditioner'
+                !print *,id,' : WARNING: baseline rcond too small: ', &
+                !     minval(eigenvalues) / maxval(eigenvalues), &
+                !     ', no preconditioner'
                 do j = 0, basis_order
                    nna_inv(j, j, k, idet) = 1 / nna(j, j, k, idet)
                 end do
