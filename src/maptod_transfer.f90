@@ -504,7 +504,7 @@ CONTAINS
              end if
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 j = (k-1) * nosubpix
-                map(:, :, m) = locmap(:, j:j+nosubpix-1)
+                map(:, :, m) = map(:, :, m) + locmap(:, j:j+nosubpix-1)
              end if
           end do
           !$OMP END PARALLEL
@@ -526,7 +526,7 @@ CONTAINS
                 n = 0
                 do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, ndegrade
                    n = n + 1
-                   map(:, n, m) = sum(locmap(:, j:j+ndegrade-1), 2)
+                   map(:, n, m) = map(:, n, m) + sum(locmap(:, j:j+ndegrade-1), 2)
                 end do
              end if
           end do
@@ -661,7 +661,7 @@ CONTAINS
              end if
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 j = (k-1) * nosubpix
-                cc(:, :, :, m) = loccc(:, :, j:j+nosubpix-1)
+                cc(:, :, :, m) = cc(:, :, :, m) + loccc(:, :, j:j+nosubpix-1)
              end if
           end do
           !$OMP END PARALLEL
@@ -685,7 +685,8 @@ CONTAINS
                    do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, &
                         ndegrade
                       n = n + 1
-                      cc(:, col, n, m) = sum(loccc(:, col, j:j+ndegrade-1), 2)
+                      cc(:, col, n, m) = cc(:, col, n, m) &
+                           + sum(loccc(:, col, j:j+ndegrade-1), 2)
                    end do
                 end do
              end if
@@ -813,7 +814,7 @@ CONTAINS
              if (id == id_submap(i)) m = m + 1
              if (ksubmap_table(i, 0) .and. id == id_submap(i)) then
                 j = (k-1) * nosubpix
-                hits(:, m) = lochits(j:j+nosubpix-1)
+                hits(:, m) = hits(:, m) + lochits(j:j+nosubpix-1)
              end if
           end do
        else
@@ -824,7 +825,7 @@ CONTAINS
                 n = 0
                 do j = (k-1)*nosubpix*ndegrade, k*nosubpix*ndegrade-1, ndegrade
                    n = n + 1
-                   hits(n, m) = sum(lochits(j:j+ndegrade-1))
+                   hits(n, m) = hits(n, m) + sum(lochits(j:j+ndegrade-1))
                 end do
              end if
           end do
