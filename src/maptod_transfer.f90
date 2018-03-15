@@ -324,6 +324,10 @@ CONTAINS
     integer, allocatable :: nosubmaps_task(:)
     integer :: isubmap_start, isubmap_stop
 
+    ! Every process owns every submap in allreduce mode
+
+    if (allreduce) return
+
     if (.not. allocated(ksubmap_table)) &
          call abort_mpi('assign_submaps: ksubmap_table not allocated')
 
