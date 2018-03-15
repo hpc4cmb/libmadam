@@ -324,33 +324,6 @@ CONTAINS
     integer, allocatable :: nosubmaps_task(:)
     integer :: isubmap_start, isubmap_stop
 
-    ! Every process owns every submap in allreduce mode
-
-    if (allreduce) return
-
-    if (.not. allocated(ksubmap_table)) &
-         call abort_mpi('assign_submaps: ksubmap_table not allocated')
-
-    allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
-         nosubmaps_task(0:ntasks-1), stat=ierr)
-    if (ierr /= 0) call abort_mpi('No room to assign submaps')
-
-    if (id == 0 .and. nosubmaps_tot > 100000) then
-       write(*,'(a,i0,a,i0,a)') 'WARNING: You have a LOT of submaps (', &
-            nosubmaps_tot, &
-            '). Reassigning submaps will take time. Reduce nside_submap (', &
-            nside_submap, ') to divide the map in larger chunks'
-    end if
-
-    ksubmap = .false.
-    nosubmaps_task = 0
-
-    ksubmap = ksubmap_table
-
-    nosubmap_target = ceiling(dble(nosubmaps_tot) / ntasks)
-
-    id_submap = -1
-
     if (allreduce) then
        ! Assign the submaps in contiguous blocs.  This will allow
        ! fast MPI_allgather operations.
@@ -363,6 +336,30 @@ CONTAINS
           itask = itask + 1
        end do
     else
+       ! Every process owns every submap in allreduce mode
+       if (.not. allocated(ksubmap_table)) &
+            call abort_mpi('assign_submaps: ksubmap_table not allocated')
+
+       allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
+            nosubmaps_task(0:ntasks-1), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room to assign submaps')
+
+       if (id == 0 .and. nosubmaps_tot > 100000) then
+          write(*,'(a,i0,a,i0,a)') 'WARNING: You have a LOT of submaps (', &
+               nosubmaps_tot, &
+               '). Reassigning submaps will take time. Reduce nside_submap (', &
+               nside_submap, ') to divide the map in larger chunks'
+       end if
+
+       ksubmap = .false.
+       nosubmaps_task = 0
+
+       ksubmap = ksubmap_table
+
+       nosubmap_target = ceiling(dble(nosubmaps_tot) / ntasks)
+
+       id_submap = -1
+
        ! First assign submaps to processes with local data up to
        ! nosubmap_target submaps per process
 
@@ -410,6 +407,9 @@ CONTAINS
              itask = modulo(itask+1, ntasks)
           end if
        end do
+
+       deallocate(ksubmap)
+       deallocate(nosubmaps_task)
     end if
 
     ! update the auxiliary information
@@ -419,9 +419,6 @@ CONTAINS
     nopix_cross = nosubmaps * nosubpix_cross
     nosubmaps_max = nosubmaps
     call max_mpi(nosubmaps_max)
-
-    deallocate(ksubmap)
-    deallocate(nosubmaps_task)
 
   END SUBROUTINE assign_submaps
 
