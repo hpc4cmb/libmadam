@@ -332,6 +332,7 @@ CONTAINS
     end if
 
     nosubmap_target = ceiling(dble(nosubmaps_tot) / ntasks)
+    id_submap = -1
 
     if (allreduce) then
        ! Assign the submaps in contiguous blocs.  This will allow
@@ -357,8 +358,6 @@ CONTAINS
        nosubmaps_task = 0
 
        ksubmap = ksubmap_table
-
-       id_submap = -1
 
        ! First assign submaps to processes with local data up to
        ! nosubmap_target submaps per process
