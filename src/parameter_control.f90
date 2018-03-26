@@ -614,7 +614,7 @@ CONTAINS
 
   SUBROUTINE write_parameters()
 
-    integer :: idet, itod, i
+    integer :: idet, itod, i, j
     character(len=30) :: fi, fe, ff, fk, fs
     real(dp) :: sigma
 
@@ -642,6 +642,28 @@ CONTAINS
        call abort_mpi('Unknown function basis')
     end select
     write (*,fi) 'basis_order', basis_order, 'Destriping function order'
+
+    write (*, *)
+    write (*, fk) 'bin_subsets', bin_subsets
+    if (bin_subsets) then
+       write (*, '(x,a,t24,"= ")') 'Surveys'
+       do i = 1, nsurvey
+          write (*, '(i4,4x,a15,"  :  ")', advance='no') i, trim(surveys(i)%name)
+          do j = 1, surveys(i)%nspan
+             write (*, '("( ",f15.0," -- ",f15.0," )")', advance='no') &
+                  surveys(i)%starts(j), surveys(i)%stops(j)
+          end do
+          write (*, *)
+       end do
+       write (*, '(x,a,t24,"= ")') 'Detector sets'
+       do i = 1, ndetset
+          write (*, '(i4,4x,a15,"  :  ")', advance='no') i, trim(detsets(i)%name)
+          do j = 1, detsets(i)%ndet
+             write (*, '(a,x)', advance='no') trim(detsets(i)%detectors(j))
+          end do
+          write (*, *)
+       end do
+    end if
 
     write (*,*)
     write (*,fi) 'ntasks',ntasks,'Number of processes'
