@@ -347,7 +347,7 @@ contains
              if (id == 0) call toc('construct_preconditioner')
           end if
 
-          call wait_mpi          
+          call wait_mpi
 
           if (kwrite_covmat) then
 
@@ -940,6 +940,13 @@ contains
 
     if (.not. bin_subsets) return
 
+    call wait_mpi
+
+    if (info > 0 .and. id == 0) then
+       write (*, *) 'Binning subsets. nsurvey = ', nsurvey, &
+            ' ndetset = ', ndetset
+    end if
+
     cputime_final = cputime_final + get_time_and_reset(1)
 
     ! bin and write all requested subset maps with full data destriping.
@@ -966,7 +973,7 @@ contains
     loop_pass : do pass = 1, npass
 
        ! First pass produces the binned map, hit map, mask and the
-       ! noise matrices then the baselines are subtracted and the
+       ! noise matrices.  Then the baselines are subtracted and the
        ! second pass produces the destriped maps
        !
        ! only if both binned and destriped maps are required are
@@ -1008,7 +1015,12 @@ contains
 
           cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
 
-          if (nhit_survey == 0) cycle
+          if (nhit_survey == 0) then
+             if (info > 0 .and. id == 0) then
+                write (*, *) trim(surveyname), ' : no overlap'
+             end if
+             cycle
+          end if
 
           loop_detset : do idetset = 0, ndetset
 
@@ -1046,7 +1058,12 @@ contains
 
              cputime_flag_subset = cputime_flag_subset + get_time_and_reset(10)
 
-             if (nhit_det == 0) cycle loop_detset
+             if (nhit_det == 0) then
+                if (info > 0 .and. id == 0) then
+                   write (*, *) trim(detsetname), ' : no overlap'
+                end if
+                cycle loop_detset
+             end if
 
              if (temperature_only) then
                 nmap = 1
@@ -1219,6 +1236,7 @@ contains
 
     if (len_trim(filename) == 0) then
        file_exists = .false.
+       return
     else
        inquire(file=trim(path_output) // trim(filename), exist=file_exists)
        if (.not. file_exists) inquire(file=filename, exist=file_exists)
@@ -1227,9 +1245,9 @@ contains
     if (info > 0) then
        if (file_exists .and. id == 0) write (*,*) trim(filename) // ' exists!'
        if (.not. file_exists .and. id == 0) &
-            write (*,*) trim(path_output) // trim(filename) // ' does not exist!'
+            write (*,*) trim(path_output) // trim(filename) // ' does not exist'
        if (.not. file_exists .and. id == 0) &
-            write (*,*) trim(filename) // ' does not exist!'
+            write (*,*) trim(filename) // ' does not exist'
     end if
 
   end function file_exists
