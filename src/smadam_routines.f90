@@ -540,7 +540,6 @@ CONTAINS
                         + bf*basis_function(:, i-i0)
                 end do
 
-                ! This loop implicitly applies the locmap==0 (loccc==0) criterion
                 do order = 0, basis_order
                    bf = basis_function(order, i-i0)
                    if (nmap == 1) then
@@ -851,7 +850,7 @@ CONTAINS
        call wait_mpi
        cputime_cga_1 = cputime_cga_1 + get_time_and_reset(12)
 
-       wamap = 0.0
+       wamap = 0
        call collect_map(wamap, nosubpix_cross, .true.) ! locmap -> wamap
        call wait_mpi
        cputime_cga_mpi_reduce = cputime_cga_mpi_reduce + get_time_and_reset(12)
@@ -865,7 +864,7 @@ CONTAINS
             + get_time_and_reset(12)
 
        if (kfilter) then
-          call cinvmul(ap,p)
+          call cinvmul(ap, p)
        else
           ap = 0
           if (diagfilter /= 0) then
@@ -905,7 +904,7 @@ CONTAINS
 
        ap = ap + sum(ap_all_threads, dim=4)
 
-       Cputime_cga_2 = cputime_cga_2 + get_time(12)
+       cputime_cga_2 = cputime_cga_2 + get_time(12)
 
        pap = sum(p*ap)
        call sum_mpi(pap)
@@ -933,7 +932,7 @@ CONTAINS
        call sum_mpi(rr)
        beta = rz / rzo
 
-       if (ID==0.and.info.ge.2) write(*,'(i4,4es16.6," (",f6.3,"s)")') &
+       if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f6.3,"s)")') &
             istep, rz/rzinit, rr/rrinit, alpha, beta, get_time_and_reset(99)
 
        if ((rz/rzinit < cglimit .or. rr/rrinit < cglimit) &
@@ -957,7 +956,7 @@ CONTAINS
 
     cputime_cga = cputime_cga + get_time(10)
 
-    if (info >= 5) write(*,idf) ID,'Done'
+    if (info > 4) write(*,idf) ID,'Done'
 
   contains
 
