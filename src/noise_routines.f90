@@ -588,7 +588,7 @@ CONTAINS
     real(dp), intent(in) :: x(noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
     integer, intent(in) :: mode
-    integer :: ichunk, idet, m, no, noba, kstart, i, ipsd
+    integer :: ichunk, idet, m, no, noba, kstart, i, ipsd, ierr
     real(dp) :: x0
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
@@ -608,20 +608,22 @@ CONTAINS
 
     !$OMP PARALLEL DEFAULT(SHARED) NUM_THREADS(nthreads) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, x0, m, no, xx, fx, &
-    !$OMP         id_thread, ipsd)
+    !$OMP         id_thread, ipsd, ierr)
 
     id_thread = omp_get_thread_num()
 
     ! FFTW malloc is not thread safe but we want to allocate the workspace
     ! to be aligned to allow SIMD optimization in FFTW
 
-    !$OMP CRITICAL
-    pfx(id_thread) = fftw_alloc_complex(int(nof/2+1, C_SIZE_T))
-    call c_f_pointer(pfx(id_thread), fx, [nof/2+1])
-
-    pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-    call c_f_pointer(pxx(id_thread), xx, [nof])
-    !$OMP END CRITICAL
+!!$    !$OMP CRITICAL
+!!$    pfx(id_thread) = fftw_alloc_complex(int(nof/2+1, C_SIZE_T))
+!!$    call c_f_pointer(pfx(id_thread), fx, [nof/2+1])
+!!$
+!!$    pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+!!$    call c_f_pointer(pxx(id_thread), xx, [nof])
+!!$    !$OMP END CRITICAL
+    allocate(fx(nof/2+1), xx(nof), stat=ierr)
+    if (ierr /= 0) stop 'No room for Fourier transform'
 
     !$OMP DO SCHEDULE(DYNAMIC,1)
     do idet = 1, nodetectors
@@ -684,10 +686,12 @@ CONTAINS
     end do
     !$OMP END DO
 
-    !$OMP CRITICAL
-    call fftw_free(pfx(id_thread))
-    call fftw_free(pxx(id_thread))
-    !$OMP END CRITICAL
+!!$    !$OMP CRITICAL
+!!$    call fftw_free(pfx(id_thread))
+!!$    call fftw_free(pxx(id_thread))
+!!$    !$OMP END CRITICAL
+    deallocate(fx)
+    deallocate(xx)
 
     !$OMP END PARALLEL
 
@@ -970,13 +974,15 @@ CONTAINS
                 end if
 
                 id_thread = omp_get_thread_num()
-                !$OMP CRITICAL
-                pfx(id_thread) = fftw_alloc_complex(int(nof/2+1, C_SIZE_T))
-                call c_f_pointer(pfx(id_thread), fx, [nof/2+1])
-
-                pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-                call c_f_pointer(pxx(id_thread), xx, [nof])
-                !$OMP END CRITICAL
+!!$                !$OMP CRITICAL
+!!$                pfx(id_thread) = fftw_alloc_complex(int(nof/2+1, C_SIZE_T))
+!!$                call c_f_pointer(pfx(id_thread), fx, [nof/2+1])
+!!$
+!!$                pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+!!$                call c_f_pointer(pxx(id_thread), xx, [nof])
+!!$                !$OMP END CRITICAL
+                allocate(fx(nof/2+1), xx(nof), stat=ierr)
+                if (ierr /= 0) stop 'No room for Fourier transform'
 
                 !Remove the interval average first.
                 !This ensures that solution is independent of a constant
@@ -1017,10 +1023,12 @@ CONTAINS
                 z(kstart+1:kstart+noba, idet) = &
                      z(kstart+1:kstart+noba, idet) - x0
 
-                !$OMP CRITICAL
-                call fftw_free(pfx(id_thread))
-                call fftw_free(pxx(id_thread))
-                !$OMP END CRITICAL
+!!$                !$OMP CRITICAL
+!!$                call fftw_free(pfx(id_thread))
+!!$                call fftw_free(pxx(id_thread))
+!!$                !$OMP END CRITICAL
+                deallocate(fx)
+                deallocate(xx)
 
              end if
 
