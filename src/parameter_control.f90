@@ -126,15 +126,15 @@ CONTAINS
           ! Measure the plateau value, VERY Planck Specific but will work
           ! for white noise filters
 
-          nbin = 10
+          nbin = 1000
           allocate(freqs(nbin), data(nbin))
-          freqs = (/ (dble(i), i=1,nbin) /)
+          freqs = (/ (1 + dble(i*10)/nbin, i=0, nbin) /)
 
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
                 call interpolate_psd(detectors(idet)%psdfreqs, &
                      detectors(idet)%psds(:, ipsd), freqs, data)
-                rms = sqrt(minval(data) * fsample)
+                rms = sqrt(minval(data) * fsample) * .999
                 detectors(idet)%sigmas(ipsd) = rms
              end do
           end do
