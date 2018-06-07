@@ -39,11 +39,12 @@ CONTAINS
     real(dp), allocatable :: weights(:)
 
     ! noise weighting parameters
-    real(dp) :: sigma, rms, fbase, psdmin
+    real(dp) :: sigma, rms, fbase, psdmin, psdmax
     integer(i8b) :: nn, ipsd
 
     integer (i8b) :: nbin
     real(dp), allocatable :: freqs(:), data(:)
+    real(dp), pointer :: psd(:)
 
     ! Make sure path_output contains the separator
 
@@ -92,6 +93,22 @@ CONTAINS
     if (id == 0 .and. info > 0) then
        write(*,*)
        write(*,*) 'Initializing parameters'
+    end if
+
+    if (.not. radiometers) then
+
+       ! Regularize the provided PSDs by adding power to the
+       ! low frequency modes
+
+       do idet = 1, nodetectors
+          do ipsd = 1, detectors(idet)%npsd
+             psd => detectors(idet)%psds(:, ipsd)
+             i = maxloc(psd, 1)
+             psdmax = psd(i)
+             psd(1:i-1) = psdmax
+          end do
+       end do
+
     end if
 
     if (noise_weights_from_psd) then

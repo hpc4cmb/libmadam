@@ -168,7 +168,7 @@ MODULE commonparam
   logical :: kcompress_pixels=.false.
   character(len=SLEN) :: file_covmat = ''
 
-  type(detector_data), allocatable :: detectors(:)
+  type(detector_data), allocatable, target :: detectors(:)
 
   ! Derived directly from input parameters
   integer :: nmap=0, ncc=0, nside_max, nodetectors=-1

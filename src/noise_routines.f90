@@ -473,9 +473,11 @@ CONTAINS
       integer  :: i, j, ierr, n
       real(dp) :: plateau
       real(dp), allocatable :: freqs(:), data(:)
+      real(dp), pointer :: psd(:)
 
-      call interpolate_psd(detectors(idet)%psdfreqs, &
-           detectors(idet)%psds(:, ipsd), f, spectrum)
+      psd => detectors(idet)%psds(:, ipsd)
+
+      call interpolate_psd(detectors(idet)%psdfreqs, psd, f, spectrum)
 
       if (noise_weights_from_psd) then
 
@@ -496,8 +498,7 @@ CONTAINS
             allocate(freqs(n), data(n))
             freqs = fsample / 2
 
-            call interpolate_psd(detectors(idet)%psdfreqs, &
-                 detectors(idet)%psds(:, ipsd), freqs, data)
+            call interpolate_psd(detectors(idet)%psdfreqs, psd, freqs, data)
 
             plateau = data(1)
 
@@ -509,8 +510,7 @@ CONTAINS
             allocate(freqs(n), data(n))
             freqs = (/ (1 + dble(i*10)/n, i=0, n-1) /)
 
-            call interpolate_psd(detectors(idet)%psdfreqs, &
-                 detectors(idet)%psds(:, ipsd), freqs, data)
+            call interpolate_psd(detectors(idet)%psdfreqs, psd, freqs, data)
 
             plateau = minval(data)
 
@@ -704,9 +704,8 @@ CONTAINS
 
     real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin
-    real(dp), allocatable :: invcov(:, :), blockm(:, :), decay(:)
+    real(dp), allocatable :: invcov(:, :), blockm(:, :)
     logical :: neg
-    real(dp) :: tauinv
 
     if (precond_width < 1) return
 
@@ -764,21 +763,13 @@ CONTAINS
     prec_diag = 0
     memory_precond = noba_short_max*nodetectors*(nband*4.+8.)
 
-    allocate(invcov(nband+1, npsdtot), decay(nband+1), stat=ierr)
+    allocate(invcov(nband+1, npsdtot), stat=ierr)
     if (ierr /= 0) stop 'No room for invcov'
-
-    ! Ensure that the preconditioner is positive definite
-    tauinv = 1. / (nband / 2.)
-    do i = 1, size(decay)
-       decay(i) = exp(-(dble(i - 1) * tauinv)**2)
-    end do
 
     do ipsd = 1, npsdtot
        call dfftinv(xx, fcov(:, ipsd)) ! C_a inverse into real domain
-       invcov(:, ipsd) = xx(1:nband+1) * decay
+       invcov(:, ipsd) = xx(1:nband+1)
     end do
-
-    deallocate(decay)
 
     !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
     !$OMP     DEFAULT(NONE) &
