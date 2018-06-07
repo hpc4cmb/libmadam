@@ -505,9 +505,9 @@ CONTAINS
 
             ! Measure and subtract the plateau value, VERY Planck Specific
 
-            n = 10
+            n = 1000
             allocate(freqs(n), data(n))
-            freqs = (/ (dble(i), i = 1, n) /)
+            freqs = (/ (1 + dble(i*10)/n, i=0, n-1) /)
 
             call interpolate_psd(detectors(idet)%psdfreqs, &
                  detectors(idet)%psds(:, ipsd), freqs, data)
@@ -704,8 +704,9 @@ CONTAINS
 
     real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin
-    real(dp), allocatable :: invcov(:, :), blockm(:, :)
+    real(dp), allocatable :: invcov(:, :), blockm(:, :), decay(:)
     logical :: neg
+    real(dp) :: tauinv
 
     if (precond_width < 1) return
 
@@ -749,7 +750,7 @@ CONTAINS
     end if
 
     use_diagonal = .false.
-    nband = precond_width
+    nband = min(precond_width, nof / 2 - 1)
     if (.not. allocated(bandprec)) then
        allocate(bandprec(nband+1, noba_short_max, nodetectors), stat=ierr)
        if (ierr /= 0) stop 'No room for bandprec'
@@ -763,13 +764,21 @@ CONTAINS
     prec_diag = 0
     memory_precond = noba_short_max*nodetectors*(nband*4.+8.)
 
-    allocate(invcov(nof, npsdtot), stat=ierr)
+    allocate(invcov(nband+1, npsdtot), decay(nband+1), stat=ierr)
     if (ierr /= 0) stop 'No room for invcov'
+
+    ! Ensure that the preconditioner is positive definite
+    tauinv = 1. / (nband / 2.)
+    do i = 1, size(decay)
+       decay(i) = exp(-(dble(i - 1) * tauinv)**2)
+    end do
 
     do ipsd = 1, npsdtot
        call dfftinv(xx, fcov(:, ipsd)) ! C_a inverse into real domain
-       invcov(:, ipsd) = xx
+       invcov(:, ipsd) = xx(1:nband+1) * decay
     end do
+
+    deallocate(decay)
 
     !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
     !$OMP     DEFAULT(NONE) &

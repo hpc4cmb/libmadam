@@ -128,13 +128,13 @@ CONTAINS
 
           nbin = 1000
           allocate(freqs(nbin), data(nbin))
-          freqs = (/ (1 + dble(i*10)/nbin, i=0, nbin) /)
+          freqs = (/ (1 + dble(i*10)/nbin, i=0, nbin-1) /)
 
           do idet = 1, nodetectors
              do ipsd = 1, detectors(idet)%npsd
                 call interpolate_psd(detectors(idet)%psdfreqs, &
                      detectors(idet)%psds(:, ipsd), freqs, data)
-                rms = sqrt(minval(data) * fsample) * .999
+                rms = sqrt(minval(data) * fsample)
                 detectors(idet)%sigmas(ipsd) = rms
              end do
           end do
