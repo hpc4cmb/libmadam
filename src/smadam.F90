@@ -99,7 +99,7 @@ contains
     integer(c_long), intent(in), value :: npsdval
     real(c_double), intent(in) :: psdvals(npsdval)
 
-    integer :: ierr, idet, i, pixmin, pixmax
+    integer :: ierr, idet, i, pixmin, pixmax, subchunkcounter
 
     ! set up MPI
 
@@ -185,7 +185,9 @@ contains
 
     subchunk_start = isubchunk
 
-    loop_subchunk : do isubchunk = subchunk_start, nsubchunk
+    loop_subchunk : do subchunkcounter = subchunk_start, nsubchunk
+       ! isubchunk == 0 means full data and it is the last set to run
+       isubchunk = modulo(subchunkcounter + 1, nsubchunk + 1)
 
        subchunk_file_map = file_map
        subchunk_file_binmap = file_binmap
@@ -234,7 +236,7 @@ contains
        call write_parameters
        call wait_mpi
 
-       if (isubchunk == subchunk_start) then
+       if (subchunkcounter == subchunk_start) then
           call allocate_tod
 
           call allocate_baselines
@@ -323,7 +325,7 @@ contains
           call time_stamp
 
           if (use_inmask) then
-             if (isubchunk == subchunk_start) then
+             if (subchunkcounter == subchunk_start) then
                 call tic
                 call read_inmask(inmask)
                 if (id == 0) call toc('read_inmask')
@@ -417,8 +419,8 @@ contains
 
        call run_subsets()
 
-       if (isubchunk == nsubchunk .and. kfirst) then
-          ! subtract the baselines to return the destriped TOD.
+       if (isubchunk == 0 .and. kfirst) then
+          ! subtract the full data baselines to return the destriped TOD.
           ! If the baselines were already subtracted, the call has no effect.
           call tic
           call clean_tod(tod, aa)
@@ -428,7 +430,7 @@ contains
        call restore_pixels
 
        if (.not. mcmode) then
-          if (isubchunk == nsubchunk) then
+          if (subchunkcounter == nsubchunk) then
              call free_baselines
           end if
           call free_maps
@@ -538,7 +540,7 @@ contains
        file_leakmatrix = subchunk_file_leakmatrix
        file_wcov = subchunk_file_wcov
 
-       if (isubchunk == nsubchunk) exit loop_subchunk
+       if (subchunkcounter == nsubchunk) exit loop_subchunk
 
        call reset_timers
 
@@ -786,8 +788,8 @@ contains
 
     call run_subsets()
 
-    if (isubchunk == nsubchunk .and. kfirst) then
-       ! subtract the baselines to return the destriped TOD.
+    if (isubchunk == 0 .and. kfirst) then
+       ! subtract the full data baselines to return the destriped TOD.
        ! If the baselines were already subtracted, the call has no effect.
        call tic
        call clean_tod(tod, aa)

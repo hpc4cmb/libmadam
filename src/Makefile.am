@@ -131,4 +131,4 @@ AM_TESTS_ENVIRONMENT = \
 TESTS = test_libmadam test_libmadam.py test_libmadam_mc.py
 
 clean-local:
-	rm -rf *.mod maps/*
+	rm -rf *.mod maps/* pymaps/* binned.fits hits.fits
