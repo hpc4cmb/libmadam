@@ -346,6 +346,10 @@ CONTAINS
     !NCVM
     case ('bfinvert')
        read(value, *, iostat=ierr) bfinvert
+    case ('lag_max')
+       read(value, *, iostat=ierr) lag_max
+    case ('lag_overlap')
+       read(value, *, iostat=ierr) lag_overlap
     case ('file_covmat')
        file_covmat = trim(value)
 
