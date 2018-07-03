@@ -164,8 +164,7 @@ MODULE commonparam
   character(len=80) :: instrument  = ''
 
   ! NCVM specific parameters
-  logical :: kwrite_covmat=.false., ksplit_covmat=.false., bfinvert=.false.
-  logical :: kcompress_pixels=.false.
+  logical :: kwrite_covmat=.false., bfinvert=.true.
   character(len=SLEN) :: file_covmat = ''
 
   type(detector_data), allocatable, target :: detectors(:)

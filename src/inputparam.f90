@@ -344,10 +344,6 @@ CONTAINS
     case('nwrite_binary')
        read(value, *, iostat=ierr) nwrite_binary
     !NCVM
-    case ('kcompress_pixels')
-       read(value, *, iostat=ierr) kcompress_pixels
-    case ('ksplit_covmat')
-       read(value, *, iostat=ierr) ksplit_covmat
     case ('bfinvert')
        read(value, *, iostat=ierr) bfinvert
     case ('file_covmat')
