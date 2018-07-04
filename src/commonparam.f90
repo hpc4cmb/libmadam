@@ -164,8 +164,7 @@ MODULE commonparam
   character(len=80) :: instrument  = ''
 
   ! NCVM specific parameters
-  logical :: kwrite_covmat=.false., bfinvert=.true.
-  integer :: lag_max = 4000, lag_overlap = 1000 ! Only with bfinvert=.true.
+  logical :: kwrite_covmat=.false.
   character(len=SLEN) :: file_covmat = ''
 
   type(detector_data), allocatable, target :: detectors(:)

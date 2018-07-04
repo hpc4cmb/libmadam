@@ -815,9 +815,8 @@ CONTAINS
     end if
 
     if (kwrite_covmat) then
-       write (*,fk) 'kwrite_covmat',kwrite_covmat,'Covariance matrix written'
-       write (*,fs)  'file_covmat',trim(file_covmat)
-       write (*,fk) 'bfinvert',bfinvert,'Brute force invert middle matrix'
+       write (*,fk) 'kwrite_covmat', kwrite_covmat, 'Covariance matrix written'
+       write (*,fs) 'file_covmat', trim(file_covmat)
     end if
 
     write (*,*)
@@ -843,17 +842,14 @@ CONTAINS
     write (*,*)
     write (*,*) 'Detectors available on the FIRST process and noise ' &
          // 'according to the FIRST period'
-    write (*,'(a)') ' Detectors:   psi_pol    kpolar       sigma' // &
-         '       slope       fknee        fmin      weight      1/sqrt(weight)'
-    do idet = 1,nodetectors
-       sigma = 0.0
-       if (detectors(idet)%weights(1) > 0) &
-            sigma = 1.d0 / sqrt(detectors(idet)%weights(1))
-       write (*,'(x,a,t12,f12.4,l5,3x,6es12.4)') detectors(idet)%name,  &
-            detectors(idet)%psipol, detectors(idet)%kpolar, &
-            detectors(idet)%sigmas(1), detectors(idet)%slope, &
-            detectors(idet)%fknee, detectors(idet)%fmin, &
-            detectors(idet)%weights(1), sigma
+    write (*,'(x,a12,3a15)') 'Detectors   ', 'sigma', 'weight', '1/sqrt(weight)'
+    do idet = 1, nodetectors
+       sigma = 0
+       if (detectors(idet)%weights(1) > 0) then
+          sigma = 1 / sqrt(detectors(idet)%weights(1))
+       end if
+       write (*,'(x,a12,3g15.5)') detectors(idet)%name, &
+            detectors(idet)%sigmas(1), detectors(idet)%weights(1), sigma
     end do
 
     if (info > 1) then

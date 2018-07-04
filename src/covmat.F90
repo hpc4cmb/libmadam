@@ -122,12 +122,7 @@ contains
                       jbase = local_basehitmap(j, jpix)
 
                       lag = abs(jbase - ibase) + 1
-                      if (bfinvert) then
-                         if (lag > wband) cycle loop_baseline2
-                         mm = -middlematrix(lag, ibase)
-                      else
-                         mm = -middlematrix(lag, 1)
-                      end if
+                      mm = -middlematrix(lag, 1)
 
                       if (nmap == 1) then
                          local_covmat(1, 1, jpix, ipix) = &
@@ -528,7 +523,7 @@ contains
     integer(i4b), intent(in) :: ipsd, idet
     real(dp), intent(in) :: detweight
     integer(i4b), intent(in) :: kstart, noba
-    integer(i4b) :: ierr, ibase, jbase, lag, buflen, offset, istart
+    integer(i4b) :: ierr
 
     integer(i4b), save :: last_ipsd = -1, last_noba = -1, noba_max = 0
     real(dp), allocatable :: buf(:, :)
@@ -544,150 +539,24 @@ contains
 
     if (allocated(middlematrix)) deallocate(middlematrix)
 
-    if (bfinvert) then
-       if (lag_max < noba) then
-          wband = lag_max
-       else
-          wband = noba
-       end if
-       allocate(middlematrix(wband, noba), stat=ierr)
-       if (ierr /= 0) then
-          print *,'Failed to allocate ', wband*noba*8/2**20, &
-               ' MB for middlematrix. noba = ', noba, &
-               ', wband = ', wband, ', lag_max = ', lag_max
-          call abort_mpi('No room for local middlematrix')
-       end if
-       if (noba > noba_max) then
-          memory_ncm = memory_ncm - wband*noba_max*8
-          memory_ncm = memory_ncm + wband*noba*8
-          noba_max = noba
-       end if
-    else
-       allocate(middlematrix(noba, 1), stat=ierr)
-       if (ierr /= 0) then
-          print *,'Failed to allocate ', noba*8/2**20, &
-               ' MB for middlematrix. noba = ', noba
-          call abort_mpi('No room for local middlematrix')
-       end if
-       if (noba > noba_max) then
-          memory_ncm = memory_ncm - noba_max*8
-          memory_ncm = memory_ncm + noba*8
-          noba_max = noba
-       end if
+    allocate(middlematrix(noba, 1), stat=ierr)
+    if (ierr /= 0) then
+       print *,'Failed to allocate ', noba*8/2**20, &
+            ' MB for middlematrix. noba = ', noba
+       call abort_mpi('No room for local middlematrix')
+    end if
+    if (noba > noba_max) then
+       memory_ncm = memory_ncm - noba_max*8
+       memory_ncm = memory_ncm + noba*8
+       noba_max = noba
     end if
 
     middlematrix = 0
 
-    if (.not. bfinvert) then
-       ! Approximate M to be circulant and ignore gaps
-       ! Adding the white noise term in Fourier domain means adding
-       ! a constant offset
-       call dfftinv(xx, 1/(fcov(:, ipsd) + nshort * detweight))
-       middlematrix(:,1) = xx(1:noba)
-    else
-       ! Build inverse M without circulancy and brute force invert
-       if (any(fcov(:, ipsd) == 0)) then
-          print *, id, ' : WARNING : fcov had zero modes, ', &
-               'regularizing for brute force inverse'
-          where (fcov(:, ipsd) == 0) fcov(:, ipsd) = 1.0
-       end if
-
-       ! xx == C_a, the prior baseline covariance
-       call dfftinv(xx, 1 / fcov(:, ipsd))
-
-       ! middlematrix = spread(xx(1:wband), 2, noba)
-
-       ! Process the matrix in overlapping diagonal blocks
-       offset = 0
-       loop_block : do
-          buflen = noba - offset
-          if (buflen > wband) buflen = wband
-          if (offset + buflen > noba) buflen = noba - offset
-          allocate(buf(buflen, buflen), stat=ierr)
-          if (ierr /= 0) then
-             print *,'Failed to allocate ', buflen**2*8/2**20, &
-                  ' MB for middlematrix buffer. buflen = ', buflen, &
-                  ', wband = ', wband, ', lag_max = ', lag_max
-             call abort_mpi('No room for middlematrix buffer')
-          end if
-          buf = 0
-          do ibase = 1, buflen
-             lag = 0
-             do jbase = ibase, buflen
-                lag = lag + 1
-                buf(jbase, ibase) = xx(lag)
-             end do
-          end do
-
-          ! invert using lapack to get C_a^-1
-          cputime_middlematrix = cputime_middlematrix + get_time_and_reset(10)
-          call dpotrf('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : C_a factorization failed with info = ', ierr
-             stop 'C_a factorization failed'
-          end if
-          call dpotri('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : C_a inversion failed with info = ', ierr
-             stop 'C_a inversion failed'
-          end if
-          cputime_invert_middlematrix = &
-               cputime_invert_middlematrix + get_time_and_reset(10)
-
-          ! add the white noise diagonal
-
-          do ibase = 1, buflen
-             buf(ibase, ibase) = buf(ibase, ibase) &
-                  + nna(0, 0, kstart + offset + ibase, idet)
-          end do
-          cputime_middlematrix = cputime_middlematrix + get_time_and_reset(10)
-
-          ! invert again to get the complete middle matrix
-
-          call dpotrf('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : C_a factorization failed with info = ', ierr
-             stop 'C_a factorization failed'
-          end if
-          call dpotri('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : middlematrix inversion failed with info = ', ierr
-             stop 'middlematrix inversion failed'
-          end if
-          cputime_invert_middlematrix = cputime_invert_middlematrix &
-               + get_time_and_reset(10)
-
-          ! The results are in lower diagonal form
-
-          if (offset == 0) then
-             istart = 1
-          else
-             istart = 1 + lag_overlap / 2
-          end if
-
-          do ibase = istart, buflen
-             lag = 0
-             do jbase = ibase, buflen
-                lag = lag + 1
-                middlematrix(lag, offset + ibase) = buf(jbase, ibase)
-                middlematrix(lag, offset + jbase) = buf(jbase, ibase)
-             end do
-          end do
-
-          cputime_symmetrize_middlematrix = &
-               cputime_symmetrize_middlematrix + get_time_and_reset(10)
-
-          deallocate(buf)
-
-          if (offset + buflen == noba) then
-             exit loop_block
-          else
-             offset = offset + buflen - lag_overlap
-          end if
-
-       end do loop_block
-
-    end if
+    ! Adding the white noise term in Fourier domain means adding
+    ! a constant offset
+    call dfftinv(xx, 1/(fcov(:, ipsd) + nshort * detweight))
+    middlematrix(:,1) = xx(1:noba)
 
     last_ipsd = ipsd
     last_noba = noba
