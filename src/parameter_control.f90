@@ -209,7 +209,7 @@ CONTAINS
           where (detectors(idet)%sigmas == 0)
              detectors(idet)%weights = 0
           elsewhere
-             detectors(idet)%weights = 1.d0 / detectors(idet)%sigmas**2
+             detectors(idet)%weights = 1.d0 / detectors(idet)%plateaus / fsample
           end where
        end do
 
@@ -234,12 +234,12 @@ CONTAINS
 
                 allocate(weights(detectors(idet1)%npsd))
 
-                where (detectors(idet1)%sigmas == 0 &
-                     .or. detectors(idet2)%sigmas == 0)
+                where (detectors(idet1)%plateaus == 0 &
+                     .or. detectors(idet2)%plateaus == 0)
                    weights = 0
                 elsewhere
-                   weights = 2 / (detectors(idet1)%sigmas**2 &
-                        + detectors(idet2)%sigmas**2)
+                   weights = 2 / (detectors(idet1)%plateaus &
+                        + detectors(idet2)%plateaus) / fsample
                 end where
                 detectors(idet1)%weights = weights
                 detectors(idet2)%weights = weights
