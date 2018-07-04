@@ -48,6 +48,70 @@ MODULE noise_routines
 
 CONTAINS
 
+  subroutine measure_noise_weights(radiometers)
+    !
+    ! Determine noise weights and split the PSDs into
+    ! baselines and "white" (small scale) noise
+    !
+    logical, intent(in) :: radiometers
+    real(dp) :: fstep, fbase, flower, fupper, sigma, rms, plateau
+    integer :: nn, ipsd, nbin, ilower, iupper, ibase, idet, i
+    real(dp), allocatable :: freqs(:), data(:)
+
+    if (radiometers) then
+       ! well-behaved PSD, just get the last PSD bin value
+       nbin = 1
+       allocate(freqs(nbin), data(nbin))
+       freqs = fsample / 2
+
+       do idet = 1, nodetectors
+          do ipsd = 1, detectors(idet)%npsd
+             call interpolate_psd(detectors(idet)%psdfreqs, &
+                  detectors(idet)%psds(:,ipsd), freqs, data)
+             plateau = data(1)
+             rms = sqrt(plateau * fsample)
+             detectors(idet)%sigmas(ipsd) = rms
+             detectors(idet)%plateaus(ipsd) = plateau
+          end do
+       end do
+       deallocate(freqs, data)
+    else
+       ! Measure the plateau value, VERY Planck Specific but will work
+       ! for white noise filters
+       nbin = 10000
+       fstep = fsample * .5 / nbin
+       allocate(freqs(nbin), data(nbin))
+       freqs = (/ (fstep * i, i=1, nbin) /)
+       fbase = 1 / (dnshort / fsample) ! baseline frequency
+       ibase = fbase / fstep
+       flower = 1 ! Plateau lower limit
+       fupper = 10 ! Plateau upper limit
+       ilower = flower / fstep
+       iupper = fupper / fstep
+
+       do idet = 1, nodetectors
+          do ipsd = 1, detectors(idet)%npsd
+             call interpolate_psd(detectors(idet)%psdfreqs, &
+                  detectors(idet)%psds(:, ipsd), freqs, data)
+             plateau = minval(data(ilower:iupper))
+             ! integrate the RMS from the residual PSD:
+             ! 1. constant PSD up to fbase
+             rms = ibase * plateau
+             ! 2. then integrate everything left
+             do i = ibase + 1, nbin
+                rms = rms + data(i)
+             end do
+             rms = sqrt(rms / nbin * fsample)
+             detectors(idet)%sigmas(ipsd) = rms
+             detectors(idet)%plateaus(ipsd) = plateau
+          end do
+       end do
+       deallocate(freqs, data)
+    end if
+
+  end subroutine measure_noise_weights
+
+
   subroutine interpolate_psd(freq, psd, targetfreq, targetpsd)
 
     ! Use linear interpolation in the log-log plane
@@ -483,7 +547,8 @@ CONTAINS
 
          ! the sigmas have already been updated from the PSDs
 
-         plateau = detectors(idet)%sigmas(ipsd)**2 / fsample
+         !plateau = detectors(idet)%sigmas(ipsd)**2 / fsample
+         plateau = detectors(idet)%plateaus(ipsd)
 
       else
 

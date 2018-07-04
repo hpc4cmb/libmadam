@@ -4,7 +4,7 @@ MODULE parameter_control
 
   use commonparam
   use mpi_wrappers
-  use noise_routines, only : interpolate_psd
+  use noise_routines, only : interpolate_psd, measure_noise_weights
   use pointing, only : subchunk
   use maps_and_baselines, only : memory_baselines, memory_maps
 
@@ -29,21 +29,14 @@ CONTAINS
     ! enabled by default and looping over pointing, time and buffer
     ! are disabled
 
-    integer(i4b) :: nodets_per_point, nodet_pol, idet, ipoint, ndet, i, m, n
-    integer(i4b) :: nleft, ns, ierr
+    integer(i4b) :: nodets_per_point, nodet_pol, idet, ipoint, ndet, i, m, n, &
+         nleft, ns, ierr, idet1, idet2, horn1, horn2, ipsd
     real(i8b) :: weight
     logical :: use_all_data
-    integer(i4b) :: idet1, idet2, horn1, horn2
     character(len=SLEN) :: subsetname
-
     real(dp), allocatable :: weights(:)
+    real(dp) :: psdmin, psdmax
 
-    ! noise weighting parameters
-    real(dp) :: sigma, rms, fbase, psdmin, psdmax
-    integer(i8b) :: nn, ipsd
-
-    integer (i8b) :: nbin
-    real(dp), allocatable :: freqs(:), data(:)
     real(dp), pointer :: psd(:)
 
     ! Make sure path_output contains the separator
@@ -112,54 +105,11 @@ CONTAINS
     end if
 
     if (noise_weights_from_psd) then
-
        ! Improve noise weighting in case we have full PSDs from TOAST
-
        if (id == 0 .and. info > 0) then
           write (*,*) 'Adjusting noise weights using noise spectra '
        end if
-
-       if (radiometers) then
-
-          ! well-behaved PSD, just get the last PSD bin value
-
-          nbin = 1
-          allocate(freqs(nbin), data(nbin))
-          freqs = fsample / 2
-
-          do idet = 1, nodetectors
-             do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd(detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:,ipsd), freqs, data)
-                rms = sqrt(data(1) * fsample)
-                detectors(idet)%sigmas(ipsd) = rms
-             end do
-          end do
-
-          deallocate(freqs, data)
-
-       else
-
-          ! Measure the plateau value, VERY Planck Specific but will work
-          ! for white noise filters
-
-          nbin = 1000
-          allocate(freqs(nbin), data(nbin))
-          freqs = (/ (1 + dble(i*10)/nbin, i=0, nbin-1) /)
-
-          do idet = 1, nodetectors
-             do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd(detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:, ipsd), freqs, data)
-                rms = sqrt(minval(data) * fsample)
-                detectors(idet)%sigmas(ipsd) = rms
-             end do
-          end do
-
-          deallocate(freqs, data)
-
-       end if
-
+       call measure_noise_weights(radiometers)
     end if
 
     ! Checkings
