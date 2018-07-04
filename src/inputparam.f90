@@ -128,7 +128,7 @@ CONTAINS
        if (nint == 0) nint = 1
        detectors(idet)%npsd = nint
        allocate(detectors(idet)%weights(nint), detectors(idet)%sigmas(nint), &
-            detectors(idet)%psdstarts(nint))
+            detectors(idet)%psdstarts(nint), detectors(idet)%plateaus(nint))
        detweight = detweights(idet)
        detectors(idet)%weights = detweight
        if (detweight > 0._dp) then
@@ -199,8 +199,6 @@ CONTAINS
     select case (key)
     case ('info')
        read(value, *, iostat=ierr) info
-    case ('runfile')
-       file_simulation = trim(value)
     case ('nthreads')
        read(value, *, iostat=ierr) nthreads
     case ('nsubchunk')
@@ -337,8 +335,6 @@ CONTAINS
        file_spectrum = trim(value)
     case ('file_gap')
        file_gap = trim(value)
-    case ('file_fpdb_supplement')
-       file_fpdb_supplement = trim(value)
     case('binary_output')
        read(value, *, iostat=ierr) binary_output
     case('nwrite_binary')

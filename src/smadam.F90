@@ -898,6 +898,7 @@ contains
 
 
   subroutine clear_caches() bind(c, name='clear_caches')
+    integer :: idet
 
     if (.not. cached .and. id == 0) &
          write (*,*) 'WARNING: Madam caches are already empty.'

@@ -1480,7 +1480,6 @@ CONTAINS
     endif
 
     call fits_add_key(out, 'PARFILE', file_param, 'Parameter file')
-    call fits_add_key(out, 'SIMFILE', file_simulation, 'Simulation file')
 
   END SUBROUTINE write_header_code
 
@@ -1526,16 +1525,12 @@ CONTAINS
          'Mission duration/days')
     call fits_add_key(out,'TSTART', real(istart_mission*samples_to_d), &
          'Mission start/days')
-    ! RK edit begins
     call fits_add_key(out, 'IMISSION', nosamples_tot, &
          'Mission duration/samples')
     call fits_add_key(out,'ISTART', istart_mission, &
          'Mission start/samples')
     call fits_add_key(out, 'NSUBCHNK', nsubchunk,'Number of subchunks')
     call fits_add_key(out, 'ISUBCHNK', isubchunk,'Index of subchunk')
-    ! RK edit ends
-    call fits_add_key(out, 'SIMFILE', trim(file_simulation), 'Simulation file')
-
     call fits_add_comment(out, '---------------------------------')
     call fits_add_comment(out, '         Detector info           ')
     call fits_add_comment(out, '---------------------------------')
@@ -1546,12 +1541,6 @@ CONTAINS
     do i = 1, nodetectors
        call fits_add_key(out, addi('DETNAM',i), detectors(i)%name, &
             'Detector name')
-       call fits_add_key(out, addi('PSIPOL',i), degs(detectors(i)%psipol), &
-            'Psi_pol/deg')
-       call fits_add_key(out, addi('KPOLAR',i), detectors(i)%kpolar, &
-            'Polarized/nonpolarized detector')
-       call fits_add_key(out, addi('IPOINT',i), detectors(i)%ipoint, &
-            'Pointing ID')
     enddo
     call fits_add_key(out, 'TEMPONLY', temperature_only, 'Temperature map only')
 

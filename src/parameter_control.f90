@@ -162,10 +162,6 @@ CONTAINS
 
     end if
 
-    ! Check for FPDB supplement
-
-    if (len_trim(file_fpdb_supplement) > 0) call parse_fpdb_supplement()
-
     ! Checkings
 
     if (bin_subsets .or. do_leakmatrix) then
@@ -397,88 +393,6 @@ CONTAINS
 
 
   CONTAINS
-
-
-    subroutine parse_fpdb_supplement()
-      !
-      ! file_fpdb_supplement is used to override information from TOAST
-      !
-      character(len=200) :: line, name, key
-      integer :: iend, nline, iline, i, i2, ifield, idet, ierr
-      logical :: there
-      real(dp) :: value
-
-      if (id == 0) then
-         ! Check file and count the number of lines
-         inquire(file=file_fpdb_supplement, exist=there)
-         if (.not. there) call abort_mpi('fpdb_supplement not found')
-
-         open(unit=55, file=trim(file_fpdb_supplement))
-         nline = 0
-         do
-            read(55, '(a)',iostat=iend) line
-            if (iend < 0) exit
-            nline = nline + 1
-         end do
-         rewind(55)
-      end if
-
-      call broadcast_mpi(nline, 0)
-
-      do iline = 1,nline
-         if (id == 0) read(55, '(a)') line
-         call broadcast_mpi(line, 0)
-
-         ! check for comment lines
-         if (index(adjustl(line),'#') == 1 .or. len_trim(line) == 0) cycle
-
-         i = 1
-         do ifield = 1,2
-            i2 = scan(line(i:), ',') - 1
-            if (i2 < 1) &
-                 call abort_mpi('Bad line in fpdb_supplement: ' // trim(line))
-
-            select case(ifield)
-            case (1)
-               name = line(i:i+i2-1)
-            case (2)
-               key = line(i:i+i2-1)
-            end select
-
-            i = i + i2 + 1
-         end do
-
-         read(line(i:), *, iostat=ierr) value
-         if (ierr /= 0) then
-            call abort_mpi('Failed to parse ' // trim(line(i:)) // &
-                 ' in ' // trim(line))
-         end if
-
-         if (id == 0) write (*,'(3(a," : "),g15.5)') &
-              'supplemental', trim(name), trim(key), value
-
-         do idet = 1,nodetectors
-            if (detectors(idet)%name == trim(name)) then
-               select case(trim(key))
-               case ('slope')
-                  detectors(idet)%slope = value
-               case ('fknee')
-                  detectors(idet)%fknee= value
-               case ('fmin')
-                  detectors(idet)%fmin = value
-               case ('sigma')
-                  detectors(idet)%sigmas = value
-               case ('psipol')
-                  detectors(idet)%psipol = value
-               case default
-                  call abort_mpi('Unknown key in fpdb_supplement: ' // trim(key))
-               end select
-               exit
-            end if
-         end do
-      end do
-
-    end subroutine parse_fpdb_supplement
 
 
     !------------------------------------------------------------------------

@@ -80,7 +80,7 @@ CONTAINS
 
   SUBROUTINE close_pointing
 
-    integer :: k
+    integer :: k, idet
 
     if (allocated(ksubmap)) deallocate(ksubmap)
     if (allocated(subtable1)) deallocate(subtable1)
@@ -99,9 +99,22 @@ CONTAINS
 
     if (allocated(id_submap)) deallocate(id_submap)
 
-    if (allocated(detectors)) deallocate(detectors)
+    if (allocated(detectors)) then
+       do idet = 1, nodetectors
+          deallocate(detectors(idet)%weights)
+          deallocate(detectors(idet)%sigmas)
+          deallocate(detectors(idet)%psdstarts)
+          deallocate(detectors(idet)%plateaus)
+          if (allocated(detectors(idet)%psdfreqs)) then
+             deallocate(detectors(idet)%psdfreqs)
+             deallocate(detectors(idet)%psds)
+          end if
+       end do
+       deallocate(detectors)
+    end if
 
     buffersize = 0
+    nodetectors = 0
 
   END SUBROUTINE close_pointing
 

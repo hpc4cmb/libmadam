@@ -37,7 +37,11 @@ MODULE commonparam
      real(dp), allocatable :: psdstarts(:)
      real(dp), allocatable :: psdfreqs(:)
      real(dp), allocatable :: psds(:,:)
-     real(dp), allocatable :: sigmas(:), weights(:)
+     real(dp), allocatable :: sigmas(:) ! "white" noise sigma
+     real(dp), allocatable :: weights(:) ! detector noise weight
+     ! plateau is a constant offset subtracted from the PSD to get
+     ! the 1/f (baseline) part
+     real(dp), allocatable :: plateaus(:)
   END TYPE detector_data
 
   real(dp) :: fsample = 1 ! Sampling frequency
@@ -147,9 +151,8 @@ MODULE commonparam
   logical :: rm_monopole=.false., temperature_only=.false.
 
   ! Input files
-  character(len=SLEN) :: file_param='', file_simulation='', &
-       file_inmask='', file_spectrum='', file_gap='', &
-       file_fpdb_supplement=''
+  character(len=SLEN) :: file_param='', &
+       file_inmask='', file_spectrum='', file_gap=''
 
   ! Output files
   character(len=SLEN) :: file_root='madam'
