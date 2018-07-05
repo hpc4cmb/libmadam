@@ -319,8 +319,9 @@ contains
 
              if (local_covmat(1, 1, mypix2, mypix1) == 0) cycle loop_row
 
-             covmat_send(row:row+2, col:col+2) = &
-                  covmat_send(row:row+2, col:col+2) &
+
+             covmat_send(row:row+nmap-1, col:col+nmap-1) = &
+                  covmat_send(row:row+nmap-1, col:col+nmap-1) &
                   + local_covmat(:, :, mypix2, mypix1)
           end do loop_row
        end do loop_col
