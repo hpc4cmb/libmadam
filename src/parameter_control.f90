@@ -325,7 +325,7 @@ CONTAINS
     ! covmat specific checks
     if (kwrite_covmat) then
        ! ensure that the baseline correlation is evaluated far enough
-       filter_time = 48.*3600
+       filter_time = maxval(noba_short_pp) * dnshort / fsample * 2.1
     end if
 
 
