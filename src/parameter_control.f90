@@ -241,12 +241,14 @@ CONTAINS
                    weights = 2 / (detectors(idet1)%plateaus &
                         + detectors(idet2)%plateaus) / fsample
                 end where
-                detectors(idet1)%weights = weights
-                detectors(idet2)%weights = weights
-                if (id == 0) write (*,'(a,es15.6,a)') &
+                if (id == 0) write (*,'(a,g15.6,a,g15.5,a,g15.5)') &
                      'Assigning horn weight, ', weights(1), ', to ' // &
                      trim(detectors(idet1)%name) // ' and ' // &
-                     trim(detectors(idet2)%name)  // ' for the FIRST period'
+                     trim(detectors(idet2)%name)  // ' for the FIRST period' &
+                     // '. Original weights were ', detectors(idet1)%weights(1), &
+                     ' and ', detectors(idet2)%weights(1)
+                detectors(idet1)%weights = weights
+                detectors(idet2)%weights = weights
 
                 deallocate(weights)
              end if

@@ -136,6 +136,7 @@ CONTAINS
        else
           detectors(idet)%sigmas = 0._dp
        end if
+       detectors(idet)%plateaus = detectors(idet)%sigmas ** 2 / fsample
        detectors(idet)%psdstarts = 0._dp
        detectors(idet)%kpolar = (nmap /= 1)
 
