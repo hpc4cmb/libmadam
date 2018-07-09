@@ -241,7 +241,7 @@ CONTAINS
                    weights = 2 / (detectors(idet1)%plateaus &
                         + detectors(idet2)%plateaus) / fsample
                 end where
-                if (id == 0) write (*,'(a,g15.6,a,g15.5,a,g15.5)') &
+                if (id == 0) write (*,'(a,g13.5,a,g13.5,a,g13.5)') &
                      'Assigning horn weight, ', weights(1), ', to ' // &
                      trim(detectors(idet1)%name) // ' and ' // &
                      trim(detectors(idet2)%name)  // ' for the FIRST period' &
@@ -706,9 +706,9 @@ CONTAINS
     write (*,ff) '', nosamples_tot/fsample/3600., 'hours'
 
     write (*,*)
-    write (*,*) 'Detectors available on the FIRST process and noise ' &
+    write (*,'(x,a)') 'Detectors available on the FIRST process and noise ' &
          // 'according to the FIRST period'
-    write (*,'(x,a12,3a15)') 'Detectors   ', 'sigma', 'weight', '1/sqrt(weight)'
+    write (*,'(x,a12,3a15)') 'detector    ', 'sigma', 'weight', '1/sqrt(weight)'
     do idet = 1, nodetectors
        sigma = 0
        if (detectors(idet)%weights(1) > 0) then
