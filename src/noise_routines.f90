@@ -896,14 +896,14 @@ CONTAINS
           if (ierr /= 0) stop 'No room for blockm'
           blockm = 0
 
-          ! For one reason or another, ifort 17.0.3 sometimes segfaults
-          ! executing this spread() when there are multiple threads:
           blockm = spread(invcov(1:nbandmin+1, ipsd), 2, noba)
-          ! so we write the spread explicitly:
-          !do i = 1, noba
-          !   blockm(:, i) = invcov(1:nbandmin+1, ipsd)
-          !end do
           blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
+
+          ! Regularize the matrix for decomposition by ensuring that the
+          ! band power at nbandmin is negligible
+          do i = 1, nbandmin+1
+             blockm(i, :) = blockm(i, :) * exp(-(2 * dble(i) / nbandmin) ** 2)
+          end do
 
           ! Cholesky decompose
 
