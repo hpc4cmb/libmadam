@@ -772,7 +772,7 @@ CONTAINS
   SUBROUTINE construct_preconditioner(nna)
 
     real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
-    integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin
+    integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin, try
     real(dp), allocatable :: invcov(:, :), blockm(:, :)
     logical :: neg
 
@@ -848,7 +848,7 @@ CONTAINS
     !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
     !$OMP         detectors, nthreads) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
-    !$OMP         i, j, k, n, neg, ierr, nbandmin)
+    !$OMP         i, j, k, n, neg, ierr, nbandmin, try)
     do idet = 1,nodetectors
 
        !$OMP PARALLEL DO IF (nodetectors < nthreads) &
@@ -859,7 +859,7 @@ CONTAINS
        !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
        !$OMP         detectors) &
        !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, blockm, &
-       !$OMP         i, j, k, n, neg, ierr, nbandmin)
+       !$OMP         i, j, k, n, neg, ierr, nbandmin, try)
        do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(1:ichunk-1))
@@ -894,20 +894,25 @@ CONTAINS
           ! submatrix.  Do the computation in double precision
           allocate(blockm(nbandmin+1, noba), stat=ierr)
           if (ierr /= 0) stop 'No room for blockm'
-          blockm = 0
 
-          blockm = spread(invcov(1:nbandmin+1, ipsd), 2, noba)
-          blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
+          loop_try : do try = 0, 3
+             blockm = 0
+             blockm = spread(invcov(1:nbandmin+1, ipsd), 2, noba)
+             blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
 
-          ! Regularize the matrix for decomposition by ensuring that the
-          ! band power at nbandmin is negligible
-          do i = 1, nbandmin+1
-             blockm(i, :) = blockm(i, :) * exp(-(2 * dble(i) / nbandmin) ** 2)
-          end do
+             if (try /= 0) then
+                ! Band diagonal failed to decompose.
+                ! Regularize the matrix for decomposition by ensuring that the
+                ! band power at nbandmin is negligible
+                do i = 1, nbandmin+1
+                   blockm(i, :) = blockm(i, :) * exp(-(dble(try*i) / nbandmin) ** 2)
+                end do
+             end if
 
-          ! Cholesky decompose
-
-          call DPBTRF('L', noba, nbandmin, blockm, nbandmin+1, ierr)
+             ! Cholesky decompose
+             call DPBTRF('L', noba, nbandmin, blockm, nbandmin+1, ierr)
+             if (ierr == 0) exit loop_try
+          end do loop_try
 
           if (ierr /= 0) then
              if (ierr < 0) then
