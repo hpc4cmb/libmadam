@@ -25,7 +25,7 @@ MODULE noise_routines
 
   real(dp), allocatable :: xx(:)
   complex(dp), allocatable :: fx(:)
-  complex(dp), allocatable, target :: fcov(:, :)
+  complex(dp), allocatable, target :: fcov(:, :), fprecond(:, :)
 
   !Store interpolated spectra
   real(dp),allocatable :: freqtab(:), spectab(:, :)
@@ -255,6 +255,7 @@ CONTAINS
     if (.not. kfilter) return
 
     if (allocated(fcov)) deallocate(fcov)
+    if (allocated(fprecond)) deallocate(fprecond)
     if (allocated(psddet)) deallocate(psddet)
     if (allocated(psdind)) deallocate(psdind)
     if (allocated(psdstart)) deallocate(psdstart)
@@ -742,7 +743,7 @@ CONTAINS
           end do
 
           x0 = 0
-          if (noba > 0.and. mode == 2) then
+          if (noba > 0 .and. mode == 2) then
              x0 = sum(y(kstart+1:kstart+noba, idet)) / noba
           end if
           y(kstart+1:kstart+noba, idet) = y(kstart+1:kstart+noba, idet) - x0
@@ -772,8 +773,12 @@ CONTAINS
   SUBROUTINE construct_preconditioner(nna)
 
     real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
-    integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin, try
+    integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, nbandmin, &
+         try, ipsddet
     real(dp), allocatable :: invcov(:, :), blockm(:, :)
+    real(dp) :: r
+    integer, parameter :: trymax = 3
+    integer :: ntries(0:trymax)
     logical :: neg
 
     if (precond_width < 1) return
@@ -797,8 +802,8 @@ CONTAINS
           do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
              kstart = sum(noba_short_pp(1:ichunk-1))
-             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
-             if (ipsd < 0) then
+             ipsddet = psd_index_det(idet, baselines_short_time(kstart+1))
+             if (ipsddet < 0) then
                 ! No PSD available
                 do k = kstart+1, kstart+noba
                    prec_diag(k, idet) = 1.
@@ -807,7 +812,7 @@ CONTAINS
              end if
              do k = kstart+1, kstart+noba
                 if (nna(k, idet) == 0) then
-                   prec_diag(k, idet) = 1. / detectors(idet)%weights(ipsd)
+                   prec_diag(k, idet) = 1. / detectors(idet)%weights(ipsddet)
                 else
                    prec_diag(k, idet) = 1. / nna(k, idet)
                 end if
@@ -818,6 +823,28 @@ CONTAINS
     end if
 
     use_diagonal = .false.
+
+    if (use_fprecond) then
+       if (allocated(fprecond)) deallocate(fprecond)
+       allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
+       if (ierr /= 0) stop 'No room for fprecond'
+       memory_precond = (nof/2+1)*npsdtot*16.
+       fprecond = 0
+       do idet = 1, nodetectors
+          do ichunk = 1, ninterval
+             noba = noba_short_pp(ichunk)
+             if (noba == 0) cycle
+             kstart = sum(noba_short_pp(1:ichunk-1))
+             ipsd = psd_index(idet, baselines_short_time(kstart+1))
+             ipsddet = psd_index_det(idet, baselines_short_time(kstart+1))
+             if (ipsddet < 0) cycle
+             fprecond(:, ipsd) = 1.d0 /( &
+                  nshort*detectors(idet)%weights(ipsddet) + fcov(:, ipsd))
+          end do
+       end do
+       return
+    end if
+
     nband = min(precond_width, nof / 2 - 1)
     if (.not. allocated(bandprec)) then
        allocate(bandprec(nband+1, noba_short_max, nodetectors), stat=ierr)
@@ -840,13 +867,15 @@ CONTAINS
        invcov(:, ipsd) = xx(1:nband+1)
     end do
 
+    ntries = 0
+
     !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
     !$OMP         baselines_short_time, nband, invcov, id, &
     !$OMP         sampletime, nof, baselines_short_start, &
     !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
-    !$OMP         detectors, nthreads) &
+    !$OMP         detectors, nthreads, ntries) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
     !$OMP         i, j, k, n, neg, ierr, nbandmin, try)
     do idet = 1,nodetectors
@@ -857,7 +886,7 @@ CONTAINS
        !$OMP         noba_short_pp, baselines_short_time, nband, &
        !$OMP         invcov, id, sampletime, nof, baselines_short_start, &
        !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
-       !$OMP         detectors) &
+       !$OMP         detectors, ntries) &
        !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, blockm, &
        !$OMP         i, j, k, n, neg, ierr, nbandmin, try)
        do ichunk = 1, ninterval
@@ -895,7 +924,8 @@ CONTAINS
           allocate(blockm(nbandmin+1, noba), stat=ierr)
           if (ierr /= 0) stop 'No room for blockm'
 
-          loop_try : do try = 0, 3
+          try = 0
+          loop_try : do
              blockm = 0
              blockm = spread(invcov(1:nbandmin+1, ipsd), 2, noba)
              blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
@@ -911,8 +941,12 @@ CONTAINS
 
              ! Cholesky decompose
              call DPBTRF('L', noba, nbandmin, blockm, nbandmin+1, ierr)
-             if (ierr == 0) exit loop_try
+             if (ierr == 0 .or. try == trymax) then
+                exit loop_try
+             end if
+             try = try + 1
           end do loop_try
+          ntries(try) = ntries(try) + 1
 
           if (ierr /= 0) then
              if (ierr < 0) then
@@ -938,6 +972,16 @@ CONTAINS
     end do
     !$OMP END PARALLEL DO
 
+    call sum_mpi(ntries, trymax+1)
+    if (id == 0) then
+       print *, 'Constructed ', sum(ntries), ' band preconditioners. ', &
+            ntries(0), ' required no regularization'
+       do try = 1, trymax
+          if (ntries(try) > 0) print *, ntries(try), ' required level = ', &
+               try, ' regularization'
+       end do
+    end if
+
     deallocate(invcov)
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 
@@ -952,7 +996,7 @@ CONTAINS
   SUBROUTINE preconditioning_band(z, r)
     !Apply the preconditioner
 
-    ! z and r and may 3-dimensional arrays in the calling code but
+    ! z and r may be 3-dimensional arrays in the calling code but
     ! here we collapse the first dimension.  The band preconditioner
     ! only works for basis_order == 0.
     real(dp), intent(out), target :: z(noba_short, nodetectors)
@@ -988,6 +1032,9 @@ CONTAINS
           !$OMP END PARALLEL DO
        end do
        !$OMP END PARALLEL DO
+    else if (use_fprecond) then
+       ! Apply the filter-based preconditioner
+       call convolve_pp(z, r, fprecond, 0)
     else
        !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
        !$OMP     DEFAULT(NONE) &
@@ -1027,7 +1074,7 @@ CONTAINS
                      bandprec(1:nbandmin+1, kstart+1:kstart+noba, idet), &
                      nbandmin+1, z(kstart+1:kstart+noba, idet), noba, ierr)
                 if (ierr /= 0) then
-                   print *, id, ' : failed to cholesky decompose. argument # ', &
+                   print *, id, ' : failed to Cholesky decompose. argument # ', &
                         -ierr, ' had an illegal value'
                    call abort_mpi('bad preconditioner2')
                 end if

@@ -145,6 +145,7 @@ MODULE commonparam
   real(dp) :: cglimit=1.d-12
   integer :: iter_min=3, iter_max=1000
   integer :: precond_width=10
+  logical :: use_fprecond=.false.
 
   integer :: mode_detweight=0
 

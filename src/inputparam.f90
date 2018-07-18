@@ -294,6 +294,8 @@ CONTAINS
        read(value, *, iostat=ierr) diagfilter
     case ('precond_width')
        read(value, *, iostat=ierr) precond_width
+    case ('use_fprecond')
+       read(value, *, iostat=ierr) use_fprecond
     case ('filter_time')
        read(value, *, iostat=ierr) filter_time
     case ('tail_time')

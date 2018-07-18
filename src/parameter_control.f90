@@ -661,7 +661,11 @@ CONTAINS
 
     write(*,fi) 'precond_width', precond_width, &
          'Width of the preconditioner band matrix'
-    if (precond_width==0) write(*,*) 'No preconditioning'
+    if (precond_width==0) then
+       write(*,*) 'No preconditioning'
+    else
+       write (*,fk) 'use_fprecond', use_fprecond, 'use C_a preconditioner'
+    end if
 
     if (flag_by_horn) then
        write (*,fk) 'flag_by_horn',flag_by_horn,'Combining flags within horns'

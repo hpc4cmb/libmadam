@@ -28,6 +28,8 @@ MODULE madam_routines
        subtract_baselines_a, clean_tod, unclean_tod, &
        leakmatrix
 
+  real(dp) :: ybalim
+
 CONTAINS
 
   !-------------------------------------------------------------------------
@@ -425,7 +427,7 @@ CONTAINS
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
-    real(dp) :: detweight, bf
+    real(dp) :: detweight, bf, invvar
     integer(i8b) :: i, k, ip, j, order, order2, i0, imap, n, workspace_length
     integer(i8b) :: ntot, nbad, ngood
     integer(i4b) :: ival, noba, kstart, ipsd, idet
@@ -495,13 +497,16 @@ CONTAINS
 
     !$OMP PARALLEL DEFAULT(NONE) &
     !$OMP    PRIVATE(idet, ival, noba, kstart, ipsd, detweight, &
-    !$OMP        k, i0, basis_function, i, ip, order, bf) &
+    !$OMP        k, i0, basis_function, i, ip, order, bf, invvar) &
     !$OMP    SHARED(nodetectors, noba_short_pp, detectors, ninterval, &
     !$OMP        yba, nna, baselines_short_start, basis_functions, &
     !$OMP        baselines_short_stop, isubchunk, subchunk, pixels, &
     !$OMP        dummy_pixel, locmap, basis_order, tod, nmap, &
     !$OMP        baselines_short_time, weights, order2, checknan, id, &
-    !$OMP        noba_short_max, nosamples_proc)
+    !$OMP        noba_short_max, nosamples_proc) &
+    !$OMP    REDUCTION(+: ybalim)
+
+    ybalim = 0
 
     !$OMP DO SCHEDULE(DYNAMIC,1)
     do idet = 1, nodetectors
@@ -511,6 +516,7 @@ CONTAINS
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
+          invvar = detectors(idet)%sigmas(ipsd) ** 2 * detweight ** 2
           if (detweight == 0) cycle
           do k = kstart+1, kstart+noba
 
@@ -536,6 +542,7 @@ CONTAINS
                    bf = basis_function(order, i-i0)
                    yba(order, k, idet) = yba(order, k, idet) &
                         + bf*tod(i, idet)
+                   ybalim = ybalim + bf * invvar
                    nna(:, order, k, idet) = nna(:, order, k, idet) &
                         + bf*basis_function(:, i-i0)
                 end do
@@ -801,6 +808,7 @@ CONTAINS
        write(*,*) 'CG iteration begins'
        write(*,'(x,a,es25.15)') 'rzinit =', rzinit
        write(*,'(x,a,es25.15)') 'rrinit =', rrinit
+       write(*,'(x,a,es25.15)') '  <rr> =', ybalim
        write(*,'(a4,4a16,a10)') &
             'iter', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
     end if
