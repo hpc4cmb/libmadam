@@ -70,7 +70,6 @@ MODULE commonparam
   real(dp) :: diagfilter=0
   logical :: sync_output=.true., skip_existing=.false.
   logical :: write_cut=.false.
-  logical :: filter_mean=.false.
   logical :: tod_is_clean = .false.
   logical :: binary_output=.false., concatenate_binary=.false.
   ! Used for concatenate_binary when storing multiple MC maps
@@ -140,7 +139,6 @@ MODULE commonparam
   real(dp) :: dnshort=-1
   integer :: nlong=-1, nshort=-1
   logical :: kfirst=.true., kfilter=.false.
-  real(dp) :: filter_time=3600, tail_time=600
 
   real(dp) :: cglimit=1.d-12
   integer :: iter_min=3, iter_max=1000
@@ -187,7 +185,7 @@ MODULE commonparam
   integer(i8b) :: istart_mission, istart_proc
 
   ! Baselines
-  integer(i8b) :: noba_short_tot, noba_short_max, noba_short
+  integer(i8b) :: noba_short_tot, noba_short_max, noba_short, noba_short_pp_max
   integer(i8b) :: kshort_start
 
   integer(i4b), allocatable :: baselines_short(:) ! short baselines per process

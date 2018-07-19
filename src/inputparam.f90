@@ -254,8 +254,6 @@ CONTAINS
     case ('basis_order')
        read(value, *, iostat=ierr) basis_order
        if (basis_order < 0) call abort_mpi('basis order must be nonnegative')
-    case ('filter_mean')
-       read(value, *, iostat=ierr) filter_mean
     case ('iter_min')
        read(value, *, iostat=ierr) iter_min
     case ('iter_max')
@@ -296,10 +294,6 @@ CONTAINS
        read(value, *, iostat=ierr) precond_width
     case ('use_fprecond')
        read(value, *, iostat=ierr) use_fprecond
-    case ('filter_time')
-       read(value, *, iostat=ierr) filter_time
-    case ('tail_time')
-       read(value, *, iostat=ierr) tail_time
     case ('rm_monopole')
        read(value, *, iostat=ierr) rm_monopole
 

@@ -220,15 +220,11 @@ CONTAINS
 
     if (.not. kfilter) return
 
-    nofilter = (filter_time*fsample+.5) / nshort
-    notail   = (tail_time*fsample+.5) / nshort
+    nofilter = noba_short_pp_max
 
-    !if (nofilter > noba_short_max) nofilter = noba_short_max
-    if (notail > nofilter) notail = nofilter
-
-    nof_min = nofilter + 2*notail
+    nof_min = nofilter
     ! Ensure that the filter is long enough for the preconditioner
-    if (precond_width > nof_min-1) nof_min = precond_width+1
+    if (precond_width > nof_min-1) nof_min = precond_width + 1
 
     nof = 1
     do
@@ -367,8 +363,7 @@ CONTAINS
           end do
 
           aspec = 1.d0 / (fa*aspec)
-          ! Madam/TOAST edit: do not constrain baseline mean
-          if (.not. filter_mean) aspec(1) = 0
+          aspec(1) = 0
           fcov(:, ipsdtot) = aspec
 
           ! RK edit: check for NaNs
@@ -635,7 +630,7 @@ CONTAINS
     real(dp), intent(in) :: aa(noba_short, nodetectors)
 
     if (kfilter) then
-       call convolve_pp(ca, aa, fcov, 2)
+       call convolve_pp(ca, aa, fcov)
     else
        ca = 0
     endif
@@ -646,20 +641,19 @@ CONTAINS
   !-----------------------------------------------------------------------
 
 
-  SUBROUTINE convolve_pp(y, x, fc, mode)
+  SUBROUTINE convolve_pp(y, x, fc)
     ! Convolve a baseline vector with the noise prior, one pointing period
     ! at a time. FIXME: should have an option to apply the filter across the boundaries.
 
     real(dp), intent(out) :: y(noba_short, nodetectors)
     real(dp), intent(in) :: x(noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
-    integer, intent(in) :: mode
     integer :: ichunk, idet, m, no, noba, kstart, i, ipsd, ierr
     real(dp) :: x0
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
+    !type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
     integer :: id_threads
 
     call reset_time(14)
@@ -672,7 +666,10 @@ CONTAINS
     ! We allocate enough pointers for every thread to use a separate
     ! (but shared) one
 
-    !$OMP PARALLEL DEFAULT(SHARED) NUM_THREADS(nthreads) &
+    !$OMP PARALLEL NUM_THREADS(nthreads) &
+    !$OMP     DEFAULT(NONE) &
+    !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
+    !$OMP         baselines_short_time, fc, x, y) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, x0, m, no, xx, fx, &
     !$OMP         id_thread, ipsd, ierr)
 
@@ -705,48 +702,14 @@ CONTAINS
              cycle
           end if
 
-          ! Remove the PID average first.
-          ! This ensures that solution is independent of a constant
-          ! offset/pointing period
-          x0 = 0
-          if (noba > 0 .and. mode >= 1) then
-             x0 = sum(x(kstart+1:kstart+noba, idet)) / noba
-          end if
-
-          ! overlap-save loop
-          m = 0
-          do
-             if (m == noba) exit
-
-             no = min(noba-m, nofilter)
-             xx = 0.0
-
-             ! Copy one data section+tails and convolve
-             if (m > 0) then
-                xx(1:notail) = x(kstart+m-notail+1:kstart+m, idet) - x0
-             end if
-
-             if (no+notail <= noba-m) then
-                xx(notail+1:no+2*notail) = &
-                     x(kstart+m+1:kstart+m+no+notail, idet) - x0
-             else
-                xx(notail+1:notail+noba-m) = &
-                     x(kstart+m+1:kstart+noba, idet) - x0
-             endif
-
-             call dfft(fx, xx)
-             fx = fx * fc(:, ipsd)
-             call dfftinv(xx, fx)
-
-             y(kstart+m+1:kstart+m+no, idet) = xx(notail+1:notail+no)
-             m = m + no
-          end do
-
-          x0 = 0
-          if (noba > 0 .and. mode == 2) then
-             x0 = sum(y(kstart+1:kstart+noba, idet)) / noba
-          end if
-          y(kstart+1:kstart+noba, idet) = y(kstart+1:kstart+noba, idet) - x0
+          xx(1:noba) = x(kstart+1:kstart+noba, idet)
+          xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
+          xx(noba+1:) = 0
+          call dfft(fx, xx)
+          fx = fx * fc(:, ipsd)
+          call dfftinv(xx, fx)
+          xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
+          y(kstart+1:kstart+noba, idet) = xx(1:noba)
 
        end do
     end do
@@ -788,11 +751,13 @@ CONTAINS
     if (ID == 0 .and. info > 1) write(*,*) 'Constructing preconditioner'
     if (info > 4) write(*, idf) ID, 'Constructing preconditioner'
 
+    memory_precond = 0
+
     if (.not. kfilter .or. precond_width == 1) then
        nband = 1
        use_diagonal = .true.
        if (.not. allocated(prec_diag)) then
-          allocate(prec_diag(noba_short_max, nodetectors), stat=ierr)
+          allocate(prec_diag(noba_short, nodetectors), stat=ierr)
           if (ierr /= 0) stop 'No room for prec_diag'
        end if
        memory_precond = noba_short_max*nodetectors*8.
@@ -822,14 +787,11 @@ CONTAINS
        return
     end if
 
-    use_diagonal = .false.
-
     if (use_fprecond) then
        if (allocated(fprecond)) deallocate(fprecond)
        allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
        if (ierr /= 0) stop 'No room for fprecond'
-       memory_precond = (nof/2+1)*npsdtot*16.
-       fprecond = 0
+       memory_precond = memory_precond + (nof/2+1)*npsdtot*16.
        do idet = 1, nodetectors
           do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
@@ -844,6 +806,8 @@ CONTAINS
        end do
        return
     end if
+
+    use_diagonal = .false.
 
     nband = min(precond_width, nof / 2 - 1)
     if (.not. allocated(bandprec)) then
@@ -864,6 +828,12 @@ CONTAINS
 
     do ipsd = 1, npsdtot
        call dfftinv(xx, fcov(:, ipsd)) ! C_a inverse into real domain
+       ! DEBUG begin
+       do i = 1, nof/2
+          write (1000+100*id+ipsd, *) i, &
+               real(fcov(i, ipsd)), imag(fcov(i, ipsd)), xx(i)
+       end do
+       ! DEBUG end
        invcov(:, ipsd) = xx(1:nband+1)
     end do
 
@@ -1008,6 +978,7 @@ CONTAINS
     type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
     integer :: id_thread, m, no, nbandmin
     real(dp) :: x0
+    real(dp), allocatable :: ztemp(:, :)
 
     if (precond_width < 1) then
        z = r
@@ -1017,24 +988,10 @@ CONTAINS
     call reset_time(16)
 
     if (use_diagonal) then
-       !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
-       !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(nodetectors, noba_short, z, r, prec_diag, nthreads) &
-       !$OMP     PRIVATE(idet, k)
-       do idet = 1, nodetectors
-          !$OMP PARALLEL DO IF (nodetectors < nthreads) &
-          !$OMP     DEFAULT(NONE) &
-          !$OMP     SHARED(nodetectors, z, noba_short, r, prec_diag, idet) &
-          !$OMP     PRIVATE(k)
-          do k = 1, noba_short
-             z(k, idet) = r(k, idet) * prec_diag(k, idet)
-          end do
-          !$OMP END PARALLEL DO
-       end do
-       !$OMP END PARALLEL DO
+       z = r * prec_diag
     else if (use_fprecond) then
        ! Apply the filter-based preconditioner
-       call convolve_pp(z, r, fprecond, 0)
+       call convolve_pp(z, r, fprecond)
     else
        !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
        !$OMP     DEFAULT(NONE) &

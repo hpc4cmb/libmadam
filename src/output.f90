@@ -1613,21 +1613,16 @@ CONTAINS
        call fits_add_comment(out, '           Noise filter                ')
        call fits_add_comment(out, '---------------------------------------')
 
-       call fits_add_key(out, 'FILTTIM', real(filter_time), &
+       call fits_add_key(out, 'FILTTIM', noba_short_pp_max * nshort / fsample, &
             'Noise filter length/seconds')
-       call fits_add_key(out, 'TAILTIM', real(tail_time), 'Overlap/seconds')
 
        if (len_trim(file_spectrum) >= 0) then
           do i = 1, nodetectors
              call fits_add_comment(out, detectors(i)%name)
              call fits_add_key(out, addi('SIGMA', i), &
                   real(detectors(i)%sigmas(1)), 'White noise std')
-             call fits_add_key(out, addi('SLOPE', i), &
-                  real(detectors(i)%slope), 'Spectral slope')
-             call fits_add_key(out, addi('FKNEE', i), &
-                  real(detectors(i)%fknee), 'Knee frequency (Hz)')
-             call fits_add_key(out, addi('FMIN', i), &
-                  real(detectors(i)%fmin), 'Minimum frequency (Hz)')
+             call fits_add_key(out, addi('PLATEAU', i), &
+                  real(detectors(i)%plateaus(1)), 'White noise plateau')
           end do
        else
           call fits_add_key(out, 'FSPEC', trim(file_spectrum), &

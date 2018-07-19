@@ -130,7 +130,6 @@ CONTAINS
     if (kwrite_covmat) then
        kfilter = .true.
        kfirst = .true.
-       filter_mean = .true.
     end if
 
     if (nthreads > nthreads_max) nthreads = nthreads_max
@@ -312,6 +311,7 @@ CONTAINS
        endif
        noba_short_pp(i) = (intervals(i)-1) / dnshort + 1
     end do
+    noba_short = sum(noba_short_pp)
 
     ! Resolution
     nosubpix_max = nside_max**2 / nside_submap**2
@@ -323,13 +323,6 @@ CONTAINS
        concatenate_messages = .false.
        reassign_submaps = .true.
     end if
-
-    ! covmat specific checks
-    if (kwrite_covmat) then
-       ! ensure that the baseline correlation is evaluated far enough
-       filter_time = maxval(noba_short_pp) * dnshort / fsample * 2.1
-    end if
-
 
     if (checknan) then
        do idet = 1,nodetectors
@@ -447,10 +440,13 @@ CONTAINS
     noba_short_max = 0
     noba_short_tot = 0
 
-    nba = sum(noba_short_pp)
-    noba_short_max = nba
+    noba_short_max = noba_short
     call max_mpi(noba_short_max)
-    noba_short_tot = nba
+
+    noba_short_pp_max = maxval(noba_short_pp)
+    call max_mpi(noba_short_pp_max)
+
+    noba_short_tot = noba_short
     call sum_mpi(noba_short_tot)
 
     ! Distribute submaps
@@ -483,6 +479,8 @@ CONTAINS
 
        if (kfirst) then
           write(*,fi) 'noba_short_tot', noba_short_tot, 'Total baselines'
+          write(*,fi) 'noba_short_pp_max', noba_short_pp_max, &
+               'Longest interval in baselines'
           write(*,fi) 'noba_short_max', noba_short_max, 'Baselines/process'
        end if
 
@@ -637,11 +635,6 @@ CONTAINS
 
        if (kfilter) then
           write (*,fk) 'kfilter',kfilter,'Noise filter ON'
-          write (*,fk) 'filter_mean',filter_mean,'Constrain baseline mean'
-          if (info > 1) then
-             write (*,ff) 'filter_time',filter_time,'Filter length (s)'
-             write (*,ff) 'tail_time',tail_time,'Filter overlap (s)'
-          end if
        else
           write (*,fk) 'kfilter', kfilter, 'Noise filter OFF'
           write (*,fe) 'diagfilter', diagfilter, 'diagonal baseline filter'
@@ -778,7 +771,6 @@ CONTAINS
 
     ! most loops iterate over baselines when there is no destriping
     kshort_start = 0
-    noba_short = sum(noba_short_pp)
 
     ! Store the baseline lengths for first destriping
 
