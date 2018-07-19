@@ -829,10 +829,10 @@ CONTAINS
     do ipsd = 1, npsdtot
        call dfftinv(xx, fcov(:, ipsd)) ! C_a inverse into real domain
        ! DEBUG begin
-       do i = 1, nof/2
-          write (1000+100*id+ipsd, *) i, &
-               real(fcov(i, ipsd)), imag(fcov(i, ipsd)), xx(i)
-       end do
+       !do i = 1, nof/2
+       !   write (1000+100*id+ipsd, *) i, &
+       !        real(fcov(i, ipsd)), imag(fcov(i, ipsd)), xx(i)
+       !end do
        ! DEBUG end
        invcov(:, ipsd) = xx(1:nband+1)
     end do
@@ -905,7 +905,7 @@ CONTAINS
                 ! Regularize the matrix for decomposition by ensuring that the
                 ! band power at nbandmin is negligible
                 do i = 1, nbandmin+1
-                   blockm(i, :) = blockm(i, :) * exp(-(dble(try*i) / nbandmin) ** 2)
+                   blockm(i, :) = blockm(i, :) * exp(-0.5 * (dble(try*i) / nbandmin) ** 2)
                 end do
              end if
 
