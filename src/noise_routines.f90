@@ -230,7 +230,7 @@ CONTAINS
     do
        if (nof >= nof_min) exit
        nof = 2*nof
-    enddo
+    end do
     if (ID == 0) write(*,*) 'FFT length =', nof
 
     allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
@@ -279,8 +279,9 @@ CONTAINS
     real(dp), allocatable :: aspec(:), f(:), g(:), spectrum(:), &
          ftable(:), spectrum_table(:, :)
     integer :: ipsd, ipsdtot, ierr
+    real(sp) :: memsum, mem_min, mem_max
 
-    if (.not.(kfilter)) return
+    if (.not. kfilter) return
 
     if (info == 3 .and. ID == 0) write(*,*) 'Building filter...'
     if (info > 4) write(*,*) 'Building filter...'
@@ -299,6 +300,15 @@ CONTAINS
          stat=ierr)
     if (ierr /= 0) stop 'No room for fcov'
     memory_filter = memory_filter + (nof/2+1)*npsdtot*16. + npsdtot*24.
+
+    memsum = memory_filter / 2**20
+    mem_min = memsum; mem_max = memsum
+    call min_mpi(mem_min); call max_mpi(mem_max)
+    call sum_mpi(memsum)
+    if (ID == 0 .and. info > 0) then
+       write(*,'(x,a,t32,3(f9.1," MB"))') &
+            'Allocated memory for filter:', memsum, mem_min, mem_max
+    end if
 
     allocate(aspec(nof/2+1), spectrum(nof), f(nof), g(nof), stat=ierr)
     if (ierr /= 0) stop 'No room for aspec'
@@ -330,7 +340,7 @@ CONTAINS
 
              do i = 1, nof
                 f(i) = k*fa +(i-1)*fa/nof
-             enddo
+             end do
 
              if (kread_file) then
                 call get_spectrum_file
@@ -338,7 +348,7 @@ CONTAINS
                 !call get_spectrum_powerlaw
                 !call get_spectrum_toast(idet, ipsd)
                 call get_spectrum_interp(idet, ipsd)
-             endif
+             end if
 
              do i = 1, nof
                 x = pi*f(i)/fa
@@ -389,8 +399,8 @@ CONTAINS
             spectrum(i) = sigma*sigma/fsample*(f(i)/fknee)**(slope)
          else
             spectrum(i) = sigma*sigma/fsample*(fmin/fknee)**(slope)
-         endif
-      enddo
+         end if
+      end do
 
     END SUBROUTINE get_spectrum_powerlaw
 
@@ -419,7 +429,7 @@ CONTAINS
             write (*,*) 'ERROR, ' // trim(file_spectrum) // &
                  ' is not formatted correctly'
             stop
-         endif
+         end if
 
          allocate(ftable(nolines), spectrum_table(nolines, nodetectors), &
               dtemp(nocols+1, nolines), stemp(nocols), sigmas(nocols), &
@@ -451,7 +461,7 @@ CONTAINS
                   write (*,*) 'ERROR: ' // trim(detectors(idet)%name) // &
                        ' not in ' // trim(file_spectrum)
                   stop
-               endif
+               end if
                if (index(stemp(icol),trim(detectors(idet)%name)) > 0) exit
             end do
 
@@ -465,7 +475,7 @@ CONTAINS
          end do
 
          deallocate(stemp, dtemp)
-      endif
+      end if
 
       ! broadcast the results
       call broadcast_mpi(nolines, 0)
@@ -478,7 +488,7 @@ CONTAINS
          allocate(ftable(nolines), spectrum_table(nolines, nodetectors), &
               stat=ierr)
          if (ierr /= 0) stop 'No room for ftable'
-      endif
+      end if
 
       call broadcast_mpi(ftable, nolines, 0)
       nocols = nodetectors
@@ -500,7 +510,7 @@ CONTAINS
          icol = idet
       else
          icol = 1
-      endif
+      end if
 
       k = 1
       do i = 1, nof
@@ -509,7 +519,7 @@ CONTAINS
          do
             if (logf <= ftable(k+1) .or. k == nolines-1) exit
             k = k + 1
-         enddo
+         end do
 
          p = (logf-ftable(k)) / (ftable(k+1)-ftable(k))
 
@@ -518,7 +528,7 @@ CONTAINS
 
          logspec = (1.d0-p)*spectrum_table(k, icol) + p*spectrum_table(k+1, icol)
          spectrum(i) = exp(logspec) ! *sigma*sigma/fsample  -RK
-      enddo
+      end do
 
     END SUBROUTINE get_spectrum_file
 
@@ -633,7 +643,7 @@ CONTAINS
        call convolve_pp(ca, aa, fcov)
     else
        ca = 0
-    endif
+    end if
 
   END SUBROUTINE cinvmul
 
@@ -743,6 +753,7 @@ CONTAINS
     integer, parameter :: trymax = 3
     integer :: ntries(0:trymax)
     logical :: neg
+    real(sp) :: memsum, mem_min, mem_max
 
     if (precond_width < 1) return
 
@@ -811,17 +822,26 @@ CONTAINS
 
     nband = min(precond_width, nof / 2 - 1)
     if (.not. allocated(bandprec)) then
-       allocate(bandprec(nband+1, noba_short_max, nodetectors), stat=ierr)
+       allocate(bandprec(nband+1, noba_short, nodetectors), stat=ierr)
        if (ierr /= 0) stop 'No room for bandprec'
     end if
     if (.not. allocated(prec_diag)) then
-       allocate(prec_diag(noba_short_max, nodetectors), stat=ierr)
+       allocate(prec_diag(noba_short, nodetectors), stat=ierr)
        if (ierr /= 0) stop 'No room for prec_diag'
     end if
 
     bandprec = 0
     prec_diag = 0
-    memory_precond = noba_short_max*nodetectors*(nband*4.+8.)
+    memory_precond = noba_short*nodetectors*(nband+2)*8.
+
+    memsum = memory_precond / 2**20
+    mem_min = memsum; mem_max = memsum
+    call min_mpi(mem_min); call max_mpi(mem_max)
+    call sum_mpi(memsum)
+    if (ID == 0 .and. info > 0) then
+       write(*,'(x,a,t32,3(f9.1," MB"))') &
+            'Allocated memory for precond:', memsum, mem_min, mem_max
+    end if
 
     allocate(invcov(nband+1, npsdtot), stat=ierr)
     if (ierr /= 0) stop 'No room for invcov'
@@ -848,7 +868,7 @@ CONTAINS
     !$OMP         detectors, nthreads, ntries) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
     !$OMP         i, j, k, n, neg, ierr, nbandmin, try)
-    do idet = 1,nodetectors
+    do idet = 1, nodetectors
 
        !$OMP PARALLEL DO IF (nodetectors < nthreads) &
        !$OMP     DEFAULT(NONE) &
@@ -905,7 +925,8 @@ CONTAINS
                 ! Regularize the matrix for decomposition by ensuring that the
                 ! band power at nbandmin is negligible
                 do i = 1, nbandmin+1
-                   blockm(i, :) = blockm(i, :) * exp(-0.5 * (dble(try*i) / nbandmin) ** 2)
+                   blockm(i, :) = blockm(i, :) * &
+                        exp(-0.5 * (dble(try*i) / nbandmin) ** 2)
                 end do
              end if
 
@@ -983,7 +1004,7 @@ CONTAINS
     if (precond_width < 1) then
        z = r
        return
-    endif
+    end if
 
     call reset_time(16)
 
@@ -1082,7 +1103,7 @@ CONTAINS
                    else
                       xx(notail+1:notail+noba-m) = &
                            r(kstart+m+1:kstart+noba, idet) - x0
-                   endif
+                   end if
 
                    call dfft(fx, xx)
                    fx = fx / (fcov(:, ipsd) &
