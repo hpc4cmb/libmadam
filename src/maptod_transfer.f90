@@ -350,65 +350,65 @@ CONTAINS
        if (.not. allocated(ksubmap_table)) &
             call abort_mpi('assign_submaps: ksubmap_table not allocated')
 
-       allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
-            nosubmaps_task(0:ntasks-1), stat=ierr)
-       if (ierr /= 0) call abort_mpi('No room to assign submaps')
+       if (ID == 0) then
+          allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
+               nosubmaps_task(0:ntasks-1), stat=ierr)
+          if (ierr /= 0) call abort_mpi('No room to assign submaps')
+          ksubmap = ksubmap_table
+          nosubmaps_task = 0
 
-       ksubmap = .false.
-       nosubmaps_task = 0
+          ! First assign submaps to processes with local data up to
+          ! nosubmap_target submaps per process
 
-       ksubmap = ksubmap_table
-
-       ! First assign submaps to processes with local data up to
-       ! nosubmap_target submaps per process
-
-       loop_target : do i = 1, nosubmap_target
-          loop_task : do itask = 0, ntasks-1
-             loop_submap : do isubmap = 0, nosubmaps_tot-1
-                if (ksubmap(isubmap, itask)) then
-                   id_submap(isubmap) = itask
-                   ksubmap(isubmap, :) = .false.
-                   nosubmaps_task(itask) = nosubmaps_task(itask) + 1
-                   cycle loop_task
-                end if
-             end do loop_submap
-             if (nosubmaps_task(itask) == 0) then
-                ! This process did not find any available submaps,
-                ! pick the first available to have at least one
-                loop_submap2 : do isubmap = 0, nosubmaps_tot-1
-                   if (id_submap(isubmap) == -1) then
+          loop_target : do i = 1, nosubmap_target
+             loop_task : do itask = 0, ntasks-1
+                loop_submap : do isubmap = 0, nosubmaps_tot-1
+                   if (ksubmap(isubmap, itask)) then
                       id_submap(isubmap) = itask
                       ksubmap(isubmap, :) = .false.
                       nosubmaps_task(itask) = nosubmaps_task(itask) + 1
                       cycle loop_task
                    end if
-                end do loop_submap2
-             end if
-          end do loop_task
-       end do loop_target
+                end do loop_submap
+                if (nosubmaps_task(itask) == 0) then
+                   ! This process did not find any available submaps,
+                   ! pick the first available to have at least one
+                   loop_submap2 : do isubmap = 0, nosubmaps_tot-1
+                      if (id_submap(isubmap) == -1) then
+                         id_submap(isubmap) = itask
+                         ksubmap(isubmap, :) = .false.
+                         nosubmaps_task(itask) = nosubmaps_task(itask) + 1
+                         cycle loop_task
+                      end if
+                   end do loop_submap2
+                end if
+             end do loop_task
+          end do loop_target
 
-       ! Then assign the rest of the maps. This time in a round robin fashion
-       ! but never more than nosubmap_target
+          ! Then assign the rest of the maps. This time in a round robin fashion
+          ! but never more than nosubmap_target
 
-       itask = 0
-       do isubmap = 0, nosubmaps_tot-1
-          if (id_submap(isubmap) == -1) then
-             ! Make sure the current task has free slots
-             do while (nosubmaps_task(itask) == nosubmap_target)
+          itask = 0
+          do isubmap = 0, nosubmaps_tot-1
+             if (id_submap(isubmap) == -1) then
+                ! Make sure the current task has free slots
+                do while (nosubmaps_task(itask) == nosubmap_target)
+                   itask = modulo(itask+1, ntasks)
+                end do
+
+                ! Assign the unassigned submap
+                id_submap(isubmap) = itask
+                nosubmaps_task(itask) = nosubmaps_task(itask) + 1
+
+                ! Next submap is assigned to the next task
                 itask = modulo(itask+1, ntasks)
-             end do
+             end if
+          end do
 
-             ! Assign the unassigned submap
-             id_submap(isubmap) = itask
-             nosubmaps_task(itask) = nosubmaps_task(itask) + 1
-
-             ! Next submap is assigned to the next task
-             itask = modulo(itask+1, ntasks)
-          end if
-       end do
-
-       deallocate(ksubmap)
-       deallocate(nosubmaps_task)
+          deallocate(ksubmap)
+          deallocate(nosubmaps_task)
+       end if
+       call broadcast_mpi(id_submap, nosubmaps_tot, 0)
     end if
 
     ! update the auxiliary information
