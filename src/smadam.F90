@@ -551,15 +551,10 @@ contains
     call reset_timers
 
     if (.not. mcmode) then
-
-       if (allocated(intervals)) &
-            deallocate(intervals, noba_short_pp)
+       if (allocated(intervals)) deallocate(intervals, noba_short_pp)
        if (allocated(baselines_short)) deallocate(baselines_short)
        if (allocated(baselines_short_start)) &
             deallocate(baselines_short_start, baselines_short_stop)
-       if (allocated(prec_diag)) deallocate(prec_diag)
-       if (allocated(bandprec)) deallocate(bandprec)
-
        call close_filter()
        call close_output()
        call close_pointing()
@@ -907,13 +902,10 @@ contains
     call free_maps
     call free_locmaps
 
-    if (allocated(intervals)) &
-         deallocate(intervals, noba_short_pp)
+    if (allocated(intervals)) deallocate(intervals, noba_short_pp)
     if (allocated(baselines_short)) deallocate(baselines_short)
     if (allocated(baselines_short_start)) &
          deallocate(baselines_short_start, baselines_short_stop)
-    if (allocated(prec_diag)) deallocate(prec_diag)
-    if (allocated(bandprec)) deallocate(bandprec)
 
     call close_filter()
     call close_output()

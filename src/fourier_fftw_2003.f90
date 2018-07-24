@@ -70,16 +70,16 @@ CONTAINS
 
   SUBROUTINE close_fourier
 
-    ! Destroying the FFTW plans is disabled for now, after
+    ! Destroying the FFTW plans was disabled for a while, after
     ! observing inexplicable segfaults in some environments.
 
     if (c_associated(plan)) then
-       !call fftw_destroy_plan(plan)
+       call fftw_destroy_plan(plan)
        plan = C_NULL_PTR
     end if
 
     if (c_associated(plan_inv)) then
-       !call fftw_destroy_plan(plan_inv)
+       call fftw_destroy_plan(plan_inv)
        plan_inv = C_NULL_PTR
     end if
 

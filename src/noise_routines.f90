@@ -258,6 +258,8 @@ CONTAINS
     if (allocated(psdstop)) deallocate(psdstop)
     if (allocated(fx)) deallocate(fx)
     if (allocated(xx)) deallocate(xx)
+    if (allocated(prec_diag)) deallocate(prec_diag)
+    if (allocated(bandprec)) deallocate(bandprec)
 
     call close_fourier
 
@@ -821,14 +823,12 @@ CONTAINS
     use_diagonal = .false.
 
     nband = min(precond_width, nof / 2 - 1)
-    if (.not. allocated(bandprec)) then
-       allocate(bandprec(nband+1, noba_short, nodetectors), stat=ierr)
-       if (ierr /= 0) stop 'No room for bandprec'
-    end if
-    if (.not. allocated(prec_diag)) then
-       allocate(prec_diag(noba_short, nodetectors), stat=ierr)
-       if (ierr /= 0) stop 'No room for prec_diag'
-    end if
+    if (allocated(bandprec)) deallocate(bandprec)
+    allocate(bandprec(nband+1, noba_short, nodetectors), stat=ierr)
+    if (ierr /= 0) stop 'No room for bandprec'
+    if (allocated(prec_diag)) deallocate(prec_diag)
+    allocate(prec_diag(noba_short, nodetectors), stat=ierr)
+    if (ierr /= 0) stop 'No room for prec_diag'
 
     bandprec = 0
     prec_diag = 0
