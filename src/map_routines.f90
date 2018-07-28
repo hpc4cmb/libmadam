@@ -350,7 +350,6 @@ CONTAINS
 
     real(dp),intent(in) :: map(nmap, 0:nosubpix_map-1, nosubmaps)
     integer, intent(in) :: mask(0:nosubpix_map-1, nosubmaps)
-    real(dp),allocatable :: diffmap(:, :, :)
     character(len=16) :: stokes(nmap)
     integer :: cover, imap
 

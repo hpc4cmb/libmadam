@@ -147,8 +147,6 @@ CONTAINS
 
     integer :: allocstat
     real(sp) :: memsum, mem_min, mem_max
-    integer(i8b) :: i, order
-    real(dp) :: r, ninv
 
     memory_baselines = 0
 

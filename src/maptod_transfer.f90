@@ -320,7 +320,7 @@ CONTAINS
     integer, intent(out) :: nosubmaps, nopix_map, nopix_cross, nosubmaps_max
 
     logical, allocatable :: ksubmap(:, :)
-    integer :: ierr, itask, ind, i, nosubmap_target, isubmap
+    integer :: ierr, itask, i, nosubmap_target, isubmap
     integer, allocatable :: nosubmaps_task(:)
     integer :: isubmap_start, isubmap_stop
 
@@ -478,7 +478,7 @@ CONTAINS
     logical, optional :: inplace
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0
     real(dp) :: buffer(nmap, nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
@@ -577,13 +577,26 @@ CONTAINS
 
        nmap0 = size(submaps_send, 1) ! Workaround for unpolarized subsets
 
-       call mpi_alltoallv(submaps_send, sendcounts*nmap0*nosubpix, &
-            sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-            submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, &
-            MPI_DOUBLE_PRECISION, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       sendcounts = sendcounts * (nmap0 * nosubpix)
+       sendoffs = sendoffs * (nmap0 * nosubpix)
+       recvcounts = recvcounts * (nmap0 * nosubpix)
+       recvoffs = recvoffs * (nmap0 * nosubpix)
+
+       call mpi_alltoallv( &
+            submaps_send, sendcounts, sendoffs, MPI_DOUBLE_PRECISION, &
+            submaps_recv, recvcounts, recvoffs, MPI_DOUBLE_PRECISION, &
+            comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect map with alltoallv')
+
+       sendcounts = sendcounts / (nmap0 * nosubpix)
+       sendoffs = sendoffs / (nmap0 * nosubpix)
+       recvcounts = recvcounts / (nmap0 * nosubpix)
+       recvoffs = recvoffs / (nmap0 * nosubpix)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, map, submaps_recv, nmap)
@@ -634,7 +647,7 @@ CONTAINS
     real(dp), intent(inout) :: cc(nmap, nmap, nosubpix, nosubmaps)
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0, col
     real(dp) :: buffer(nmap, nmap, nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
@@ -738,12 +751,25 @@ CONTAINS
           end if
           !$OMP END PARALLEL
 
-          call mpi_alltoallv(submaps_send, sendcounts*nmap0*nosubpix, &
-               sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-               submaps_recv, recvcounts*nmap0*nosubpix, &
-               recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr)
+          ! Manipulate the auxiliary arrays in place rather than have
+          ! temporary arrays created
+
+          sendcounts = sendcounts * (nmap0 * nosubpix)
+          sendoffs = sendoffs * (nmap0 * nosubpix)
+          recvcounts = recvcounts * (nmap0 * nosubpix)
+          recvoffs = recvoffs * (nmap0 * nosubpix)
+
+          call mpi_alltoallv( &
+               submaps_send, sendcounts, sendoffs, MPI_DOUBLE_PRECISION, &
+               submaps_recv, recvcounts, recvoffs, MPI_DOUBLE_PRECISION, &
+               comm, ierr)
 
           if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect cc')
+
+          sendcounts = sendcounts / (nmap0 * nosubpix)
+          sendoffs = sendoffs / (nmap0 * nosubpix)
+          recvcounts = recvcounts / (nmap0 * nosubpix)
+          recvoffs = recvoffs / (nmap0 * nosubpix)
 
           !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
           !$OMP     SHARED(nrecv_submap, submaps_recv_ind, cc, submaps_recv, &
@@ -797,7 +823,7 @@ CONTAINS
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade
     integer :: buffer(nosubpix)
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads
 
     ndegrade = nosubpix_max / nosubpix
 
@@ -865,12 +891,25 @@ CONTAINS
        end if
        !$OMP END PARALLEL
 
-       call mpi_alltoallv(submaps_send, sendcounts*nosubpix, &
-            sendoffs*nosubpix, MPI_INTEGER, submaps_recv, &
-            recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       sendcounts = sendcounts * nosubpix
+       sendoffs = sendoffs * nosubpix
+       recvcounts = recvcounts * nosubpix
+       recvoffs = recvoffs * nosubpix
+
+       call mpi_alltoallv( &
+            submaps_send, sendcounts, sendoffs, MPI_INTEGER, submaps_recv, &
+            recvcounts, recvoffs, MPI_INTEGER, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect hits with alltoallv')
+
+       sendcounts = sendcounts / nosubpix
+       sendoffs = sendoffs / nosubpix
+       recvcounts = recvcounts / nosubpix
+       recvoffs = recvoffs / nosubpix
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, hits, submaps_recv)
@@ -922,7 +961,7 @@ CONTAINS
     real(dp), intent(in) :: map(nmap, nosubpix, nosubmaps)
     integer :: i, j, k, m, msend, id_tod, id_map, ndegrade
     real(dp) :: buffer(nmap, nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
     real(dp), allocatable :: recvbuf(:, :, :), sendbuf(:, :, :)
 
@@ -1017,13 +1056,26 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call mpi_alltoallv(submaps_recv, recvcounts*nmap*nosubpix, &
-            recvoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, &
-            submaps_send, sendcounts*nmap*nosubpix, sendoffs*nmap*nosubpix, &
-            MPI_DOUBLE_PRECISION, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       sendcounts = sendcounts * (nmap * nosubpix)
+       sendoffs = sendoffs * (nmap * nosubpix)
+       recvcounts = recvcounts * (nmap * nosubpix)
+       recvoffs = recvoffs * (nmap * nosubpix)
+
+       call mpi_alltoallv( &
+            submaps_recv, recvcounts, recvoffs, MPI_DOUBLE_PRECISION, &
+            submaps_send, sendcounts, sendoffs, MPI_DOUBLE_PRECISION, &
+            comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to scatter map with alltoallv')
+
+       sendcounts = sendcounts / (nmap * nosubpix)
+       sendoffs = sendoffs / (nmap * nosubpix)
+       recvcounts = recvcounts / (nmap * nosubpix)
+       recvoffs = recvoffs / (nmap * nosubpix)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &
@@ -1085,7 +1137,7 @@ CONTAINS
     integer, intent(in) :: mask(nosubpix, nosubmaps)
     integer :: i, j, k, m, msend, id_tod, id_map, ndegrade
     integer :: buffer(nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
     integer, allocatable :: recvbuf(:, :), sendbuf(:, :)
 
@@ -1179,12 +1231,25 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call mpi_alltoallv(submaps_recv, recvcounts*nosubpix, &
-            recvoffs*nosubpix, MPI_INTEGER, submaps_send, sendcounts*nosubpix, &
-            sendoffs*nosubpix, MPI_INTEGER, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       sendcounts = sendcounts * nosubpix
+       sendoffs = sendoffs * nosubpix
+       recvcounts = recvcounts * nosubpix
+       recvoffs = recvoffs * nosubpix
+
+       call mpi_alltoallv( &
+            submaps_recv, recvcounts, recvoffs, MPI_INTEGER, &
+            submaps_send, sendcounts, sendoffs, MPI_INTEGER, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to scatter mask with alltoallv')
+
+       sendcounts = sendcounts / nosubpix
+       sendoffs = sendoffs / nosubpix
+       recvcounts = recvcounts / nosubpix
+       recvoffs = recvoffs / nosubpix
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &

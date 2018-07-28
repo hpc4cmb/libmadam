@@ -29,13 +29,11 @@ CONTAINS
     ! enabled by default and looping over pointing, time and buffer
     ! are disabled
 
-    integer(i4b) :: idet, ndet, i, m, n, nleft, ns, ierr, idet1, idet2, &
-         horn1, horn2, ipsd
-    real(i8b) :: weight
+    integer(i4b) :: idet, i, n, ierr, idet1, idet2, horn1, horn2, ipsd
     logical :: use_all_data
     character(len=SLEN) :: subsetname
     real(dp), allocatable :: weights(:)
-    real(dp) :: psdmin, psdmax
+    real(dp) :: psdmax
 
     real(dp), pointer :: psd(:)
 
@@ -416,9 +414,7 @@ CONTAINS
     ! Looping over time, pointings and buffer are disabled.
 
     character(len=30) :: fi
-
-    integer(i8b) :: nleft, kstart, n, nmax
-    integer(i4b) :: i, k, iloop, nba, ierr
+    integer(i4b) :: i, k, ierr
 
     fi = '(x,a,t24,"= ",i12,   2x,a)'
 
@@ -487,7 +483,7 @@ CONTAINS
 
   SUBROUTINE write_parameters()
 
-    integer :: idet, itod, i, j
+    integer :: idet, i, j
     character(len=30) :: fi, fe, ff, fk, fs
     real(dp) :: sigma
 
@@ -962,7 +958,6 @@ CONTAINS
     real(dp), allocatable, intent(out) :: short_times(:)
     real(c_double), pointer, intent(in) :: sample_times(:)
 
-    integer(i8b) :: i, j
     integer :: ierr
 
     ! insert the baseline start times

@@ -57,8 +57,8 @@ CONTAINS
     ! baselines and "white" (small scale) noise
     !
     logical, intent(in) :: radiometers
-    real(dp) :: fstep, fbase, flower, fupper, sigma, rms, plateau
-    integer :: nn, ipsd, nbin, ilower, iupper, ibase, idet, i
+    real(dp) :: fstep, fbase, flower, fupper, rms, plateau
+    integer :: ipsd, nbin, ilower, iupper, ibase, i, idet
     real(dp), allocatable :: freqs(:), data(:)
 
     if (radiometers) then
@@ -188,7 +188,6 @@ CONTAINS
     !
     integer :: idet, ipsd
     real(dp) :: starttime
-    integer :: ipsdtot
 
     if (.not. allocated(detectors(idet)%psds) &
          .and. detectors(idet)%npsd == 1) then
@@ -250,7 +249,7 @@ CONTAINS
 
 
   subroutine allocate_bandprec
-    integer :: ichunk, idet, ierr
+    integer :: ierr
 
     call free_bandprec
     allocate(bandprec(ninterval, nodetectors), stat=ierr)
@@ -723,7 +722,7 @@ CONTAINS
     real(dp), intent(out) :: y(noba_short, nodetectors)
     real(dp), intent(in) :: x(noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
-    integer :: ichunk, idet, m, no, noba, kstart, i, ipsd, ierr, id_thread, ijob
+    integer :: ichunk, idet, m, no, noba, kstart, ipsd, ierr, id_thread, ijob
     real(dp) :: x0
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
@@ -773,7 +772,6 @@ CONTAINS
     real(dp), intent(in)  :: nna(noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
-    real(dp) :: r
     integer, parameter :: trymax = 10
     integer :: ntries(trymax), nempty, nband, ijob, id_thread
     real(sp) :: memsum, mem_min, mem_max
@@ -967,11 +965,10 @@ CONTAINS
     ! only works for basis_order == 0.
     real(dp), intent(out), target :: z(noba_short, nodetectors)
     real(dp), intent(in), target :: r(noba_short, nodetectors)
-    integer :: i, j, k, idet, kstart, noba, ichunk, ierr, ijob
+    integer :: j, k, idet, kstart, noba, ichunk, ierr, ijob
 
     integer :: m, no, nband
     real(dp) :: x0
-    real(dp), allocatable :: ztemp(:, :)
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()

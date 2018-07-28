@@ -46,8 +46,8 @@ contains
   subroutine write_covmat(outroot)
     character(len=*), intent(in) :: outroot
 
-    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, imap, ipix, ibase, &
-         jmap, jpix, jbase, k, i, j, ip, kstart, noba, lag
+    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, ipix, ibase, &
+         jpix, jbase, i, j, kstart, noba, lag
     real(dp) :: detweight, mm, ptf1
     character(len=SLEN) :: outfile
     logical :: there
@@ -106,7 +106,7 @@ contains
 
           call get_hitmap(idet, kstart, noba)
 
-          call get_middlematrix(fcov, ipsd, idet, detweight, kstart, noba)
+          call get_middlematrix(fcov, ipsd, detweight, noba)
 
           ! double loop over all non-zeros in P^T F
 
@@ -261,7 +261,7 @@ contains
     ! create a global pixel-pixel matrix, accumulate the local
     ! contributions and write the matrix out
     character(len=*), intent(in) :: covmatfile
-    integer(i4b) :: ierr, mypix1, mypix2, row, col, isend, map1, map2, pix1, &
+    integer(i4b) :: ierr, mypix1, mypix2, row, col, isend, map1, pix1, &
          pix2, ip1, ip2, evenodd, itarget, isource, nelem
     integer(i8b) :: firstpix, lastpix, npix, npix_proc
     real(dp), allocatable, target :: covmat1(:, :), covmat2(:, :)
@@ -516,18 +516,17 @@ contains
 
 
 
-  subroutine get_middlematrix(fcov, ipsd, idet, detweight, kstart, noba)
+  subroutine get_middlematrix(fcov, ipsd, detweight, noba)
     ! compute the noba x noba middle matrix block:
     ! M = (C_a^-1 + F^T C_w^-1 F)^-1
 
     complex(dp), intent(inout) :: fcov(nof/2+1,*)
-    integer(i4b), intent(in) :: ipsd, idet
+    integer(i4b), intent(in) :: ipsd
     real(dp), intent(in) :: detweight
-    integer(i4b), intent(in) :: kstart, noba
+    integer(i4b), intent(in) :: noba
     integer(i4b) :: ierr
 
     integer(i4b), save :: last_ipsd = -1, last_noba = -1, noba_max = 0
-    real(dp), allocatable :: buf(:, :)
 
     if (ipsd == last_ipsd .and. noba == last_noba) return
 

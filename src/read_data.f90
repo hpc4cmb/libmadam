@@ -207,8 +207,7 @@ CONTAINS
     integer(c_long), intent(in) :: nsamp
 
     integer :: ierr, iperiod, idet
-    integer(i8b) :: ninterval_max, n, len, i, ngood, nflag, nzeroweight
-    character(len=256) :: name
+    integer(i8b) :: ninterval_max, len, i, ngood, nflag, nzeroweight
 
     if (id == 0 .and. info > 1) write (*,'(/,a,/)') 'Examining periods'
 

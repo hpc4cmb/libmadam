@@ -99,7 +99,7 @@ contains
     integer(c_long), intent(in), value :: npsdval
     real(c_double), intent(in) :: psdvals(npsdval)
 
-    integer :: ierr, idet, i, pixmin, pixmax, subchunkcounter
+    integer :: idet, pixmin, pixmax, subchunkcounter
 
     ! set up MPI
 
@@ -358,7 +358,7 @@ contains
           else
 
              call tic
-             call iterate_a(aa, yba, nna, wamap, cca, tod)
+             call iterate_a(aa, yba, nna, wamap, cca)
              if (id == 0) call toc('iterate_a')
 
              call tic
@@ -587,7 +587,7 @@ contains
     type(c_ptr), intent(in), value :: pixweights
     type(c_ptr), intent(in), value :: signal
 
-    integer :: ierr, idet, i, pixmin, pixmax, n
+    integer :: i, n
 
     ! set up MPI
 
@@ -746,7 +746,7 @@ contains
        if (id == 0) call toc('initialize_a')
 
        call tic
-       call iterate_a(aa, yba, nna, wamap, cca, tod)
+       call iterate_a(aa, yba, nna, wamap, cca)
        if (id == 0) call toc('iterate_a')
 
        call tic
@@ -893,7 +893,6 @@ contains
 
 
   subroutine clear_caches() bind(c, name='clear_caches')
-    integer :: idet
 
     if (.not. cached .and. id == 0) &
          write (*,*) 'WARNING: Madam caches are already empty.'

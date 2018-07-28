@@ -109,7 +109,7 @@ CONTAINS
     !
     real(dp), intent(out) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_map-1)
-    integer :: i, ip, n, ierr, idet, num_threads, ival, noba, kstart, ipsd
+    integer :: i, ip, idet, num_threads, ival, noba, kstart, ipsd
     integer :: k, firstpix, lastpix
     real(dp) :: detweight, sqrtweight
     real(dp) :: w(nmap)
@@ -252,9 +252,9 @@ CONTAINS
     real(dp), intent(inout) :: binmap(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
-    integer :: i, n, ip, m, ierr, firstpix, lastpix, idet, ival, noba, kstart
+    integer :: i, ip, ierr, firstpix, lastpix, idet, ival, noba, kstart
     integer :: ipsd, k
-    real(dp) :: pw, detweight
+    real(dp) :: detweight
 
     if (info == 3 .and. ID == 0) write(*,*) 'Binning TOD...'
 
@@ -346,7 +346,7 @@ CONTAINS
     ! Count the number of hits/pixel
 
     integer, intent(out) :: nohits(0:nopix_map-1,*)
-    integer :: i, n, ip, idet, ival, noba, kstart, ipsd, k, firstpix, lastpix
+    integer :: i, ip, idet, ival, noba, kstart, ipsd, k, firstpix, lastpix
     real(dp) :: detweight
 
     if (.not. do_hits) return
@@ -668,7 +668,7 @@ CONTAINS
   !-------------------------------------------------------------------------
 
 
-  SUBROUTINE iterate_a(aa, yba, nna, wamap, cca, tod)
+  SUBROUTINE iterate_a(aa, yba, nna, wamap, cca)
     !
     ! Solution of the destriping equation by conjugate gradient algorithm
     ! This routine uses tables pixel,weights directly to speed up the computation.
@@ -678,18 +678,17 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     real(dp), intent(inout):: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
 
     real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :)
     logical, allocatable :: rmask(:, :, :)
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
-    real(dp) :: alpha, beta, pw, apn, bf, detweight
-    integer :: i, j, k, n, m, ip, istep, idet, first, last, order, i0, m0
-    integer :: order2, ival, noba, kstart, ipsd, ichunk
+    real(dp) :: alpha, beta, pw, apn, detweight
+    integer :: i, k, m, ip, istep, idet, order, i0, m0
+    integer :: ival, noba, kstart, ipsd, ichunk
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
-    integer :: ierr, imap, num_threads
+    integer :: ierr, num_threads
     integer(i8b) :: npix_thread, firstpix, lastpix, itask
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
@@ -1452,7 +1451,7 @@ CONTAINS
     ! Subtract baselines and compute the final map
     real(dp), intent(inout) :: map(nmap,0:nopix_map-1)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
-    integer :: i, k, ip, idet, i0, order, ival, noba, kstart, ipsd
+    integer :: i, k, ip, idet, i0, ival, noba, kstart, ipsd
     real(dp) :: aw, detweight
     real(dp), pointer :: basis_function(:, :)
 
@@ -1502,7 +1501,7 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE clean_tod(tod,aa)
+  SUBROUTINE clean_tod(tod, aa)
     !
     ! Subtract baselines from the TOD
 

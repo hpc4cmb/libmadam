@@ -125,13 +125,10 @@ CONTAINS
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
 
-    real(sp), allocatable :: mapbuffer(:,:)
     character(len=SLEN) :: file_map_bin, file_map_txt
-    INTEGER(i4b) :: status(MPI_STATUS_SIZE)
-    INTEGER(i4b) :: fh, filemode, fileinfo, ierr, pix
-    INTEGER(MPI_OFFSET_KIND) :: fileoffset
+    INTEGER(i4b) :: ierr, pix
 
-    INTEGER :: nsend, nrecv, mysubmap, rec_len, rec
+    INTEGER :: nsend, nrecv, mysubmap, rec_len
     logical :: there
     INTEGER, allocatable :: recvcounts(:), displs(:)
     REAL(sp), allocatable :: sendbuffer(:), recvbuffer(:)
@@ -213,17 +210,6 @@ CONTAINS
           file_map_bin = trim(file_map_bin) // '_' // addi('', writegroup)
        end if
 
-       !call mpi_info_create(fileinfo, ierr)
-       !filemode = ior(MPI_MODE_WRONLY, MPI_MODE_CREATE)
-       !call mpi_file_open(MPI_COMM_WORLD, file_map_bin, filemode, fileinfo, &
-       !    fh, ierr)
-       !if (ierr /= 0) call abort_mpi('Failed to open binary map file')
-
-       !fileoffset = 0
-       !call mpi_file_set_view(fh, fileoffset, MPI_REAL4, MPI_REAL4, 'native', &
-       !    fileinfo, ierr)
-       !if (ierr /= 0) call abort_mpi('Failed to set view to binary map file')
-
        ! Collect the maps to root process for writing
 
        allocate(recvcounts(ntasks_bin), displs(ntasks_bin), stat=ierr)
@@ -281,10 +267,6 @@ CONTAINS
 
        if (id_bin == 0) then
 
-          !fileoffset = count(id_submap < id) * nosubpix_map * nmap
-          !call mpi_file_write_at(fh, fileoffset, recvbuffer, nrecv, &
-          !    MPI_REAL4, status, ierr)
-
           inquire(iolength=rec_len) recvbuffer
           open(unit=55, file=trim(file_map_bin), action='readwrite', &
                form='unformatted', access='direct', recl=rec_len)
@@ -319,9 +301,6 @@ CONTAINS
 
        deallocate(recvcounts, displs, sendbuffer)
        if (id_bin == 0) deallocate(recvbuffer)
-
-       !call mpi_file_close(fh, ierr)
-       !if (ierr /= 0) call abort_mpi('Failed to close binary file')
 
     else
 
@@ -558,13 +537,10 @@ CONTAINS
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
 
-    real(sp), allocatable :: mapbuffer(:, :)
     character(len=SLEN) :: file_map_bin, file_map_txt
-    INTEGER(i4b) :: status(MPI_STATUS_SIZE)
-    INTEGER(i4b) :: fh, filemode, fileinfo, ierr, pix
-    INTEGER(MPI_OFFSET_KIND) :: fileoffset
+    INTEGER(i4b) :: ierr, pix
 
-    INTEGER :: nsend, nrecv, mysubmap, rec_len, rec
+    INTEGER :: nsend, nrecv, mysubmap, rec_len
     logical :: there
     INTEGER, allocatable :: recvcounts(:), displs(:)
     REAL(sp), allocatable :: sendbuffer(:), recvbuffer(:)
@@ -644,17 +620,6 @@ CONTAINS
           file_map_bin = trim(file_map_bin) // '_' // addi('', writegroup)
        end if
 
-       !call mpi_info_create(fileinfo, ierr)
-       !filemode = ior(MPI_MODE_WRONLY, MPI_MODE_CREATE)
-       !call mpi_file_open(mpi_comm_world, file_map_bin, filemode, fileinfo, &
-       !    fh, ierr)
-       !if (ierr /= 0) call abort_mpi('Failed to open binary map file')
-
-       !fileoffset = 0
-       !call mpi_file_set_view(fh, fileoffset, MPI_REAL4, MPI_REAL4, 'native', &
-       !    fileinfo, ierr)
-       !if (ierr /= 0) call abort_mpi('Failed to set view to binary map file')
-
        ! Collect the maps to root process for writing
 
        allocate(recvcounts(ntasks_bin), displs(ntasks_bin), stat=ierr)
@@ -712,10 +677,6 @@ CONTAINS
 
        if (id_bin == 0) then
 
-          !fileoffset = count(id_submap < id) * nosubpix_map * nmap
-          !call mpi_file_write_at(fh, fileoffset, recvbuffer, nrecv, &
-          !    MPI_REAL4, status, ierr)
-
           inquire(iolength=rec_len) recvbuffer
           open(unit=55, file=trim(file_map_bin), action='readwrite', &
                form='unformatted', access='direct', recl=rec_len)
@@ -750,9 +711,6 @@ CONTAINS
 
        deallocate(recvcounts, displs, sendbuffer)
        if (id_bin == 0) deallocate(recvbuffer)
-
-       !call mpi_file_close(fh, ierr)
-       !if (ierr /= 0) call abort_mpi('Failed to close binary file')
 
     else
 
@@ -838,7 +796,7 @@ CONTAINS
     !
     integer, intent(in) :: mask(nosubpix_map, nosubmaps)
     real(sp),intent(in) :: crit(nosubpix_map, nosubmaps)
-    integer :: idwr, isubmap, skycover, coloffset
+    integer :: idwr, isubmap, skycover
     integer(idp) :: offset, writeoffset, nhit, i
     real(sp), allocatable :: sbuffer(:)
     integer, allocatable  :: ibuffer(:)
@@ -962,14 +920,14 @@ CONTAINS
     ! Write hit map into file.
     !
     integer, intent(in) :: hits(nosubpix_map, nosubmaps,*)
-    integer :: idwr, isubmap, idet, coloffset
+    integer :: idwr, isubmap, coloffset
     integer(idp) :: offset, nhit, buflen, i
-    integer, allocatable :: ibuffer(:), total(:)
+    integer, allocatable :: ibuffer(:)
     integer(i8b), allocatable :: i8buffer(:)
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
-    integer :: npix, ierr, repeat
-    integer(i8b) :: bufoffset, writeoffset
+    integer :: npix, repeat
+    integer(i8b) :: writeoffset
 
     if (.not. do_hits .or. len_trim(file_hit) == 0) return
 
@@ -1512,7 +1470,7 @@ CONTAINS
 
     type(fitshandle) :: out
     real(dp) :: samples_to_d
-    integer :: i, j, k
+    integer :: i
 
     samples_to_d = 1.d0/fsample/24.d0/3600.d0
 

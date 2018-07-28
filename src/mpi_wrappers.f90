@@ -135,11 +135,11 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE init_mpi( comm_in, ntasks_out, id_out )
+  SUBROUTINE init_mpi(comm_in, ntasks_out, id_out)
 
-    integer,intent(in) :: comm_in
-    integer,intent(out) :: ntasks_out, id_out
-    integer :: required, provided
+    integer, intent(in) :: comm_in
+    integer, intent(out) :: ntasks_out, id_out
+    !integer :: required, provided
 
     comm = comm_in
 
@@ -149,8 +149,8 @@ CONTAINS
     !call mpi_init_thread(required, provided, rc)
     !if ( rc /= 0 ) stop 'MPI_init failed'
 
-    call mpi_comm_size(comm,ntasks,rc)
-    call mpi_comm_rank(comm,id_task,rc)
+    call mpi_comm_size(comm, ntasks, rc)
+    call mpi_comm_rank(comm, id_task, rc)
 
     !if ( provided < required .and. id_task == 0 ) &
     !     print *,'WARNING: MPI environment did not provide thread support'
