@@ -1016,7 +1016,7 @@ CONTAINS
                      r(0, kstart+1:kstart+noba, idet)
                 call DPBTRS( &
                      'L', noba, nband-1, 1, bandprec(ichunk, idet)%data, &
-                     nband, z(0, kstart+1:kstart+noba, idet), noba, ierr)
+                     nband, z(0, kstart+1, idet), noba, ierr)
                 if (ierr /= 0) then
                    print *, id, ' : failed to Cholesky solve. argument # ', &
                         -ierr, ' had an illegal value'
