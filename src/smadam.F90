@@ -128,7 +128,7 @@ contains
        write (*,*) 'Destriping of CMB data with a noise filter'
        write (*,*) 'Version ',version
        write (*,*)
-    endif
+    end if
 
     if (mcmode .and. cached) &
          call abort_mpi('Destripe called while caches are not empty.')
@@ -205,7 +205,7 @@ contains
        if (nsubchunk > 1) then
           if (id == 0 .and. info > 0) then
              write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
-          endif
+          end if
           call add_subchunk_id(file_map, isubchunk, nsubchunk)
           call add_subchunk_id(file_hit, isubchunk, nsubchunk)
           call add_subchunk_id(file_mask, isubchunk, nsubchunk)
@@ -321,7 +321,7 @@ contains
           if (id == 0 .and. info > 0) then
              write(*,*)
              write(*,*) 'Destriping TOD'
-          endif
+          end if
           call time_stamp
 
           if (use_inmask) then
@@ -367,14 +367,14 @@ contains
 
           end if
 
-       endif
+       end if
 
        call wait_mpi
        if (id == 0 .and. info > 0) then
           write(*,*)
           write(*,*) 'Finalization begins'
           if (info > 1) write(*,*)
-       endif
+       end if
        call time_stamp
        call reset_time(1)
 
@@ -464,7 +464,7 @@ contains
           call write_memory('CG work space',      memory_cg)
           call write_memory('NCM', memory_ncm)
           call write_memory('Total')
-       endif
+       end if
 
        ! Timing
 
@@ -529,7 +529,7 @@ contains
 
           call write_time('Total', cputime_total)
           if (id == 0 .and. info > 0) write(*,*)
-       endif
+       end if
 
        file_map = subchunk_file_map
        file_binmap = subchunk_file_binmap
@@ -611,7 +611,7 @@ contains
        write (*,*) 'Destriping of CMB data with a noise filter'
        write (*,*) 'Version ',version
        write (*,*)
-    endif
+    end if
 
     if (.not. cached) &
          call abort_mpi('destripe_with_cache called with empty caches.')
@@ -656,7 +656,7 @@ contains
     if (nsubchunk > 1) then
        if (id == 0 .and. info > 0) then
           write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
-       endif
+       end if
        call add_subchunk_id(file_map, isubchunk, nsubchunk)
        call add_subchunk_id(file_hit, isubchunk, nsubchunk)
        call add_subchunk_id(file_mask, isubchunk, nsubchunk)
@@ -679,8 +679,8 @@ contains
     call wait_mpi
 
     if (kfirst) then
-       aa = 0.0
-       yba = 0.0
+       aa = 0
+       yba = 0
        nna = 0
        nna_inv = 0
     end if
@@ -738,7 +738,7 @@ contains
        if (id == 0 .and. info > 0) then
           write(*,*)
           write(*,*) 'First destriping phase'
-       endif
+       end if
        call time_stamp
 
        call tic
@@ -753,14 +753,14 @@ contains
        call subtract_baselines_a(map, aa)
        if (id == 0) call toc('subtract_baselines_a')
 
-    endif
+    end if
 
     call wait_mpi
     if (id == 0 .and. info > 0) then
        write(*,*)
        write(*,*) 'Finalization begins'
        if (info > 1) write(*,*)
-    endif
+    end if
     call time_stamp
     call reset_time(1)
 
@@ -818,7 +818,7 @@ contains
        call write_memory('CG work space',      memory_cg)
        call write_memory('NCM', memory_ncm)
        call write_memory('Total')
-    endif
+    end if
 
     ! Timing
 
@@ -872,7 +872,7 @@ contains
        call write_time('Total', cputime_total)
        if (id == 0) write(*,*)
 
-    endif
+    end if
 
     file_map = subchunk_file_map
     file_binmap = subchunk_file_binmap

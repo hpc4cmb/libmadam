@@ -15,7 +15,7 @@ MODULE noise_routines
 
   include "fftw3.f03"
 
-  integer, save :: nof = -1, nofilter = 0, notail = 0
+  integer, save :: nof = -1, nofilter = 0
 
   real(sp), save, public :: memory_filter = 0
   real(sp), save, public :: memory_precond = 0
@@ -28,14 +28,14 @@ MODULE noise_routines
   complex(dp), allocatable, target :: fcov(:, :), fprecond(:, :)
 
   !Store interpolated spectra
-  real(dp),allocatable :: freqtab(:), spectab(:, :)
+  real(dp), allocatable :: freqtab(:), spectab(:, :)
 
   !Preconditioner
 
   logical :: use_diagonal = .false.
   !real(dp), allocatable, target :: bandprec(:, :, :)
   type bandprec_pointer
-     real(dp), pointer :: p(:, :)
+     real(dp), allocatable :: data(:, :)
   end type bandprec_pointer
   type(bandprec_pointer), allocatable :: bandprec(:, :)
   real(dp), allocatable, target :: prec_diag(:, :)
@@ -251,14 +251,10 @@ CONTAINS
 
   subroutine allocate_bandprec
     integer :: ichunk, idet, ierr
+
     call free_bandprec
     allocate(bandprec(ninterval, nodetectors), stat=ierr)
     if (ierr /= 0) stop 'No room for bandprec'
-    do ichunk = 1, ninterval
-       do idet = 1, nodetectors
-          bandprec(ichunk, idet)%p => NULL()
-       end do
-    end do
   end subroutine allocate_bandprec
 
 
@@ -269,8 +265,8 @@ CONTAINS
     if (allocated(bandprec)) then
        do ichunk = 1, ninterval
           do idet = 1, nodetectors
-             if (associated(bandprec(ichunk, idet)%p)) then
-                deallocate(bandprec(ichunk, idet)%p)
+             if (allocated(bandprec(ichunk, idet)%data)) then
+                deallocate(bandprec(ichunk, idet)%data)
              end if
           end do
        end do
@@ -777,7 +773,6 @@ CONTAINS
     real(dp), intent(in)  :: nna(noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
-    real(dp), pointer :: blockm(:, :)
     real(dp) :: r
     integer, parameter :: trymax = 10
     integer :: ntries(trymax), nempty, nband, ijob, id_thread
@@ -846,11 +841,6 @@ CONTAINS
 
     use_diagonal = .false.
 
-    if (allocated(prec_diag)) deallocate(prec_diag)
-    allocate(prec_diag(noba_short, nodetectors), stat=ierr)
-    if (ierr /= 0) stop 'No room for prec_diag'
-    prec_diag = 0
-
     allocate(invcov(nof, npsdtot), stat=ierr)
     if (ierr /= 0) stop 'No room for invcov'
     invcov = 0
@@ -877,9 +867,9 @@ CONTAINS
     !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
     !$OMP         baselines_short_time, invcov, id, &
     !$OMP         sampletime, nof, baselines_short_start, &
-    !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
+    !$OMP         baselines_short_stop, bandprec, nna, &
     !$OMP         detectors, nthreads, precond_width) &
-    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
+    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, &
     !$OMP         i, j, k, n, ierr, try, nband, id_thread, ijob) &
     !$OMP     REDUCTION(+:memory_precond, nempty, ntries)
 
@@ -906,20 +896,23 @@ CONTAINS
              ! Rows from kstart+1 to kstart+noba for one band-diagonal
              ! submatrix.  Do the computation in double precision
              nband = min(noba, try * precond_width)
-             allocate(bandprec(ichunk, idet)%p(nband, noba), stat=ierr)
-             if (ierr /= 0) stop 'No room for blockm'
-             blockm => bandprec(ichunk, idet)%p
+             allocate(bandprec(ichunk, idet)%data(nband, noba), stat=ierr)
+             if (ierr /= 0) stop 'No room for bandprec block'
 
-             blockm = spread(invcov(1:nband, ipsd), 2, noba)
-             blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
+             bandprec(ichunk, idet)%data = spread( &
+                  invcov(1:nband, ipsd), 2, noba)
+             bandprec(ichunk, idet)%data(1, :) = &
+                  bandprec(ichunk, idet)%data(1, :) &
+                  + nna(kstart+1:kstart+noba, idet)
 
              ! Cholesky decompose
-             call DPBTRF('L', noba, nband-1, blockm, nband, ierr)
+             call DPBTRF( &
+                  'L', noba, nband-1, bandprec(ichunk, idet)%data, nband, ierr)
              if (ierr == 0 .or. try == trymax .or. nband == noba) then
                 exit loop_try
              end if
 
-             deallocate(bandprec(ichunk, idet)%p)
+             deallocate(bandprec(ichunk, idet)%data)
              try = try + 1
           end do loop_try
 
@@ -927,19 +920,14 @@ CONTAINS
           if (ierr /= 0) then
              print *,'Cholesky decomposition failed for ', &
                   trim(detectors(idet)%name)
-             deallocate(bandprec(ichunk, idet)%p)
-             bandprec(ichunk, idet)%p => NULL()
-             prec_diag(kstart+1:kstart+noba, idet) = 0
+             deallocate(bandprec(ichunk, idet)%data)
           else
-             prec_diag(kstart+1:kstart+noba, idet) = 1 / blockm(1, :)
              memory_precond = memory_precond + nband*noba*8
           end if
        end do
     end do
     !$OMP END PARALLEL
 
-    ! Add the diagonal preconditioner to the tally
-    memory_precond = memory_precond + noba_short*nodetectors*8.
     memsum = memory_precond / 2**20
     mem_min = memsum; mem_max = memsum
     call min_mpi(mem_min); call max_mpi(mem_max)
@@ -1003,9 +991,8 @@ CONTAINS
     else
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(noba_short_pp, ninterval, prec_diag, bandprec, &
-       !$OMP         baselines_short_time, z, r, nodetectors, id, nof, &
-       !$OMP         nofilter, notail, nshort, detectors, nthreads, fprecond) &
+       !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
+       !$OMP         id, nof, nshort, detectors, nthreads, fprecond) &
        !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, ierr, x0, m, no, &
        !$OMP         xx, fx, nband, id_thread, ijob)
 
@@ -1023,12 +1010,13 @@ CONTAINS
              noba = noba_short_pp(ichunk)
              if (noba == 0) cycle
 
-             if (associated(bandprec(ichunk, idet)%p)) then
+             if (allocated(bandprec(ichunk, idet)%data)) then
                 ! Use the precomputed Cholesky decomposition
                 kstart = sum(noba_short_pp(1:ichunk-1))
-                nband = size(bandprec(ichunk, idet)%p, 1)
+                nband = size(bandprec(ichunk, idet)%data, 1)
                 z(kstart+1:kstart+noba, idet) = r(kstart+1:kstart+noba, idet)
-                call DPBTRS('L', noba, nband-1, 1, bandprec(ichunk, idet)%p, &
+                call DPBTRS( &
+                     'L', noba, nband-1, 1, bandprec(ichunk, idet)%data, &
                      nband, z(kstart+1:kstart+noba, idet), noba, ierr)
                 if (ierr /= 0) then
                    print *, id, ' : failed to Cholesky solve. argument # ', &
