@@ -29,8 +29,8 @@ CONTAINS
     ! enabled by default and looping over pointing, time and buffer
     ! are disabled
 
-    integer(i4b) :: nodets_per_point, nodet_pol, idet, ipoint, ndet, i, m, n, &
-         nleft, ns, ierr, idet1, idet2, horn1, horn2, ipsd
+    integer(i4b) :: idet, ndet, i, m, n, nleft, ns, ierr, idet1, idet2, &
+         horn1, horn2, ipsd
     real(i8b) :: weight
     logical :: use_all_data
     character(len=SLEN) :: subsetname
@@ -160,16 +160,8 @@ CONTAINS
 
     use_inmask = (len_trim(file_inmask).gt.0)
 
-    if (force_pol) detectors%kpolar = .true.
-
-    ! Polarized/unpolarized case
-    nodet_pol = count(detectors%kpolar)
-
-    if (nodet_pol == 0 .or. nmap == 1) then
-
+    if (nmap == 1) then
        if (id == 0 .and. info > 0) then
-          if (nodet_pol == 0) &
-               write(*,*) 'Only unpolarized detectors.'
           if (nmap == 1) &
                write(*,*) 'Only unpolarized detector weights.'
           write(*,*) '  Will produce only temperature map'

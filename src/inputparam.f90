@@ -138,7 +138,6 @@ CONTAINS
        end if
        detectors(idet)%plateaus = detectors(idet)%sigmas ** 2 / fsample
        detectors(idet)%psdstarts = 0._dp
-       detectors(idet)%kpolar = (nmap /= 1)
 
        ! Then the noise PSDs
 

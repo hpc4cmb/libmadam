@@ -44,8 +44,6 @@ CONTAINS
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
 
-    if (temperature_only) detectors%kpolar = .false.
-
     allocate(subchunk(nosamples_proc), stat=allocstat)
     call check_stat(allocstat, 'subchunk')
     subchunk = 0 ! initialize

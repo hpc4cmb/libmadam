@@ -687,6 +687,39 @@ CONTAINS
   !-----------------------------------------------------------------------
 
 
+  subroutine convolve_interval(ichunk, idet, x, y, xx, fx, fc)
+    integer, intent(in) :: ichunk, idet
+    real(dp), intent(out) :: y(noba_short, nodetectors)
+    real(dp), intent(in) :: x(noba_short, nodetectors)
+    complex(dp), intent(in) :: fc(nof/2 + 1, npsdtot)
+    real(C_DOUBLE) :: xx(nof)
+    complex(C_DOUBLE_COMPLEX) :: fx(nof/2 + 1)
+    integer :: noba, kstart, ipsd
+
+    noba = noba_short_pp(ichunk)
+    kstart = sum(noba_short_pp(1:ichunk-1))
+    ipsd = psd_index(idet, baselines_short_time(kstart+1))
+
+    if (ipsd == -1) then
+       ! no PSD
+       y(kstart+1:kstart+noba, idet) = x(kstart+1:kstart+noba, idet)
+       return
+    end if
+
+    xx(1:noba) = x(kstart+1:kstart+noba, idet)
+    xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
+    xx(noba+1:) = 0
+    call dfft(fx, xx)
+    fx = fx * fc(:, ipsd)
+    call dfftinv(xx, fx)
+    xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
+    y(kstart+1:kstart+noba, idet) = xx(1:noba)
+
+    return
+  end subroutine convolve_interval
+
+
+
   SUBROUTINE convolve_pp(y, x, fc)
     ! Convolve a baseline vector with the noise prior, one pointing period
     ! at a time. FIXME: should have an option to apply the filter across the boundaries.
@@ -694,77 +727,37 @@ CONTAINS
     real(dp), intent(out) :: y(noba_short, nodetectors)
     real(dp), intent(in) :: x(noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
-    integer :: ichunk, idet, m, no, noba, kstart, i, ipsd, ierr
+    integer :: ichunk, idet, m, no, noba, kstart, i, ipsd, ierr, id_thread, ijob
     real(dp) :: x0
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    !type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
-    integer :: id_threads
 
     call reset_time(14)
 
     y = 0
 
-    ! Compiler bug workaround:
-    ! GCC 4.7 up to at least 4.8.0 segfaults when compiling
-    ! openMP pragmas that declare type(C_PTR) variables private
-    ! We allocate enough pointers for every thread to use a separate
-    ! (but shared) one
-
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
-    !$OMP         baselines_short_time, fc, x, y) &
+    !$OMP         baselines_short_time, fc, x, y, nthreads) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, x0, m, no, xx, fx, &
-    !$OMP         id_thread, ipsd, ierr)
+    !$OMP         ipsd, ierr, id_thread, ijob)
 
     id_thread = omp_get_thread_num()
 
-    ! FFTW malloc is not thread safe but we want to allocate the workspace
-    ! to be aligned to allow SIMD optimization in FFTW
-
-!!$    !$OMP CRITICAL
-!!$    pfx(id_thread) = fftw_alloc_complex(int(nof/2+1, C_SIZE_T))
-!!$    call c_f_pointer(pfx(id_thread), fx, [nof/2+1])
-!!$
-!!$    pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-!!$    call c_f_pointer(pxx(id_thread), xx, [nof])
-!!$    !$OMP END CRITICAL
     allocate(fx(nof/2+1), xx(nof), stat=ierr)
     if (ierr /= 0) stop 'No room for Fourier transform'
 
-    !$OMP DO SCHEDULE(DYNAMIC,1)
+    ijob = -1
     do idet = 1, nodetectors
-
        do ichunk = 1, ninterval
-          noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(1:ichunk-1))
-          ipsd = psd_index(idet, baselines_short_time(kstart+1))
-
-          if (ipsd == -1) then
-             ! no PSD
-             y(kstart+1:kstart+noba, idet) = x(kstart+1:kstart+noba, idet)
-             cycle
-          end if
-
-          xx(1:noba) = x(kstart+1:kstart+noba, idet)
-          xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
-          xx(noba+1:) = 0
-          call dfft(fx, xx)
-          fx = fx * fc(:, ipsd)
-          call dfftinv(xx, fx)
-          xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
-          y(kstart+1:kstart+noba, idet) = xx(1:noba)
-
+          ijob = ijob + 1
+          if (modulo(ijob, nthreads) /= id_thread) cycle
+          call convolve_interval(ichunk, idet, x, y, xx, fx, fc)
        end do
     end do
-    !$OMP END DO
 
-!!$    !$OMP CRITICAL
-!!$    call fftw_free(pfx(id_thread))
-!!$    call fftw_free(pxx(id_thread))
-!!$    !$OMP END CRITICAL
     deallocate(fx)
     deallocate(xx)
 
@@ -786,8 +779,8 @@ CONTAINS
     real(dp), allocatable :: invcov(:, :)
     real(dp), pointer :: blockm(:, :)
     real(dp) :: r
-    integer, parameter :: trymax = 1000
-    integer :: ntries(trymax), nband
+    integer, parameter :: trymax = 10
+    integer :: ntries(trymax), nempty, nband
     real(sp) :: memsum, mem_min, mem_max
 
     if (precond_width < 1) return
@@ -832,23 +825,21 @@ CONTAINS
        return
     end if
 
-    if (use_fprecond) then
-       if (allocated(fprecond)) deallocate(fprecond)
-       allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
-       if (ierr /= 0) stop 'No room for fprecond'
-       memory_precond = memory_precond + (nof/2+1)*npsdtot*16.
-       do idet = 1, nodetectors
-          do ichunk = 1, ninterval
-             noba = noba_short_pp(ichunk)
-             if (noba == 0) cycle
-             kstart = sum(noba_short_pp(1:ichunk-1))
-             ipsd = psd_index(idet, baselines_short_time(kstart+1))
-             ipsddet = psd_index_det(idet, baselines_short_time(kstart+1))
-             if (ipsddet < 0) cycle
-             fprecond(:, ipsd) = 1.d0 /( &
-                  nshort*detectors(idet)%weights(ipsddet) + fcov(:, ipsd))
-          end do
+    ! Build fprecond to act as a fall back option
+    if (allocated(fprecond)) deallocate(fprecond)
+    allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
+    if (ierr /= 0) stop 'No room for fprecond'
+    memory_precond = memory_precond + (nof/2+1)*npsdtot*16.
+    ipsd = 0
+    do idet = 1, nodetectors
+       do ipsddet = 1, detectors(idet)%npsd
+          ipsd = ipsd + 1
+          fprecond(:, ipsd) = 1.d0 /( &
+               nshort*detectors(idet)%weights(ipsddet) + fcov(:, ipsd))
        end do
+    end do
+
+    if (use_fprecond) then
        return
     end if
 
@@ -886,7 +877,7 @@ CONTAINS
     !$OMP         detectors, nthreads, ntries, precond_width) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
     !$OMP         i, j, k, n, ierr, try, nband) &
-    !$OMP     REDUCTION(+:memory_precond)
+    !$OMP     REDUCTION(+:memory_precond, nempty)
     do idet = 1, nodetectors
 
        !$OMP PARALLEL DO IF (nodetectors < nthreads) &
@@ -898,13 +889,15 @@ CONTAINS
        !$OMP         detectors, ntries, precond_width) &
        !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, blockm, &
        !$OMP         i, j, k, n, ierr, try, nband) &
-       !$OMP     REDUCTION(+:memory_precond)
+       !$OMP     REDUCTION(+:memory_precond, nempty)
        do ichunk = 1, ninterval
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
-          if (ipsd == -1 .or. noba < 1) then
+          if (ipsd == -1 .or. noba < 1 .or. &
+               all(nna(kstart+1:kstart+noba, idet) == 0)) then
+             nempty = nempty + 1
              cycle
           end if
 
@@ -956,12 +949,14 @@ CONTAINS
     end if
 
     call sum_mpi(ntries, trymax)
+    call sum_mpi(nempty)
     if (id == 0) then
-       print *, 'Constructed ', sum(ntries), ' band preconditioners. '
+       print *, 'Constructed ', sum(ntries), ' band preconditioners.'
        do try = 1, trymax
           if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
                try*precond_width
        end do
+       print *, '    Skipped ', nempty, ' empty intervals.'
     end if
 
     deallocate(invcov)
@@ -983,14 +978,14 @@ CONTAINS
     ! only works for basis_order == 0.
     real(dp), intent(out), target :: z(noba_short, nodetectors)
     real(dp), intent(in), target :: r(noba_short, nodetectors)
-    integer :: i, j, k, idet, kstart, noba, ichunk, ierr, ipsd, ipsddet
+    integer :: i, j, k, idet, kstart, noba, ichunk, ierr, ijob
 
-    real(C_DOUBLE), pointer :: xx(:)
-    complex(C_DOUBLE_COMPLEX), pointer :: fx(:)
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
-    integer :: id_thread, m, no, nband
+    integer :: m, no, nband
     real(dp) :: x0
     real(dp), allocatable :: ztemp(:, :)
+
+    real(C_DOUBLE), pointer :: xx(:) => NULL()
+    complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
 
     if (precond_width < 1) then
        z = r
@@ -1005,32 +1000,31 @@ CONTAINS
        ! Apply the filter-based preconditioner
        call convolve_pp(z, r, fprecond)
     else
-       !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
+       !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(noba_short_pp, ninterval, prec_diag, &
-       !$OMP         bandprec, baselines_short_time, pfx, pxx, z, r, &
-       !$OMP         nodetectors, id, nof, nofilter, notail, &
-       !$OMP         fcov, nshort, detectors, nthreads) &
-       !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, &
-       !$OMP         ierr, ipsd, x0, m, no, xx, fx, id_thread, ipsddet, &
-       !$OMP         nband)
+       !$OMP     SHARED(noba_short_pp, ninterval, prec_diag, bandprec, &
+       !$OMP         baselines_short_time, z, r, nodetectors, id, nof, &
+       !$OMP         nofilter, notail, nshort, detectors, nthreads, fprecond) &
+       !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, ierr, x0, m, no, &
+       !$OMP         xx, fx, nband, id_thread, ijob)
+
+       id_thread = omp_get_thread_num()
+
+       allocate(fx(nof/2+1), xx(nof), stat=ierr)
+       if (ierr /= 0) stop 'No room for Fourier transform'
+
+       ijob = -1
        do idet = 1, nodetectors
-          !$OMP PARALLEL DO IF (nodetectors < nthreads) &
-          !$OMP     DEFAULT(NONE) &
-          !$OMP     SHARED(idet, noba_short_pp, ninterval, prec_diag, &
-          !$OMP         bandprec, baselines_short_time, pfx, pxx, z, &
-          !$OMP         r, nodetectors, id, nof, nofilter, notail, &
-          !$OMP         fcov, nshort, detectors) &
-          !$OMP     PRIVATE(ichunk, kstart, noba, j, k, ierr, &
-          !$OMP         ipsd, x0, m, no, xx, fx, id_thread, ipsddet, nband)
           do ichunk = 1, ninterval
+             ijob = ijob + 1
+             if (modulo(ijob, nthreads) /= id_thread) cycle
 
              noba = noba_short_pp(ichunk)
              if (noba == 0) cycle
-             kstart = sum(noba_short_pp(1:ichunk-1))
 
              if (associated(bandprec(ichunk, idet)%p)) then
                 ! Use the precomputed Cholesky decomposition
+                kstart = sum(noba_short_pp(1:ichunk-1))
                 nband = size(bandprec(ichunk, idet)%p, 1)
                 z(kstart+1:kstart+noba, idet) = r(kstart+1:kstart+noba, idet)
                 call DPBTRS('L', noba, nband-1, 1, bandprec(ichunk, idet)%p, &
@@ -1041,13 +1035,16 @@ CONTAINS
                    call abort_mpi('bad preconditioner2')
                 end if
              else
-                ! FIXME: apply fprecond here
+                call convolve_interval(ichunk, idet, r, z, xx, fx, fprecond)
              end if
 
           end do
-          !$OMP END PARALLEL DO
        end do
-       !$OMP END PARALLEL DO
+
+       deallocate(fx)
+       deallocate(xx)
+
+       !$OMP END PARALLEL
     end if
 
     cputime_precond = cputime_precond + get_time(16)

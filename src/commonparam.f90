@@ -1,14 +1,9 @@
 MODULE commonparam
   ! Common parameters and definitions
 
-  ! TOAST additions -RK
-  !use toast_mpi
-  !use toast
   use iso_c_binding
-  ! TOAST additions end -RK
 
   use planck_config
-  !use simulation, only : detector_data, pointing_data, tod_component
 
   implicit none
   public
@@ -26,13 +21,8 @@ MODULE commonparam
 
   TYPE detector_data
      integer :: idet = 0
-     integer :: ipoint = 0
-     real(dp) :: slope = 0
      real(dp) :: fknee = 0
-     real(dp) :: fmin = 0
-     real(dp) :: psipol = 0
      character(len=20) :: name = ''
-     logical :: kpolar = .false.
      integer :: npsd
      real(dp), allocatable :: psdstarts(:)
      real(dp), allocatable :: psdfreqs(:)
