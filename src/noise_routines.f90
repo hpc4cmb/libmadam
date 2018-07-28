@@ -829,6 +829,7 @@ CONTAINS
     if (allocated(fprecond)) deallocate(fprecond)
     allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
     if (ierr /= 0) stop 'No room for fprecond'
+    fprecond = 0
     memory_precond = memory_precond + (nof/2+1)*npsdtot*16.
     ipsd = 0
     do idet = 1, nodetectors
@@ -852,6 +853,7 @@ CONTAINS
 
     allocate(invcov(nof, npsdtot), stat=ierr)
     if (ierr /= 0) stop 'No room for invcov'
+    invcov = 0
 
     call allocate_bandprec
 
@@ -904,8 +906,9 @@ CONTAINS
              ! Rows from kstart+1 to kstart+noba for one band-diagonal
              ! submatrix.  Do the computation in double precision
              nband = min(noba, try * precond_width)
-             allocate(blockm(nband, noba), stat=ierr)
+             allocate(bandprec(ichunk, idet)%p(nband, noba), stat=ierr)
              if (ierr /= 0) stop 'No room for blockm'
+             blockm => bandprec(ichunk, idet)%p
 
              blockm = spread(invcov(1:nband, ipsd), 2, noba)
              blockm(1, :) = blockm(1, :) + nna(kstart+1:kstart+noba, idet)
@@ -916,7 +919,7 @@ CONTAINS
                 exit loop_try
              end if
 
-             deallocate(blockm)
+             deallocate(bandprec(ichunk, idet)%p)
              try = try + 1
           end do loop_try
 
@@ -924,11 +927,13 @@ CONTAINS
           if (ierr /= 0) then
              print *,'Cholesky decomposition failed for ', &
                   trim(detectors(idet)%name)
+             deallocate(bandprec(ichunk, idet)%p)
+             bandprec(ichunk, idet)%p => NULL()
+             prec_diag(kstart+1:kstart+noba, idet) = 0
+          else
+             prec_diag(kstart+1:kstart+noba, idet) = 1 / blockm(1, :)
+             memory_precond = memory_precond + nband*noba*8
           end if
-
-          bandprec(ichunk, idet)%p => blockm(:, :)
-          prec_diag(kstart+1:kstart+noba, idet) = 1 / blockm(1, :)
-          memory_precond = memory_precond + nband*noba*8
        end do
     end do
     !$OMP END PARALLEL
