@@ -774,13 +774,13 @@ CONTAINS
 
   SUBROUTINE construct_preconditioner(nna)
 
-    real(dp), intent(in)  :: nna(noba_short_max, nodetectors)
+    real(dp), intent(in)  :: nna(noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
     real(dp), pointer :: blockm(:, :)
     real(dp) :: r
     integer, parameter :: trymax = 10
-    integer :: ntries(trymax), nempty, nband
+    integer :: ntries(trymax), nempty, nband, ijob, id_thread
     real(sp) :: memsum, mem_min, mem_max
 
     if (precond_width < 1) return
@@ -798,7 +798,7 @@ CONTAINS
           allocate(prec_diag(noba_short, nodetectors), stat=ierr)
           if (ierr /= 0) stop 'No room for prec_diag'
        end if
-       memory_precond = noba_short_max*nodetectors*8.
+       memory_precond = noba_short*nodetectors*8.
 
        prec_diag = 0
        do idet = 1, nodetectors
@@ -866,31 +866,29 @@ CONTAINS
        invcov(:, ipsd) = xx
     end do
 
+    nempty = 0
     ntries = 0
+    memory_precond = 0
 
-    !$OMP PARALLEL DO IF (nodetectors >= nthreads) &
+    !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
     !$OMP         baselines_short_time, invcov, id, &
     !$OMP         sampletime, nof, baselines_short_start, &
     !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
-    !$OMP         detectors, nthreads, ntries, precond_width) &
+    !$OMP         detectors, nthreads, precond_width) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, blockm, &
-    !$OMP         i, j, k, n, ierr, try, nband) &
-    !$OMP     REDUCTION(+:memory_precond, nempty)
-    do idet = 1, nodetectors
+    !$OMP         i, j, k, n, ierr, try, nband, id_thread, ijob) &
+    !$OMP     REDUCTION(+:memory_precond, nempty, ntries)
 
-       !$OMP PARALLEL DO IF (nodetectors < nthreads) &
-       !$OMP     DEFAULT(NONE) &
-       !$OMP     SHARED(idet, nodetectors, ninterval, &
-       !$OMP         noba_short_pp, baselines_short_time, &
-       !$OMP         invcov, id, sampletime, nof, baselines_short_start, &
-       !$OMP         baselines_short_stop, bandprec, nna, prec_diag, &
-       !$OMP         detectors, ntries, precond_width) &
-       !$OMP     PRIVATE(ichunk, noba, kstart, ipsd, blockm, &
-       !$OMP         i, j, k, n, ierr, try, nband) &
-       !$OMP     REDUCTION(+:memory_precond, nempty)
+    id_thread = omp_get_thread_num()
+
+    ijob = -1
+    do idet = 1, nodetectors
        do ichunk = 1, ninterval
+          ijob = ijob + 1
+          if (modulo(ijob, nthreads) /= id_thread) cycle
+
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(1:ichunk-1))
           ipsd = psd_index(idet, baselines_short_time(kstart+1))
@@ -932,10 +930,8 @@ CONTAINS
           prec_diag(kstart+1:kstart+noba, idet) = 1 / blockm(1, :)
           memory_precond = memory_precond + nband*noba*8
        end do
-       !$OMP END PARALLEL DO
-
     end do
-    !$OMP END PARALLEL DO
+    !$OMP END PARALLEL
 
     ! Add the diagonal preconditioner to the tally
     memory_precond = memory_precond + noba_short*nodetectors*8.

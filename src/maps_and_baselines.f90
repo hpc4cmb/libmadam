@@ -5,7 +5,7 @@ MODULE maps_and_baselines
 
   use planck_config, only : sp, dp, i4b, i8b
   use commonparam, only : basis_functions, basis_order, id, info, kfirst, &
-       noba_short_max, noba_short, nodetectors, do_binmap, do_hits, do_mask, &
+       noba_short, nodetectors, do_binmap, do_hits, do_mask, &
        ndetset, nmap, nopix_cross, nopix_map, nsurvey, use_inmask
   use mpi_wrappers, only : min_mpi, max_mpi, sum_mpi
   use memory_and_time, only : check_stat
@@ -153,10 +153,10 @@ CONTAINS
     memory_baselines = 0
 
     if (kfirst) then
-       allocate(aa(0:basis_order, noba_short_max, nodetectors), &
-            yba(0:basis_order, noba_short_max, nodetectors), &
-            nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors), &
-            nna_inv(0:basis_order, 0:basis_order, noba_short_max, nodetectors), &
+       allocate(aa(0:basis_order, noba_short, nodetectors), &
+            yba(0:basis_order, noba_short, nodetectors), &
+            nna(0:basis_order, 0:basis_order, noba_short, nodetectors), &
+            nna_inv(0:basis_order, 0:basis_order, noba_short, nodetectors), &
             stat=allocstat)
        call check_stat(allocstat, 'aa, yba, nna and nna_niv')
 
@@ -166,9 +166,9 @@ CONTAINS
        nna_inv = 0
 
        memory_baselines = memory_baselines &
-            + nodetectors*noba_short_max*(basis_order+1)*16
+            + nodetectors*noba_short*(basis_order+1)*16
        memory_baselines = memory_baselines &
-            + nodetectors*noba_short_max*(basis_order+1)**2*16
+            + nodetectors*noba_short*(basis_order+1)**2*16
     else
        allocate(yba(1, 1, 1), nna(1, 1, 1, 1))
     endif

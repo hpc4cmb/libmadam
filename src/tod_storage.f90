@@ -46,13 +46,12 @@ CONTAINS
 
     memsum = memory_tod/1024./1024.
 
-    mem_min = memsum; mem_max = memsum ! -RK
-    call min_mpi(mem_min); call max_mpi(mem_max) ! -RK
-
+    mem_min = memsum; mem_max = memsum
+    call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
 
     if (id == 0 .and. info >= 1) &
-         write(*,mstr3) 'Allocated memory for TOD:',memsum, mem_min, mem_max
+         write(*,mstr3) 'Allocated memory for TOD:', memsum, mem_min, mem_max
 
   END SUBROUTINE allocate_tod
 

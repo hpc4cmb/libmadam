@@ -766,14 +766,14 @@ CONTAINS
 
     ! Store the baseline lengths for first destriping
 
-    allocate(baselines_short(noba_short_max), &
-         basis_functions(noba_short_max), stat=ierr)
+    allocate(baselines_short(noba_short), &
+         basis_functions(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short')
 
     basis_functions%copy = .true.
     basis_functions%nsamp = 0
 
-    memory_baselines = memory_baselines + noba_short_max*(4+4+17)
+    memory_baselines = memory_baselines + noba_short*(4+4+17)
 
     !Split the interval into short baselines of length int(dnshort)
     ! or int(dnshort+1).
@@ -798,8 +798,8 @@ CONTAINS
                .or. baselines_short(m) > int(dnshort, i8b) + 1) then
              write (*,*) id, ' : ERROR in start_timeloop: ' &
                   // 'Lengths do not match., dnshort = ', dnshort
-             write (*,*) id, ' : i, intervals(i), noba_short_max =', i, &
-                  intervals(i), noba_short_max
+             write (*,*) id, ' : i, intervals(i), noba_short =', i, &
+                  intervals(i), noba_short
              write (*,*) id, ' : last baseline =', baselines_short(m)
              print *,id, ' : noba_short_pp(i) = ', noba_short_pp(i)
              do k=1,noba_short_pp(i)
@@ -830,11 +830,11 @@ CONTAINS
 
     ! Auxiliary arrays for OpenMP threading and output
 
-    allocate(baselines_short_start(noba_short_max), &
-         baselines_short_stop(noba_short_max), stat=ierr)
+    allocate(baselines_short_start(noba_short), &
+         baselines_short_stop(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short_start')
 
-    memory_baselines = memory_baselines + noba_short_max*(4+4)
+    memory_baselines = memory_baselines + noba_short*(4+4)
 
     baselines_short_start = 1
     baselines_short_stop = 1
@@ -967,10 +967,10 @@ CONTAINS
 
     ! insert the baseline start times
     ! local array of short baseline start times
-    allocate(short_times(noba_short_max), stat=ierr)
+    allocate(short_times(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for short_times')
 
-    memory_baselines = memory_baselines + noba_short_max*8
+    memory_baselines = memory_baselines + noba_short*8
 
     short_times = sample_times(baselines_short_start)
 

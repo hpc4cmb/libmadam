@@ -421,9 +421,9 @@ CONTAINS
 
   SUBROUTINE initialize_a(yba, nna, wamap, cca, tod)
 
-    real(dp), intent(inout) :: yba(0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(inout) :: yba(0:basis_order, noba_short, nodetectors)
     real(dp), intent(out) :: &
-         nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
@@ -495,6 +495,8 @@ CONTAINS
        end do loop_idet
     end if
 
+    ybalim = 0
+
     !$OMP PARALLEL DEFAULT(NONE) &
     !$OMP    PRIVATE(idet, ival, noba, kstart, ipsd, detweight, &
     !$OMP        k, i0, basis_function, i, ip, order, bf, invvar) &
@@ -503,10 +505,8 @@ CONTAINS
     !$OMP        baselines_short_stop, isubchunk, subchunk, pixels, &
     !$OMP        dummy_pixel, locmap, basis_order, tod, nmap, &
     !$OMP        baselines_short_time, weights, order2, checknan, id, &
-    !$OMP        noba_short_max, nosamples_proc) &
+    !$OMP        noba_short, nosamples_proc) &
     !$OMP    REDUCTION(+: ybalim)
-
-    ybalim = 0
 
     !$OMP DO SCHEDULE(DYNAMIC,1)
     do idet = 1, nodetectors
@@ -673,18 +673,19 @@ CONTAINS
     ! Solution of the destriping equation by conjugate gradient algorithm
     ! This routine uses tables pixel,weights directly to speed up the computation.
     !
-    real(dp), intent(out) :: aa(0:basis_order, noba_short_max, nodetectors)
-    real(dp), intent(in) :: yba(0:basis_order, noba_short_max, nodetectors), &
-         nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(out) :: aa(0:basis_order, noba_short, nodetectors)
+    real(dp), intent(in) :: yba(0:basis_order, noba_short, nodetectors), &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     real(dp), intent(inout):: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
 
     real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :)
+    logical, allocatable :: rmask(:, :, :)
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
     real(dp) :: alpha, beta, pw, apn, bf, detweight
     integer :: i, j, k, n, m, ip, istep, idet, first, last, order, i0, m0
-    integer :: order2, ival, noba, kstart, ipsd
+    integer :: order2, ival, noba, kstart, ipsd, ichunk
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
@@ -702,21 +703,33 @@ CONTAINS
          p(0:basis_order, noba_short, nodetectors), &
          ap(0:basis_order, noba_short, nodetectors), &
          z(0:basis_order, noba_short, nodetectors), &
+         rmask(0:basis_order, noba_short, nodetectors), &
          stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
-    memory_cg = max(noba_short*nodetectors*32.,memory_cg)
+    ! Mask out completely flagged intervals
+    rmask = .true.
+    do idet = 1, nodetectors
+       do ichunk = 1, ninterval
+          noba = noba_short_pp(ichunk)
+          kstart = sum(noba_short_pp(1:ichunk-1))
+          if (all(nna(:, :, kstart+1:kstart+noba, idet) == 0)) then
+             rmask(:, kstart+1:kstart+noba, idet) = .false.
+          end if
+       end do
+    end do
 
-    r = 0.0
-    p = 0.0
-    ap = 0.0
-    z = 0.0
+    memory_cg = max(noba_short*nodetectors*32., memory_cg)
 
-    aa = 0.0
+    r = 0
+    p = 0
+    ap = 0
+    z = 0
+    aa = 0
 
     ! Standard aa=0 first guess
 
-    r = yba(:, 1:noba_short, 1:nodetectors)
+    r = yba
 
     if (basis_order == 0) then
        !call preconditioning_band(z(0, :, :), r(0, :, :))
@@ -730,8 +743,8 @@ CONTAINS
     end if
 
     p = z
-    rz = sum(r * z)
-    rr = sum(r * r)
+    rz = sum(r * z, mask=rmask)
+    rr = sum(r * r, mask=rmask)
 
     if (checknan) then
        if (isnan(rz)) print *,id,' : ERROR: rz is nan'
@@ -914,7 +927,7 @@ CONTAINS
 
        cputime_cga_2 = cputime_cga_2 + get_time(12)
 
-       pap = sum(p*ap)
+       pap = sum(p*ap, mask=rmask)
        call sum_mpi(pap)
 
        alpha = rz/pap
@@ -934,8 +947,8 @@ CONTAINS
        end if
 
        rzo = rz
-       rz = sum(r * z)
-       rr = sum(r * r)
+       rz = sum(r * z, mask=rmask)
+       rr = sum(r * r, mask=rmask)
        call sum_mpi(rz)
        call sum_mpi(rr)
        beta = rz / rzo
@@ -1438,7 +1451,7 @@ CONTAINS
     !
     ! Subtract baselines and compute the final map
     real(dp), intent(inout) :: map(nmap,0:nopix_map-1)
-    real(dp), intent(in) :: aa(0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, ip, idet, i0, order, ival, noba, kstart, ipsd
     real(dp) :: aw, detweight
     real(dp), pointer :: basis_function(:, :)
@@ -1494,7 +1507,7 @@ CONTAINS
     ! Subtract baselines from the TOD
 
     real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
-    real(dp), intent(in) :: aa(0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, idet, order, i0
     real(dp), pointer :: basis_function(:, :)
 
@@ -1540,7 +1553,7 @@ CONTAINS
     ! Subtract baselines from the TOD
 
     real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
-    real(dp), intent(in) :: aa(0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, idet, order, i0
     real(dp), pointer :: basis_function(:, :)
 
