@@ -769,7 +769,8 @@ CONTAINS
 
   SUBROUTINE construct_preconditioner(nna)
 
-    real(dp), intent(in)  :: nna(noba_short, nodetectors)
+    real(dp), intent(in)  :: &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
     integer, parameter :: trymax = 10
@@ -807,10 +808,10 @@ CONTAINS
                 cycle
              end if
              do k = kstart+1, kstart+noba
-                if (nna(k, idet) == 0) then
+                if (nna(0, 0, k, idet) == 0) then
                    prec_diag(k, idet) = 1. / detectors(idet)%weights(ipsddet)
                 else
-                   prec_diag(k, idet) = 1. / nna(k, idet)
+                   prec_diag(k, idet) = 1. / nna(0, 0, k, idet)
                 end if
              end do
           end do
@@ -884,7 +885,7 @@ CONTAINS
           ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
           if (ipsd == -1 .or. noba < 1 .or. &
-               all(nna(kstart+1:kstart+noba, idet) == 0)) then
+               all(nna(0, 0, kstart+1:kstart+noba, idet) == 0)) then
              nempty = nempty + 1
              cycle
           end if
@@ -901,7 +902,7 @@ CONTAINS
                   invcov(1:nband, ipsd), 2, noba)
              bandprec(ichunk, idet)%data(1, :) = &
                   bandprec(ichunk, idet)%data(1, :) &
-                  + nna(kstart+1:kstart+noba, idet)
+                  + nna(0, 0, kstart+1:kstart+noba, idet)
 
              ! Cholesky decompose
              call DPBTRF( &

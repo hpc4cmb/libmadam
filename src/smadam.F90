@@ -345,7 +345,7 @@ contains
 
           if (basis_order == 0) then
              call tic
-             call construct_preconditioner(nna(0, 0, :, :))
+             call construct_preconditioner(nna)
              if (id == 0) call toc('construct_preconditioner')
           end if
 
