@@ -717,12 +717,14 @@ CONTAINS
 
   SUBROUTINE convolve_pp(y, x, fc)
     ! Convolve a baseline vector with the noise prior, one pointing period
-    ! at a time. FIXME: should have an option to apply the filter across the boundaries.
+    ! at a time. FIXME: should have an option to apply the filter across the
+    ! boundaries.
 
     real(dp), intent(out) :: y(noba_short, nodetectors)
     real(dp), intent(in) :: x(noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
-    integer :: ichunk, idet, m, no, noba, kstart, ipsd, ierr, id_thread, ijob
+    integer :: ichunk, idet, m, no, noba, kstart, ipsd, ierr, id_thread, &
+         itask, num_threads
     real(dp) :: x0
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
@@ -737,18 +739,19 @@ CONTAINS
     !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
     !$OMP         baselines_short_time, fc, x, y, nthreads) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, x0, m, no, xx, fx, &
-    !$OMP         ipsd, ierr, id_thread, ijob)
+    !$OMP         ipsd, ierr, id_thread, itask, num_threads)
 
     id_thread = omp_get_thread_num()
+    num_threads = omp_get_num_threads()
 
     allocate(fx(nof/2+1), xx(nof), stat=ierr)
     if (ierr /= 0) stop 'No room for Fourier transform'
 
-    ijob = -1
+    itask = -1
     do idet = 1, nodetectors
        do ichunk = 1, ninterval
-          ijob = ijob + 1
-          if (modulo(ijob, nthreads) /= id_thread) cycle
+          itask = itask + 1
+          if (modulo(itask, num_threads) /= id_thread) cycle
           call convolve_interval(ichunk, idet, x, y, xx, fx, fc)
        end do
     end do
@@ -774,7 +777,7 @@ CONTAINS
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
     integer, parameter :: trymax = 10
-    integer :: ntries(trymax), nempty, nband, ijob, id_thread
+    integer :: ntries(trymax), nempty, nband, itask, id_thread
     real(sp) :: memsum, mem_min, mem_max
 
     if (precond_width < 1) return
@@ -869,16 +872,16 @@ CONTAINS
     !$OMP         baselines_short_stop, bandprec, nna, &
     !$OMP         detectors, nthreads, precond_width) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, &
-    !$OMP         i, j, k, n, ierr, try, nband, id_thread, ijob) &
+    !$OMP         i, j, k, n, ierr, try, nband, id_thread, itask) &
     !$OMP     REDUCTION(+:memory_precond, nempty, ntries)
 
     id_thread = omp_get_thread_num()
 
-    ijob = -1
+    itask = -1
     do idet = 1, nodetectors
        do ichunk = 1, ninterval
-          ijob = ijob + 1
-          if (modulo(ijob, nthreads) /= id_thread) cycle
+          itask = itask + 1
+          if (modulo(itask, nthreads) /= id_thread) cycle
 
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(1:ichunk-1))
@@ -966,7 +969,7 @@ CONTAINS
     ! only works for basis_order == 0.
     real(dp), intent(out), target :: z(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in), target :: r(0:basis_order, noba_short, nodetectors)
-    integer :: j, k, idet, kstart, noba, ichunk, ierr, ijob
+    integer :: j, k, idet, kstart, noba, ichunk, ierr, itask, num_threads
 
     integer :: m, no, nband
     real(dp) :: x0
@@ -992,21 +995,22 @@ CONTAINS
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond) &
        !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, ierr, x0, m, no, &
-       !$OMP         xx, fx, nband, id_thread, ijob)
+       !$OMP         xx, fx, nband, id_thread, itask, num_threads)
 
        id_thread = omp_get_thread_num()
+       num_threads = omp_get_num_threads()
 
        allocate(fx(nof/2+1), xx(nof), stat=ierr)
        if (ierr /= 0) stop 'No room for Fourier transform'
 
-       ijob = -1
+       itask = -1
        do idet = 1, nodetectors
           do ichunk = 1, ninterval
-             ijob = ijob + 1
-             if (modulo(ijob, nthreads) /= id_thread) cycle
-
              noba = noba_short_pp(ichunk)
              if (noba == 0) cycle
+
+             itask = itask + 1
+             if (modulo(itask, num_threads) /= id_thread) cycle
 
              if (allocated(bandprec(ichunk, idet)%data)) then
                 ! Use the precomputed Cholesky decomposition

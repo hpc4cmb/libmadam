@@ -1255,9 +1255,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                apn = 0
@@ -1307,9 +1305,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                apn = 0
@@ -1359,9 +1355,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                i0 = baselines_short_start(k)
@@ -1413,9 +1407,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                i0 = baselines_short_start(k)
