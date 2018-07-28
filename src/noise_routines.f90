@@ -667,8 +667,8 @@ CONTAINS
 
   SUBROUTINE cinvmul(ca, aa)
 
-    real(dp), intent(out) :: ca(noba_short, nodetectors)
-    real(dp), intent(in) :: aa(noba_short, nodetectors)
+    real(dp), intent(out) :: ca(0:basis_order, noba_short, nodetectors)
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
 
     if (kfilter) then
        call convolve_pp(ca, aa, fcov)
@@ -684,8 +684,8 @@ CONTAINS
 
   subroutine convolve_interval(ichunk, idet, x, y, xx, fx, fc)
     integer, intent(in) :: ichunk, idet
-    real(dp), intent(out) :: y(noba_short, nodetectors)
-    real(dp), intent(in) :: x(noba_short, nodetectors)
+    real(dp), intent(out) :: y(0:basis_order, noba_short, nodetectors)
+    real(dp), intent(in) :: x(0:basis_order, noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2 + 1, npsdtot)
     real(C_DOUBLE) :: xx(nof)
     complex(C_DOUBLE_COMPLEX) :: fx(nof/2 + 1)
@@ -697,18 +697,18 @@ CONTAINS
 
     if (ipsd == -1) then
        ! no PSD
-       y(kstart+1:kstart+noba, idet) = x(kstart+1:kstart+noba, idet)
+       y(0, kstart+1:kstart+noba, idet) = x(0, kstart+1:kstart+noba, idet)
        return
     end if
 
-    xx(1:noba) = x(kstart+1:kstart+noba, idet)
+    xx(1:noba) = x(0, kstart+1:kstart+noba, idet)
     xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
     xx(noba+1:) = 0
     call dfft(fx, xx)
     fx = fx * fc(:, ipsd)
     call dfftinv(xx, fx)
     xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
-    y(kstart+1:kstart+noba, idet) = xx(1:noba)
+    y(0, kstart+1:kstart+noba, idet) = xx(1:noba)
 
     return
   end subroutine convolve_interval
@@ -964,8 +964,8 @@ CONTAINS
     ! z and r may be 3-dimensional arrays in the calling code but
     ! here we collapse the first dimension.  The band preconditioner
     ! only works for basis_order == 0.
-    real(dp), intent(out), target :: z(noba_short, nodetectors)
-    real(dp), intent(in), target :: r(noba_short, nodetectors)
+    real(dp), intent(out), target :: z(0:basis_order, noba_short, nodetectors)
+    real(dp), intent(in), target :: r(0:basis_order, noba_short, nodetectors)
     integer :: j, k, idet, kstart, noba, ichunk, ierr, ijob
 
     integer :: m, no, nband
@@ -982,7 +982,7 @@ CONTAINS
     call reset_time(16)
 
     if (use_diagonal) then
-       z = r * prec_diag
+       z(0, :, :) = r(0, :, :) * prec_diag
     else if (use_fprecond) then
        ! Apply the filter-based preconditioner
        call convolve_pp(z, r, fprecond)
@@ -1012,10 +1012,11 @@ CONTAINS
                 ! Use the precomputed Cholesky decomposition
                 kstart = sum(noba_short_pp(1:ichunk-1))
                 nband = size(bandprec(ichunk, idet)%data, 1)
-                z(kstart+1:kstart+noba, idet) = r(kstart+1:kstart+noba, idet)
+                z(0, kstart+1:kstart+noba, idet) = &
+                     r(0, kstart+1:kstart+noba, idet)
                 call DPBTRS( &
                      'L', noba, nband-1, 1, bandprec(ichunk, idet)%data, &
-                     nband, z(kstart+1:kstart+noba, idet), noba, ierr)
+                     nband, z(0, kstart+1:kstart+noba, idet), noba, ierr)
                 if (ierr /= 0) then
                    print *, id, ' : failed to Cholesky solve. argument # ', &
                         -ierr, ' had an illegal value'
