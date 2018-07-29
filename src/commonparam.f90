@@ -23,7 +23,7 @@ MODULE commonparam
      integer :: idet = 0
      real(dp) :: fknee = 0
      character(len=20) :: name = ''
-     integer(i8b) :: npsd
+     integer :: npsd
      real(dp), allocatable :: psdstarts(:)
      real(dp), allocatable :: psdfreqs(:)
      real(dp), allocatable :: psds(:,:)
@@ -51,7 +51,8 @@ MODULE commonparam
   integer(i8b) :: psd_downsample=10
   integer (i8b) :: psdlen=1e6
   ! Enable sub ring map making
-  integer(i4b) :: nsubchunk=0, isubchunk=0
+  integer(i2b) :: nsubchunk=0
+  integer(i2b) :: isubchunk=0
   real(dp) :: fnoise_max=1000 ! When measuring noise variance, use this limit
   character(len=SLEN) :: file_profile = ''
   character(len=SLEN) :: file_intermediate_profile = ''
@@ -161,7 +162,7 @@ MODULE commonparam
   type(detector_data), allocatable, target :: detectors(:)
 
   ! Derived directly from input parameters
-  integer(i8b) :: nmap=0, ncc=0, nside_max, nodetectors=-1
+  integer :: nmap=0, ncc=0, nside_max, nodetectors=-1
 
   ! Pixels
   integer :: nopix_map, nopix_cross
@@ -183,7 +184,7 @@ MODULE commonparam
   real(i8b), allocatable :: baselines_short_time(:)
 
   ! Number of pointing periods and their duration as a number of samples
-  integer(i8b) :: ninterval = -1, ninterval_tot = -1
+  integer(i4b) :: ninterval = -1, ninterval_tot = -1
   integer(i8b), allocatable :: intervals(:)
   integer(i4b), allocatable :: interval_id(:)
 

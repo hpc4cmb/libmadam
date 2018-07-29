@@ -15,8 +15,8 @@ MODULE parameter_control
        write_parameters, baseline_times
 
   real(dp), save, public :: memory_basis_functions = 0
-  character(len=40), parameter :: mstr='(1x,a,t32,f9.1," MB")'
-  character(len=40), parameter :: mstr3='(1x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
 
 CONTAINS
 
@@ -29,8 +29,7 @@ CONTAINS
     ! enabled by default and looping over pointing, time and buffer
     ! are disabled
 
-    integer(i4b) :: n, ierr, horn1, horn2
-    integer(i8b) :: idet, idet1, idet2, ipsd, i
+    integer(i4b) :: idet, i, n, ierr, idet1, idet2, horn1, horn2, ipsd
     logical :: use_all_data
     character(len=SLEN) :: subsetname
     real(dp), allocatable :: weights(:)
@@ -196,20 +195,20 @@ CONTAINS
     if (mode_detweight == 0) then ! Detector weights from RMS
 
        do idet = 1,nodetectors
-          where (detectors(idet)%sigmas < tiny(1._dp))
+          where (detectors(idet)%sigmas == 0)
              detectors(idet)%weights = 0
           elsewhere
              detectors(idet)%weights = 1.d0 / detectors(idet)%plateaus / fsample
           end where
        end do
 
-    else if (mode_detweight == 1) then ! uniform weights
+    elseif (mode_detweight == 1) then ! uniform weights
 
        do idet = 1, nodetectors
           detectors(idet)%weights = 1
        end do
 
-    else if (mode_detweight == 2) then ! one weight per horn
+    elseif (mode_detweight == 2) then ! one weight per horn
        ! each detector has its own pointing so figuring out which
        ! detectors share a horn is a little more involved
        do idet1 = 1,nodetectors-1
@@ -224,8 +223,8 @@ CONTAINS
 
                 allocate(weights(detectors(idet1)%npsd))
 
-                where (detectors(idet1)%plateaus < tiny(1._dp) &
-                     .or. detectors(idet2)%plateaus < tiny(1._dp))
+                where (detectors(idet1)%plateaus == 0 &
+                     .or. detectors(idet2)%plateaus == 0)
                    weights = 0
                 elsewhere
                    weights = 2 / (detectors(idet1)%plateaus &
@@ -261,8 +260,8 @@ CONTAINS
 
     if (id == 0 .and. info > 2) then
        write(*,*)
-       write(*,'(1x,a,t24,"= ",i12)') 'istart_mission', istart_mission
-       write(*,'(1x,a,t24,"= ",i12)') 'nosamples_tot', nosamples_tot
+       write(*,'(x,a,t24,"= ",i12)') 'istart_mission', istart_mission
+       write(*,'(x,a,t24,"= ",i12)') 'nosamples_tot', nosamples_tot
     end if
 
     ! Non-integer baseline length allowed in standard mode + use_pntperiods=T
@@ -300,7 +299,7 @@ CONTAINS
                intervals(i), ' samples long but the baseline length is ', &
                int(dnshort, i8b), ' samples. Baseline truncated.'
        endif
-       noba_short_pp(i) = int((intervals(i)-1) / dnshort, i4b) + 1
+       noba_short_pp(i) = (intervals(i)-1) / dnshort + 1
     end do
     noba_short = sum(noba_short_pp)
 
@@ -364,7 +363,7 @@ CONTAINS
 
       ! Check to see if all the processes have the same detectors
 
-      integer(i8b) :: nodetectors_root, idet
+      integer :: nodetectors_root, idet
       character(len=SLEN) :: detname_root
 
       nodetectors_root = nodetectors
@@ -417,7 +416,7 @@ CONTAINS
     character(len=30) :: fi
     integer(i4b) :: i, k, ierr
 
-    fi = '(1x,a,t24,"= ",i12,   2x,a)'
+    fi = '(x,a,t24,"= ",i12,   2x,a)'
 
     if (id == 0 .and. info > 2) write(*,*) 'Initializing parallelization'
     if (info > 4) write(*,idf) id, 'Initializing parallelization'
@@ -484,16 +483,15 @@ CONTAINS
 
   SUBROUTINE write_parameters()
 
-    integer :: i, j
-    integer(i8b) :: idet
+    integer :: idet, i, j
     character(len=30) :: fi, fe, ff, fk, fs
     real(dp) :: sigma
 
-    fi = '(1x,a,t24,"= ",i12,   t40,a)'
-    fe = '(1x,a,t24,"= ",es12.5,t40,a)'
-    ff = '(1x,a,t24,"= ",f12.4, t40,a)'
-    fk = '(1x,a,t24,"= ",l12,   t40,a)'
-    fs = '(1x,a,t24,"= ",a,     t40,a)'
+    fi = '(x,a,t24,"= ",i12,   t40,a)'
+    fe = '(x,a,t24,"= ",es12.5,t40,a)'
+    ff = '(x,a,t24,"= ",f12.4, t40,a)'
+    fk = '(x,a,t24,"= ",l12,   t40,a)'
+    fs = '(x,a,t24,"= ",a,     t40,a)'
 
     if (ntasks > 1 .and. id /= 0) return
     if (info == 0) return
@@ -517,7 +515,7 @@ CONTAINS
     write (*, *)
     write (*, fk) 'bin_subsets', bin_subsets
     if (bin_subsets) then
-       write (*, '(1x,a,t24,"= ")') 'Surveys'
+       write (*, '(x,a,t24,"= ")') 'Surveys'
        do i = 1, nsurvey
           write (*, '(i4,4x,a15,"  :  ")', advance='no') i, trim(surveys(i)%name)
           do j = 1, surveys(i)%nspan
@@ -526,11 +524,11 @@ CONTAINS
           end do
           write (*, *)
        end do
-       write (*, '(1x,a,t24,"= ")') 'Detector sets'
+       write (*, '(x,a,t24,"= ")') 'Detector sets'
        do i = 1, ndetset
           write (*, '(i4,4x,a15,"  :  ")', advance='no') i, trim(detsets(i)%name)
           do j = 1, detsets(i)%ndet
-             write (*, '(a,1x)', advance='no') trim(detsets(i)%detectors(j))
+             write (*, '(a,x)', advance='no') trim(detsets(i)%detectors(j))
           end do
           write (*, *)
        end do
@@ -693,15 +691,15 @@ CONTAINS
     write (*,ff) '', nosamples_tot/fsample/3600., 'hours'
 
     write (*,*)
-    write (*,'(1x,a)') 'Detectors available on the FIRST process and noise ' &
+    write (*,'(x,a)') 'Detectors available on the FIRST process and noise ' &
          // 'according to the FIRST period'
-    write (*,'(1x,a12,3a15)') 'detector    ', 'sigma', 'weight', '1/sqrt(weight)'
+    write (*,'(x,a12,3a15)') 'detector    ', 'sigma', 'weight', '1/sqrt(weight)'
     do idet = 1, nodetectors
        sigma = 0
        if (detectors(idet)%weights(1) > 0) then
           sigma = 1 / sqrt(detectors(idet)%weights(1))
        end if
-       write (*,'(1x,a12,3g15.5)') detectors(idet)%name, &
+       write (*,'(x,a12,3g15.5)') detectors(idet)%name, &
             detectors(idet)%sigmas(1), detectors(idet)%weights(1), sigma
     end do
 
@@ -744,12 +742,12 @@ CONTAINS
     ! Initialize the next split-mode step.
     ! Find the TOD chunk handled in this step. In standard mode = all TOD.
     ! Also initialize parameters defining the division of TOD to processes.
-    integer :: m, n0, n, ierr, order, isub
-    integer(i8b) :: nsamp, my_offset, i, j, k
-    integer(i8b) :: sublen, suboffset, sub_start, sub_end
+    integer :: i, j, k, m, n0, n, ierr
+    integer(i8b) :: nsamp, order, my_offset
+    integer(i8b) :: sublen, suboffset, sub_start, sub_end, isub
     real(dp) :: dn, dn0, r, dr, rstart, ninv
     real(dp), pointer :: basis_function(:,:)
-    real(dp) :: memsum, mem_min, mem_max
+    real(sp) :: memsum, mem_min, mem_max
 
     call wait_mpi
 
@@ -789,8 +787,7 @@ CONTAINS
           baselines_short(m) = n - n0
        end do
        m = m + 1
-       ! Last baseline takes the rest
-       baselines_short(m) = int(intervals(i), i4b) - n
+       baselines_short(m) = intervals(i) - n ! Last baseline takes the rest
 
        if (kfirst) then
           if (baselines_short(m) < 0 &
@@ -814,14 +811,14 @@ CONTAINS
     if (nsubchunk > 0) then
        my_offset = 0
        do i = 1, ninterval
-          n = int(intervals(i), i4b)
+          n = intervals(i)
           sublen = n / nsubchunk
           do isub = 1, nsubchunk
              suboffset = sublen * (isub - 1)
              sub_start = my_offset + 1 + suboffset
              sub_end = sub_start + sublen - 1
              if (isub == nsubchunk) sub_end = my_offset + n
-             subchunk(sub_start:sub_end) = int(isub, i2b)
+             subchunk(sub_start:sub_end) = isub
           end do
           my_offset = my_offset + n
        end do
@@ -870,7 +867,7 @@ CONTAINS
                   + (basis_order+1)*nsamp*8
              basis_function => basis_functions(k)%arr
              if (nsamp < 1) cycle
-             dr = 2._dp / nsamp
+             dr = 2. / nsamp
              rstart = 0.5*dr - 1
              select case (basis_func)
              case (basis_poly)

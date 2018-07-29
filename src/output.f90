@@ -331,7 +331,7 @@ CONTAINS
 
           do imap = 1,nmap
 
-             call get_submap(sbuffer, nosubpix_map, map, int(nmap, i4b), imap, &
+             call get_submap(sbuffer, nosubpix_map, map, nmap, imap, &
                   isubmap, idwr)
 
              if (ID==idwr) then
@@ -479,8 +479,7 @@ CONTAINS
 
        do imap = 1,nmap
 
-          call get_submap( &
-               sbuffer, nosubpix_map, map, int(nmap, i4b), imap, isubmap, idwr)
+          call get_submap(sbuffer, nosubpix_map, map, nmap, imap, isubmap, idwr)
 
           if (ID==idwr) then
              if (write_cut) then
@@ -743,8 +742,7 @@ CONTAINS
           do imap = 1,nmap
 
              !print *,id,' : getting submap ',isubmap,imap ! debug
-             call get_submap( &
-                  sbuffer, nosubpix_map, binmap, int(nmap, i4b), imap, &
+             call get_submap(sbuffer, nosubpix_map, binmap, nmap, imap, &
                   isubmap, idwr)
 
              if (ID==idwr) then
@@ -1113,8 +1111,8 @@ CONTAINS
              call get_submap(ibuffer, nosubpix_map, mask, isubmap, idwr)
           else
              ibuffer = 0
-             call get_submap( &
-                  dbuffer, nosubpix_map, cc, int(nmap, i4b), 1, 1, isubmap, idwr)
+             call get_submap(dbuffer, nosubpix_map, cc, nmap, 1, 1, isubmap, &
+                  idwr)
              where(dbuffer /= 0) ibuffer = 1
           end if
 
@@ -1137,8 +1135,7 @@ CONTAINS
        do imap = 1, nmap
           do jmap = imap, nmap
 
-             call get_submap( &
-                  dbuffer, nosubpix_map, cc, int(nmap, i4b), imap, jmap, &
+             call get_submap(dbuffer, nosubpix_map, cc, nmap, imap, jmap, &
                   isubmap, idwr)
 
              if (ID == idwr) then
@@ -1286,8 +1283,7 @@ CONTAINS
        do imap = 1, nmap
           do jmap = 1, nmap
 
-             call get_submap( &
-                  dbuffer, nosubpix_map, cc, int(nmap, i4b), imap, jmap, &
+             call get_submap(dbuffer, nosubpix_map, cc, nmap, imap, jmap, &
                   isubmap, idwr)
 
              if (ID == idwr) then

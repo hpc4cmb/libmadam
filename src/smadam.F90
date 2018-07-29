@@ -49,8 +49,7 @@ module smadam
   ! openmp
   integer :: nprocs
 
-  integer(i4b) :: subchunk_start
-  integer(i8b) :: i
+  integer(i4b) :: subchunk_start, i
   character(len=SLEN) :: subchunk_file_map, subchunk_file_base
   character(len=SLEN) :: subchunk_file_binmap
   character(len=SLEN) :: subchunk_file_hit, subchunk_file_mask
@@ -100,8 +99,7 @@ contains
     integer(c_long), intent(in), value :: npsdval
     real(c_double), intent(in) :: psdvals(npsdval)
 
-    integer(i4b) :: subchunkcounter
-    integer(i8b) :: pixmin, pixmax, idet
+    integer :: idet, pixmin, pixmax, subchunkcounter
 
     ! set up MPI
 
@@ -139,7 +137,7 @@ contains
     if (temperature_only .and. nnz /= 1) &
          call abort_mpi('temperature_only=T but pointing weights are polarized')
 
-    nmap = int(nnz, i4b)
+    nmap = nnz
 
     call read_detectors(detstring, ndet, detweights, npsd, npsdtot, &
          psdstarts, npsdbin, psdfreqs, npsdval, psdvals)
@@ -635,7 +633,7 @@ contains
        path_output = trim(adjustl(path_output))
     end if
 
-    nmap = int(nnz, i4b)
+    nmap = nnz
 
     call c_f_pointer(timestamps, sampletime, (/nsamp/))
     call c_f_pointer(pix, pixels, (/nsamp, ndet/))
@@ -923,8 +921,9 @@ contains
 
     type(detset_type) :: detset
     type(survey_type) :: survey
-    integer(i8b) :: nhit_det, nhit_survey, i, nmap_save, idet, jdet, ncc_save
-    integer(i4b) :: idetset, isurvey, j
+    integer(i8b) :: nhit_det, nhit_survey
+    integer :: idetset, idet, jdet, isurvey
+    integer :: i, j, nmap_save, ncc_save
     logical :: do_binmap_save, kfirst_save, temperature_only_save
     logical :: concatenate_messages_save
     character(len=SLEN) :: file_binmap_save, file_hit_save
@@ -1251,7 +1250,7 @@ contains
 
   subroutine add_subchunk_id(filename, subchunk_id, nsubchunk)
     character(len=*) :: filename
-    integer(i4b) :: subchunk_id, nsubchunk
+    integer(i2b) :: subchunk_id, nsubchunk
 
     integer :: i
     character(len=SLEN) :: stemp

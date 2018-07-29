@@ -9,6 +9,10 @@ MODULE inputparam
 
   integer, parameter :: MAXNODET = 9999
 
+  character(len=40), allocatable :: detc(:)
+
+  integer :: nodetc = 0
+
   public read_parameters, read_detectors
 
 CONTAINS
@@ -83,8 +87,7 @@ CONTAINS
     integer(c_long), intent(in), value :: npsdval
     real(c_double), intent(in) :: psdvals(npsdval)
 
-    integer :: n, istart, istop, idet, ierr, ipsd
-    integer(i8b) :: nint, psdoffset, i
+    integer :: n, istart, istop, i, idet, nint, psdoffset, ierr, ipsd
     real(dp) :: detweight
     character(len=SLEN) :: line
 

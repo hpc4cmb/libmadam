@@ -40,8 +40,8 @@ MODULE noise_routines
 
   ! PSD information
 
-  integer(i8b) :: npsdtot
-  integer(i8b), allocatable :: psddet(:), psdind(:)
+  integer :: npsdtot
+  integer, allocatable :: psddet(:), psdind(:)
   real(dp), allocatable :: psdstart(:), psdstop(:)
 
   public cinvmul, build_filter, close_filter, &
@@ -56,8 +56,7 @@ CONTAINS
     !
     logical, intent(in) :: radiometers
     real(dp) :: fstep, fbase, flower, fupper, rms, plateau
-    integer :: nbin, ilower, iupper, ibase, i
-    integer(i8b) :: idet, ipsd
+    integer :: ipsd, nbin, ilower, iupper, ibase, i, idet
     real(dp), allocatable :: freqs(:), data(:)
 
     if (radiometers) then
@@ -130,9 +129,8 @@ CONTAINS
     n_out = size(targetfreq)
 
     startbin = 1
-    if (freq(1) < tiny(freq(1))) then
-       ! Skip zero frequency bin
-       n_in = n_in - 1
+    if (freq(1) == 0) then
+       n_in = n_in -1
        startbin = 2
     end if
 
@@ -168,7 +166,7 @@ CONTAINS
     !
     ! Returns the global PSD index (accross all detectors)
     !
-    integer(i8b) :: idet, ipsd
+    integer :: idet, ipsd
     real(dp) :: starttime
 
     do ipsd = 1, npsdtot
@@ -186,7 +184,7 @@ CONTAINS
     !
     ! Returns the PSD index for this detector
     !
-    integer(i8b) :: idet, ipsd
+    integer :: idet, ipsd
     real(dp) :: starttime
 
     if (.not. allocated(detectors(idet)%psds) &
@@ -256,7 +254,7 @@ CONTAINS
 
 
   subroutine free_bandprec
-    integer(i8b) :: idet, ichunk
+    integer :: ichunk, idet
 
     if (allocated(bandprec)) then
        do ichunk = 1, ninterval
@@ -300,13 +298,13 @@ CONTAINS
   SUBROUTINE build_filter()
     ! Build the noise filter
     integer, parameter :: kmax = 2
-    integer :: i, k, nolines, nocols, num_threads, itask, ierr
-    integer(i8b) :: idet, ipsd, ipsdtot
+    integer :: i, k, idet, nolines, nocols, num_threads, itask
     real(dp) :: fa, x
     real(dp) :: slope, fmin, fknee, sigma
     logical :: kread_file
     real(dp), allocatable :: aspec(:), f(:), g(:), spectrum(:), &
          ftable(:), spectrum_table(:, :)
+    integer :: ipsd, ipsdtot, ierr
     real(dp) :: memsum, mem_min, mem_max
 
     if (.not. kfilter) return
@@ -327,14 +325,14 @@ CONTAINS
          psddet(npsdtot), psdind(npsdtot), psdstart(npsdtot), psdstop(npsdtot), &
          stat=ierr)
     if (ierr /= 0) stop 'No room for fcov'
-    memory_filter = memory_filter + dble(nof/2+1)*npsdtot*16 + dble(npsdtot)*24
+    memory_filter = memory_filter + (nof/2+1)*npsdtot*16. + npsdtot*24.
 
     memsum = memory_filter / 2**20
     mem_min = memsum; mem_max = memsum
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
     if (ID == 0 .and. info > 0) then
-       write(*,'(1x,a,t32,3(f9.1," MB"))') &
+       write(*,'(x,a,t32,3(f9.1," MB"))') &
             'Allocated memory for filter:', memsum, mem_min, mem_max
     end if
 
@@ -349,6 +347,7 @@ CONTAINS
     !$OMP         psdstop, nof, fa, fcov, kread_file) &
     !$OMP     PRIVATE(id_thread, num_threads, ipsdtot, itask, idet, ipsd, &
     !$OMP         aspec, spectrum, f, g, ierr, k, x)
+    !$OMP
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
@@ -524,8 +523,7 @@ CONTAINS
       ! broadcast the results
       call broadcast_mpi(nolines, 0)
       do idet = 1, nodetectors
-         call broadcast_mpi( &
-              detectors(idet)%sigmas, int(detectors(idet)%npsd, i4b), 0)
+         call broadcast_mpi(detectors(idet)%sigmas, detectors(idet)%npsd, 0)
          detectors(idet)%weights = 1 / detectors(idet)%sigmas**2
       end do
 
@@ -583,7 +581,7 @@ CONTAINS
       !
       ! Find the spectrum for detector idet by logarithmic interpolation
       !
-      integer(i8b), intent(in) :: idet, ipsd
+      integer, intent(in) :: idet, ipsd
       real(dp), intent(inout) :: f(nof), spectrum(nof)
 
       integer  :: i, j, ierr, n
@@ -676,7 +674,7 @@ CONTAINS
          end do loop_bins
       end if
 
-      if (f(1) < tiny(f(1))) spectrum(1) = 0 ! leave the mean unconstrained
+      if (f(1) == 0) spectrum(1) = 0 ! leave the mean unconstrained
 
     END SUBROUTINE get_spectrum_interp
 
@@ -709,7 +707,7 @@ CONTAINS
     ! Adjust kstart and noba to exclude flagged baselines in
     ! either end of the interval
     integer, intent(inout) :: kstart, noba
-    integer(i8b), intent(in) :: idet
+    integer, intent(in) :: idet
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
@@ -735,7 +733,7 @@ CONTAINS
 
 
   subroutine convolve_interval(ichunk, idet, x, y, xx, fx, fc, nna)
-    integer(i8b), intent(in) :: ichunk, idet
+    integer, intent(in) :: ichunk, idet
     real(dp), intent(out) :: y(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in) :: x(0:basis_order, noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2 + 1, npsdtot)
@@ -786,8 +784,8 @@ CONTAINS
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
-    integer :: m, no, noba, kstart, ierr, id_thread, itask, num_threads
-    integer(i8b) :: idet, ipsd, ichunk
+    integer :: ichunk, idet, m, no, noba, kstart, ipsd, ierr, id_thread, &
+         itask, num_threads
     real(dp) :: x0
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
@@ -837,8 +835,7 @@ CONTAINS
 
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
-    integer :: i, j, k, kstart, n, noba, ierr, try, ipsddet
-    integer(i8b) :: idet, ipsd, ichunk
+    integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
     integer, parameter :: trymax = 10
     integer :: ntries(trymax), nempty, nband, itask, id_thread, num_threads
@@ -1045,8 +1042,7 @@ CONTAINS
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
-    integer :: j, k, kstart, noba, ierr, itask, num_threads
-    integer(i8b) :: idet, ichunk
+    integer :: j, k, idet, kstart, noba, ichunk, ierr, itask, num_threads
     integer :: m, no, nband
     real(dp) :: x0
 

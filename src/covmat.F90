@@ -46,8 +46,8 @@ contains
   subroutine write_covmat(outroot)
     character(len=*), intent(in) :: outroot
 
-    integer(i4b) :: ierr, ipix, ibase, jpix, jbase, i, j, kstart, noba, lag
-    integer(i8b) :: idet, ipsd, ipsd_det, ichunk
+    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, ipix, ibase, &
+         jpix, jbase, i, j, kstart, noba, lag
     real(dp) :: detweight, mm, ptf1
     character(len=SLEN) :: outfile
     logical :: there
@@ -77,10 +77,10 @@ contains
 
        INQUIRE(file=outfile, exist=there)
        IF (there) THEN
-          IF (id == 0) WRITE (*,'(1x,a," EXISTS! skipping ...")') TRIM(outfile)
+          IF (id == 0) WRITE (*,'(x,a," EXISTS! skipping ...")') TRIM(outfile)
           cycle loop_detector
        ELSE
-          IF (id == 0) WRITE (*,'(1x,"Computing ",a)') trim(outfile)
+          IF (id == 0) WRITE (*,'(x,"Computing ",a)') trim(outfile)
        END IF
 
        call tic
@@ -100,7 +100,7 @@ contains
           ! ALWAYS use the optimal weights, even if the map has some
           ! other weighting scheme
           detweight = 1 / detectors(idet)%sigmas(ipsd_det)**2
-          if (detweight < tiny(detweight)) cycle loop_chunk
+          if (detweight == 0) cycle loop_chunk
 
           call get_ptf(idet, kstart, noba, detweight)
 
@@ -200,11 +200,10 @@ contains
 
 
   subroutine add_white(idet, detweight)
-    integer(i8b), intent(in) :: idet
+    integer(i4b), intent(in) :: idet
     real(dp), intent(in) :: detweight
 
-    integer(i4b) :: i
-    integer(i8b) :: ip, k
+    integer(i4b) :: k, i, ip
 
     ! Add white noise to the diagonal
 
@@ -237,7 +236,7 @@ contains
 
   subroutine symmetrize()
 
-    integer(i8b) :: ipix, jpix
+    integer(i4b) :: ipix, jpix
 
     ! symmetrize the matrix since we only accumulated the lower diagonal
 
@@ -245,8 +244,10 @@ contains
 
     do ipix = 0, nolocpix-1
        do jpix = ipix+1, nolocpix-1
-          local_covmat(:, :, ipix, jpix) = &
-               transpose(local_covmat(:, :, jpix, ipix))
+          if (local_covmat(1, 1, jpix, ipix) /= 0) then
+             local_covmat(:, :, ipix, jpix) = &
+                  transpose(local_covmat(:, :, jpix, ipix))
+          end if
        end do
     end do
 
@@ -260,10 +261,9 @@ contains
     ! create a global pixel-pixel matrix, accumulate the local
     ! contributions and write the matrix out
     character(len=*), intent(in) :: covmatfile
-    integer(i4b) :: ierr, mypix1, mypix2, isend, &
-         ip1, ip2, evenodd, itarget, isource, nelem
-    integer(i8b) :: firstpix, lastpix, npix, npix_proc, pix1, pix2, map1, &
-         row, col
+    integer(i4b) :: ierr, mypix1, mypix2, row, col, isend, map1, pix1, &
+         pix2, ip1, ip2, evenodd, itarget, isource, nelem
+    integer(i8b) :: firstpix, lastpix, npix, npix_proc
     real(dp), allocatable, target :: covmat1(:, :), covmat2(:, :)
     real(dp), pointer :: covmat_send(:, :), covmat_recv(:, :)
     INTEGER(i4b) :: filemode, fileinfo, outfilehandle, count, &
@@ -274,7 +274,7 @@ contains
 
     npix = 12 * nside_map**2
     npix_proc = ceiling(dble(npix) / ntasks)
-    nelem = int(npix * nmap * npix_proc * nmap, i4b)
+    nelem = npix * nmap * npix_proc * nmap
 
     allocate(covmat1(npix*nmap, npix_proc*nmap), &
          covmat2(npix*nmap, npix_proc*nmap), stat=ierr)
@@ -317,9 +317,8 @@ contains
              pix2 = mypix2 + subtable2(ip2)*nosubpix_max
              row = pix2*nmap + 1
 
-             if (local_covmat(1, 1, mypix2, mypix1) < tiny(1._dp)) then
-                cycle loop_row
-             end if
+             if (local_covmat(1, 1, mypix2, mypix1) == 0) cycle loop_row
+
 
              covmat_send(row:row+nmap-1, col:col+nmap-1) = &
                   covmat_send(row:row+nmap-1, col:col+nmap-1) &
@@ -357,7 +356,7 @@ contains
     ! add the sentinel value to unobserved pixels
 
     do pix1 = firstpix, lastpix
-       if (covmat_recv(pix1*nmap+1, (pix1-firstpix)*nmap+1) < tiny(1._dp)) then
+       if (covmat_recv(pix1*nmap+1, (pix1-firstpix)*nmap+1) == 0) then
           do map1 = 1, nmap
              covmat_recv(pix1*nmap+map1, (pix1-firstpix)*nmap+map1) = -1
           end do
@@ -387,7 +386,7 @@ contains
          'native', fileinfo, ierr)
     IF (ierr /= 0) CALL abort_mpi('Unable to establish view to covmat file')
 
-    count = int(npix * nmap * (lastpix - firstpix + 1) * nmap, i4b)
+    count = npix * nmap * (lastpix - firstpix + 1) * nmap
     if (count > 0) then
        CALL mpi_file_write(outfilehandle, covmat_recv, count, MPI_REAL8, &
             status, ierr)
@@ -410,10 +409,8 @@ contains
 
   subroutine get_hitmap(idet, kstart, noba)
     ! construct a hitmap for the current pointing period
-    integer(i8b), intent(in) :: idet
-    integer(i4b), intent(in) :: kstart, noba
-    integer(i4b) :: ierr, k, i, hitmax, nhit
-    integer(i8b) :: ip
+    integer(i4b), intent(in) :: idet, kstart, noba
+    integer(i4b) :: ip, ierr, k, i, hitmax, nhit
     integer(i4b), save :: hitmax_max = 0
 
     call reset_time(10)
@@ -422,7 +419,7 @@ contains
 
     hitmax = 0
     do ip = 0, nolocpix
-       nhit = count(abs(local_ptf(1, :, ip)) >= tiny(1._dp))
+       nhit = count(local_ptf(1, :, ip) /= 0)
        hitmax = max(nhit, hitmax)
     end do
 
@@ -479,11 +476,9 @@ contains
 
   subroutine get_ptf(idet, kstart, noba, detweight)
     ! Accumulate P^T F
-    integer(i8b), intent(in) :: idet
-    integer(i4b), intent(in) :: kstart, noba
+    integer(i4b), intent(in) :: idet, kstart, noba
     real(dp) :: detweight
-    integer(i4b) :: ierr, k, i
-    integer(i8b) :: ip
+    integer(i4b) :: ip, ierr, k, i
     integer(i4b), save :: nobamax = 0
 
     call reset_time(10)
@@ -513,7 +508,7 @@ contains
        end do
     end do
 
-    local_ptf = local_ptf * detweight
+    where (local_ptf /= 0) local_ptf = local_ptf * detweight
 
     cputime_ptf = cputime_ptf + get_time(10)
 
@@ -526,12 +521,12 @@ contains
     ! M = (C_a^-1 + F^T C_w^-1 F)^-1
 
     complex(dp), intent(inout) :: fcov(nof/2+1,*)
-    integer(i8b), intent(in) :: ipsd
+    integer(i4b), intent(in) :: ipsd
     real(dp), intent(in) :: detweight
     integer(i4b), intent(in) :: noba
     integer(i4b) :: ierr
 
-    integer(i8b), save :: last_ipsd = -1, last_noba = -1, noba_max = 0
+    integer(i4b), save :: last_ipsd = -1, last_noba = -1, noba_max = 0
 
     if (ipsd == last_ipsd .and. noba == last_noba) return
 

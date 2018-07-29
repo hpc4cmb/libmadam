@@ -280,9 +280,9 @@ CONTAINS
        write (*,'(a,i0)') 'Total number of samples (single detector): ', &
             nosamples_tot
        write (*,'(a,f7.3," %")') 'Zero-weight fraction (all detectors): ', &
-            nzeroweight*100._dp / (ngood+nflag)
+            nzeroweight*100. / (ngood+nflag)
        write (*,'(a,f7.3," %")') 'Flagged fraction (all detectors): ', &
-            nflag*100._dp / (ngood+nflag)
+            nflag*100. / (ngood+nflag)
        write (*,'(a,i0)') 'Total number of intervals: ', ninterval_tot
        write (*,'(a,i0)') 'Max number of samples per task: ', nosamples_proc_max
     end if
