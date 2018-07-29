@@ -14,9 +14,9 @@ MODULE madam_routines
   implicit none
   private
 
-  real(sp), save, public :: memory_cg = 0
+  real(dp), save, public :: memory_cg = 0
 
-  real(sp), save, public :: cputime_build_matrix = 0, cputime_send_matrix = 0, &
+  real(dp), save, public :: cputime_build_matrix = 0, cputime_send_matrix = 0, &
        cputime_bin_maps = 0, cputime_send_maps = 0, cputime_count_hits = 0, &
        cputime_cga = 0, cputime_cga_init = 0, cputime_cga_mpi_reduce = 0, &
        cputime_cga_mpi_scatter = 0, cputime_cga_1 = 0, cputime_cga_2 = 0, &

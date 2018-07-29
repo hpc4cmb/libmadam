@@ -30,7 +30,7 @@ module smadam
 
   integer :: idet
 
-  real(sp) :: cputime_init=.0, cputime_final=.0, cputime_total=.0, &
+  real(dp) :: cputime_init=.0, cputime_final=.0, cputime_total=.0, &
        cputime_wait=.0, cputime_read=.0
 
   real(dp), pointer :: temparr(:, :)=>null()
@@ -56,7 +56,7 @@ module smadam
   character(len=SLEN) :: subchunk_file_matrix, subchunk_file_leakmatrix
   character(len=SLEN) :: subchunk_file_wcov
   ! subset mapping
-  real(sp) :: cputime_flag_subset=.0, cputime_subset=.0, cputime_write_subset=.0
+  real(dp) :: cputime_flag_subset=.0, cputime_subset=.0, cputime_write_subset=.0
 
 contains
 
@@ -113,7 +113,7 @@ contains
 
     if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
-            " threads per task.")') ntasks, nprocs, nthreads
+            & " threads per task.")') ntasks, nprocs, nthreads
     end if
 
     call reset_time()
@@ -600,7 +600,7 @@ contains
     nthreads = nthreads_max
     if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
-            " threads per task.")') ntasks, nprocs, nthreads
+            & " threads per task.")') ntasks, nprocs, nthreads
     end if
 
     call reset_time()

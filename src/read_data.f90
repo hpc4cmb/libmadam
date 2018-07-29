@@ -16,7 +16,7 @@ MODULE read_data
   implicit none
   private
 
-  real(sp), public :: cputime_read_tod=0, cputime_read_detpointing=0, &
+  real(dp), public :: cputime_read_tod=0, cputime_read_detpointing=0, &
        cputime_read_timestamps=0, cputime_postprocess_tod, memory_sat=0, &
        cputime_read_pointing_periods=0
 

@@ -27,7 +27,7 @@ MODULE covmat
 
   IMPLICIT NONE
 
-  real(sp), save, public :: memory_ncm = 0, cputime_ncm=0, cputime_hitmap=0, &
+  real(dp), save, public :: memory_ncm = 0, cputime_ncm=0, cputime_hitmap=0, &
        cputime_ptf=0, cputime_middlematrix=0, cputime_accumulate=0, &
        cputime_white=0, cputime_save_matrix=0, cputime_symmetrize=0, &
        cputime_invert_middlematrix=0, cputime_symmetrize_middlematrix=0

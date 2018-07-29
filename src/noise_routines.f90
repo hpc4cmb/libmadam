@@ -17,11 +17,9 @@ MODULE noise_routines
 
   integer, save :: nof = -1, nofilter = 0
 
-  real(sp), save, public :: memory_filter = 0
-  real(sp), save, public :: memory_precond = 0
-  real(sp), save, public :: cputime_filter = 0
-  real(sp), save, public :: cputime_precond = 0
-  real(sp), save, public :: cputime_prec_construct = 0
+  real(dp), save, public :: memory_filter = 0, memory_precond = 0, &
+       cputime_filter = 0, cputime_precond = 0, &
+       cputime_prec_construct = 0
 
   real(dp), allocatable :: xx(:)
   complex(dp), allocatable :: fx(:)
@@ -215,9 +213,6 @@ CONTAINS
 
   SUBROUTINE init_filter
 
-    ! Stock version of Madam now has filter_time and tail_time hardcoded to their
-    ! default values. We leave them free but retain matching default values
-
     integer :: nof_min, ierr
 
     if (.not. kfilter) return
@@ -303,14 +298,14 @@ CONTAINS
   SUBROUTINE build_filter()
     ! Build the noise filter
     integer, parameter :: kmax = 2
-    integer :: i, k, idet, nolines, nocols
+    integer :: i, k, idet, nolines, nocols, num_threads, itask
     real(dp) :: fa, x
     real(dp) :: slope, fmin, fknee, sigma
     logical :: kread_file
     real(dp), allocatable :: aspec(:), f(:), g(:), spectrum(:), &
          ftable(:), spectrum_table(:, :)
     integer :: ipsd, ipsdtot, ierr
-    real(sp) :: memsum, mem_min, mem_max
+    real(dp) :: memsum, mem_min, mem_max
 
     if (.not. kfilter) return
 
@@ -341,21 +336,35 @@ CONTAINS
             'Allocated memory for filter:', memsum, mem_min, mem_max
     end if
 
-    allocate(aspec(nof/2+1), spectrum(nof), f(nof), g(nof), stat=ierr)
-    if (ierr /= 0) stop 'No room for aspec'
-
     kread_file = (len_trim(file_spectrum) > 0)
     if (kread_file) call read_spectrum
 
     fa = fsample/nshort
 
+    !$OMP PARALLEL NUM_THREADS(nthreads) &
+    !$OMP     DEFAULT(NONE) &
+    !$OMP     SHARED(nodetectors, detectors, psddet, psdind, psdstart, &
+    !$OMP         psdstop, nof, fa, fcov, kread_file) &
+    !$OMP     PRIVATE(id_thread, num_threads, ipsdtot, itask, idet, ipsd, &
+    !$OMP         aspec, spectrum, f, g, ierr, k, x)
+    !$OMP
+
+    id_thread = omp_get_thread_num()
+    num_threads = omp_get_num_threads()
+
+    allocate(aspec(nof/2+1), spectrum(nof), f(nof), g(nof), stat=ierr)
+    if (ierr /= 0) stop 'No room for aspec'
+
     ipsdtot = 0
+    itask = -1
     do idet = 1, nodetectors
        if (.not. allocated(detectors(idet)%psds)) then
           stop 'All detectors must have at least one PSD to build the filter'
        end if
        do ipsd = 1, detectors(idet)%npsd
           ipsdtot = ipsdtot + 1
+          itask = itask + 1
+          if (modulo(itask, num_threads) /= id_thread) cycle
 
           psddet(ipsdtot) = idet
           psdind(ipsdtot) = ipsd
@@ -370,7 +379,7 @@ CONTAINS
           do k = 0, kmax
 
              do i = 1, nof
-                f(i) = k*fa +(i-1)*fa/nof
+                f(i) = k*fa + (i-1)*fa/nof
              end do
 
              if (kread_file) then
@@ -378,7 +387,7 @@ CONTAINS
              else
                 !call get_spectrum_powerlaw
                 !call get_spectrum_toast(idet, ipsd)
-                call get_spectrum_interp(idet, ipsd)
+                call get_spectrum_interp(idet, ipsd, f, spectrum)
              end if
 
              do i = 1, nof
@@ -416,7 +425,10 @@ CONTAINS
        end do ! ipsd
     end do ! idet
 
-    deallocate(aspec, f, g, spectrum)
+    deallocate(aspec, spectrum, f, g)
+
+    !$OMP END PARALLEL
+
     if (kread_file) deallocate(ftable, spectrum_table)
 
     if (info > 4) write(*,*) 'Done'
@@ -565,11 +577,12 @@ CONTAINS
 
 
 
-    SUBROUTINE get_spectrum_interp(idet, ipsd)
+    SUBROUTINE get_spectrum_interp(idet, ipsd, f, spectrum)
       !
       ! Find the spectrum for detector idet by logarithmic interpolation
       !
-      integer :: idet, ipsd
+      integer, intent(in) :: idet, ipsd
+      real(dp), intent(inout) :: f(nof), spectrum(nof)
 
       integer  :: i, j, ierr, n
       real(dp) :: plateau, margin
@@ -826,7 +839,7 @@ CONTAINS
     real(dp), allocatable :: invcov(:, :)
     integer, parameter :: trymax = 10
     integer :: ntries(trymax), nempty, nband, itask, id_thread, num_threads
-    real(sp) :: memsum, mem_min, mem_max
+    real(dp) :: memsum, mem_min, mem_max
 
     if (precond_width < 1) return
 

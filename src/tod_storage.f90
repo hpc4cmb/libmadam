@@ -13,7 +13,7 @@ MODULE tod_storage
 
   real(c_double), pointer, public :: tod(:, :)
 
-  real(sp), save, public :: memory_tod = 0
+  real(dp), save, public :: memory_tod = 0
 
   real(c_double), pointer, public :: sampletime(:)
 

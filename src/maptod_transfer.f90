@@ -37,7 +37,7 @@ MODULE maptod_transfer
        scatter_map, scatter_mask, free_locmaps, initialize_alltoallv, &
        assign_submaps
 
-  real(sp), save, public :: memory_locmap = 0, memory_all2all = 0, &
+  real(dp), save, public :: memory_locmap = 0, memory_all2all = 0, &
        memory_ksubmap = 0
 
 CONTAINS

@@ -14,7 +14,7 @@ MODULE parameter_control
   public init_parameters, init_parallelization, start_timeloop, &
        write_parameters, baseline_times
 
-  real(sp), save, public :: memory_basis_functions = 0
+  real(dp), save, public :: memory_basis_functions = 0
   character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
   character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
 

@@ -20,7 +20,7 @@ MODULE pointing
 
   integer :: buffersize = 0
 
-  real(sp), public :: memory_pointing = 0
+  real(dp), public :: memory_pointing = 0
 
   logical, allocatable, public :: ksubmap(:)
   integer, allocatable, public :: subtable1(:), subtable2(:)
@@ -39,7 +39,7 @@ CONTAINS
     !Initialize the pointing module and allocate memory for pointing data.
     !
     integer  :: allocstat
-    real(sp) :: memory, mem_min, mem_max
+    real(dp) :: memory, mem_min, mem_max
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
 

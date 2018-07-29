@@ -10,7 +10,7 @@ MODULE map_routines
   implicit none
   private
 
-  real(sp), save, public :: cputime_inv=0
+  real(dp), save, public :: cputime_inv=0
   character(len=15) :: stdstr(99,99)=''
 
   public stdstr, ccmultiply, invert_pixelmatrix_cross, &

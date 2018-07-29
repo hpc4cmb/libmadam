@@ -12,7 +12,7 @@ MODULE output
   private
 
   real(sp), parameter :: Healpix_undef = -1.6375e30
-  real(sp), save :: cputime_output = 0
+  real(dp), save :: cputime_output = 0
   integer, save :: map_repcount = 1
 
   ! for binary output
