@@ -644,7 +644,7 @@ CONTAINS
          margin = 1e-6
       else
          ! subtract with a larger margin
-         margin = 1e-3
+         margin = 1e-2
       end if
 
       where (spectrum > plateau * (1 + margin))
@@ -988,6 +988,14 @@ CONTAINS
              print *,'Cholesky decomposition failed for ', &
                   trim(detectors(idet)%name)
              deallocate(bandprec(ichunk, idet)%data)
+             ! DEBUG begin
+             write (1000+id, *) trim(detectors(idet)%name), ierr, noba
+             do i = 1, noba
+                write (1000+id, *) &
+                     i, invcov(i, ipsd), nna(0, 0, kstart+i, idet), &
+                     baselines_short_time(kstart+i)
+             end do
+             ! DEBUG end
           else
              memory_precond = memory_precond + nband*noba*8
           end if
