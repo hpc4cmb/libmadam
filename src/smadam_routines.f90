@@ -39,13 +39,14 @@ CONTAINS
     !
     ! Build and write the detector-specific leakage matrix
     !
-    integer, intent(in) :: idet
+    integer(i8b), intent(in) :: idet
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_map-1)
     integer, intent(in) :: mask(nosubpix_map, nosubmaps)
     real(dp) :: cca_dummy(1, 1, 1)
     logical :: detflags_save(NDETMAX), kfirst_save
     real(dp), allocatable :: cc_det(:, :, :), loccc_save(:, :, :)
-    integer :: ierr, ip, i, j
+    integer :: ierr, ip, j
+    integer(i8b) :: i
 
     if (info == 3 .and. id == 0) &
          write(*,*) 'Building leakage matrices...'
@@ -109,10 +110,9 @@ CONTAINS
     !
     real(dp), intent(out) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_map-1)
-    integer :: i, ip, idet, num_threads, ival, noba, kstart, ipsd
-    integer :: k, firstpix, lastpix
-    real(dp) :: detweight, sqrtweight
-    real(dp) :: w(nmap)
+    integer :: i, num_threads, noba, kstart, k
+    integer(i8b) :: idet, ipsd, ip, ival, firstpix, lastpix
+    real(dp) :: detweight, sqrtweight, w(nmap)
 
     if (info == 3 .and. id == 0) &
          write(*,*) 'Building pixel matrices...'
@@ -155,7 +155,7 @@ CONTAINS
                 cycle
              end if
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle
+             if (detweight < tiny(detweight)) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -179,7 +179,7 @@ CONTAINS
                 cycle
              end if
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle
+             if (detweight < tiny(detweight)) cycle
              sqrtweight = sqrt(detweight)
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
@@ -211,7 +211,7 @@ CONTAINS
                 cycle
              end if
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle
+             if (detweight < tiny(detweight)) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -251,8 +251,8 @@ CONTAINS
     real(dp), intent(inout) :: binmap(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
-    integer :: i, ip, ierr, firstpix, lastpix, idet, ival, noba, kstart
-    integer :: ipsd, k
+    integer :: i, ip, ierr, noba, kstart, k
+    integer(i8b) :: idet, ipsd, firstpix, lastpix, ival
     real(dp) :: detweight
 
     if (info == 3 .and. ID == 0) write(*,*) 'Binning TOD...'
@@ -288,7 +288,7 @@ CONTAINS
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) cycle
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle
+             if (detweight < tiny(detweight)) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -306,7 +306,7 @@ CONTAINS
              ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsd < 0) cycle
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle
+             if (detweight < tiny(detweight)) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -344,7 +344,8 @@ CONTAINS
     ! Count the number of hits/pixel
 
     integer, intent(out) :: nohits(0:nopix_map-1,*)
-    integer :: i, ip, idet, ival, noba, kstart, ipsd, k, firstpix, lastpix
+    integer :: i, ip, noba, kstart, k
+    integer(i8b) :: idet, ipsd, firstpix, lastpix, ival
     real(dp) :: detweight
 
     if (.not. do_hits) return
@@ -390,7 +391,7 @@ CONTAINS
              cycle
           end if
           detweight = detectors(idet)%weights(ipsd)
-          if (detweight == 0) cycle
+          if (detweight < tiny(detweight)) cycle
           do k = kstart+1, kstart+noba
              do i = baselines_short_start(k), baselines_short_stop(k)
                 if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
@@ -427,8 +428,8 @@ CONTAINS
     real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
     real(dp) :: detweight, bf, invvar
     integer(i8b) :: i, k, ip, j, order, order2, i0, imap, n, workspace_length
-    integer(i8b) :: ntot, nbad, ngood
-    integer(i4b) :: ival, noba, kstart, ipsd, idet
+    integer(i8b) :: ntot, nbad, ngood, idet, ipsd
+    integer(i4b) :: ival, noba, kstart
     real(dp), pointer :: basis_function(:, :)
     REAL(dp), allocatable :: workspace(:), eigenvectors(:, :)
     REAL(dp), allocatable :: eigenvectorsT(:, :), eigenvalues(:)
@@ -459,7 +460,7 @@ CONTAINS
                 cycle
              end if
              detweight = detectors(idet)%weights(ipsd)
-             if (detweight == 0) cycle
+             if (detweight < tiny(detweight)) cycle
              do k = kstart+1, kstart+noba
                 do i = baselines_short_start(k), baselines_short_stop(k)
                    if (isubchunk /= 0 .and. subchunk(i) /= isubchunk) cycle
@@ -515,7 +516,7 @@ CONTAINS
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
           invvar = detectors(idet)%sigmas(ipsd) ** 2 * detweight ** 2
-          if (detweight == 0) cycle
+          if (detweight < tiny(detweight)) cycle
           do k = kstart+1, kstart+noba
 
              yba(:, k, idet) = 0
@@ -590,7 +591,7 @@ CONTAINS
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
-          if (detweight == 0) cycle
+          if (detweight < tiny(detweight)) cycle
           do k = kstart+1, kstart+noba
              nna_inv(:, :, k, idet) = 0
              if (abs(nna(0, 0, k, idet)) < 1e-30) then
@@ -648,11 +649,11 @@ CONTAINS
     call sum_mpi(ngood)
     call sum_mpi(ntot)
     if (id == 0 .and. info > 0) then
-       print *,'Succesfully inverted ', 100.0*ngood/dble(ntot), &
+       print *,'Succesfully inverted ', 100.0*dble(ngood)/ntot, &
             ' % of the baseline matrices'
-       print *,' Inverse rejected on ', 100.0*nbad/dble(ntot), &
+       print *,' Inverse rejected on ', 100.0*dble(nbad)/ntot, &
             ' % of the baseline matrices'
-       print *,'                     ', 100.0*(ntot-nbad-ngood) / dble(ntot), &
+       print *,'                     ', 100.0*dble(ntot-nbad-ngood)/ntot, &
             ' % were empty'
     end if
 
@@ -681,13 +682,12 @@ CONTAINS
     logical, allocatable :: rmask(:, :, :)
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
     real(dp) :: alpha, beta, pw, apn, detweight
-    integer :: i, k, m, ip, istep, idet, order, i0, m0
-    integer :: ival, noba, kstart, ipsd, ichunk, istart, istop
+    integer :: i, k, m, istep, order, i0, m0, noba, kstart, ichunk
+    integer(i8b) :: idet, ipsd, ival
     real(dp), pointer :: basis_function(:, :)
 
-    ! for openmp -RK
-    integer :: ierr, num_threads
-    integer(i8b) :: npix_thread, firstpix, lastpix, itask
+    integer :: ierr, num_threads, itask
+    integer(i8b) :: npix_thread, firstpix, lastpix, ip
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
 
@@ -716,7 +716,7 @@ CONTAINS
        end do
     end do
 
-    memory_cg = max(noba_short*nodetectors*32., memory_cg)
+    memory_cg = max(noba_short*nodetectors*32._dp, memory_cg)
 
     r = 0
     p = 0
@@ -806,7 +806,7 @@ CONTAINS
     if (rzinit < 1.e-30) then
        if (id == 0) then
           write(*,*)
-          write(*,'(x,a,es25.15,a)') 'Anomalously low rzinit =', &
+          write(*,'(1x,a,es25.15,a)') 'Anomalously low rzinit =', &
                rzinit,' NO CG ITERATION'
        end if
        return
@@ -815,9 +815,9 @@ CONTAINS
     if (ID==0 .and. info > 1) then
        write(*,*)
        write(*,*) 'CG iteration begins'
-       write(*,'(x,a,es25.15)') 'rzinit =', rzinit
-       write(*,'(x,a,es25.15)') 'rrinit =', rrinit
-       write(*,'(x,a,es25.15)') '  <rr> =', ybalim
+       write(*,'(1x,a,es25.15)') 'rzinit =', rzinit
+       write(*,'(1x,a,es25.15)') 'rrinit =', rrinit
+       write(*,'(1x,a,es25.15)') '  <rr> =', ybalim
        write(*,'(a4,4a16,a10)') &
             'iter', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
     end if
@@ -997,7 +997,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight < tiny(detweight)) cycle
 
             loop_baseline : do k = kstart+1, kstart+noba
                pw = p(0, k, idet) * detweight
@@ -1034,7 +1034,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight < tiny(detweight)) cycle
 
             loop_baseline : do k = kstart+1, kstart+noba
                pw = p(0, k, idet) * detweight
@@ -1074,7 +1074,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight < tiny(detweight)) cycle
 
             loop_baseline : do k = kstart+1, kstart+noba
                pw = p(0, k, idet) * detweight
@@ -1113,7 +1113,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight < tiny(detweight)) cycle
 
             loop_baseline : do k = kstart+1, kstart+noba
                m0 = baselines_short_start(k)
@@ -1154,7 +1154,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle
+            if (detweight < tiny(detweight)) cycle
 
             loop_baseline : do k = kstart+1, kstart+noba
                m0 = baselines_short_start(k)
@@ -1197,7 +1197,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle loop_chunk_ap
+            if (detweight < tiny(detweight)) cycle loop_chunk_ap
 
             itask = itask + 1
             if (num_threads > 1) then
@@ -1245,7 +1245,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle loop_chunk_ap
+            if (detweight < tiny(detweight)) cycle loop_chunk_ap
 
             itask = itask + 1
             if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
@@ -1295,7 +1295,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle loop_chunk_ap
+            if (detweight < tiny(detweight)) cycle loop_chunk_ap
 
             itask = itask + 1
             if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
@@ -1345,7 +1345,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle loop_chunk_ap
+            if (detweight < tiny(detweight)) cycle loop_chunk_ap
 
             itask = itask + 1
             if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
@@ -1397,7 +1397,7 @@ CONTAINS
             ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
             if (ipsd < 0) cycle loop_chunk_ap
             detweight = detectors(idet)%weights(ipsd)
-            if (detweight == 0) cycle loop_chunk_ap
+            if (detweight < tiny(detweight)) cycle loop_chunk_ap
 
             itask = itask + 1
             if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
@@ -1435,7 +1435,8 @@ CONTAINS
     ! Subtract baselines and compute the final map
     real(dp), intent(inout) :: map(nmap,0:nopix_map-1)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
-    integer :: i, k, ip, idet, i0, ival, noba, kstart, ipsd
+    integer :: i, k, i0, noba, kstart
+    integer(i8b) :: ip, idet, ival, ipsd
     real(dp) :: aw, detweight
     real(dp), pointer :: basis_function(:, :)
 
@@ -1451,7 +1452,7 @@ CONTAINS
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
-          if (detweight == 0) cycle
+          if (detweight < tiny(detweight)) cycle
           do k = kstart+1, kstart+noba
              i0 = baselines_short_start(k)
              basis_function => basis_functions(k)%arr
@@ -1491,7 +1492,8 @@ CONTAINS
 
     real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
-    integer :: i, k, idet, order, i0
+    integer :: i, order, i0
+    integer(i8b) :: k, idet
     real(dp), pointer :: basis_function(:, :)
 
     if (.not. write_tod .and. ndetset == 0 .and. nsurvey == 0) return
@@ -1537,7 +1539,8 @@ CONTAINS
 
     real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
-    integer :: i, k, idet, order, i0
+    integer :: i, order, i0
+    integer(i8b) :: k, idet
     real(dp), pointer :: basis_function(:, :)
 
     if (.not. write_tod .and. ndetset == 0 .and. nsurvey == 0) return

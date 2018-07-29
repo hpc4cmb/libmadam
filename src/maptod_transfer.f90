@@ -30,8 +30,8 @@ MODULE maptod_transfer
   logical, allocatable, public :: ksubmap_table(:, :)
   integer, save, public :: nsize_locmap = -1
 
-  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
-  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(1x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(1x,a,t32,3(f9.1," MB"))'
 
   public update_maptod_transfer, collect_map, collect_cc, collect_hits, &
        scatter_map, scatter_mask, free_locmaps, initialize_alltoallv, &
@@ -53,7 +53,7 @@ CONTAINS
     !
     logical, allocatable, intent(in) :: ksubmap(:)
     integer(i4b) :: ierr
-    real(sp) :: memsum, mem_min, mem_max
+    real(dp) :: memsum, mem_min, mem_max
 
     nolocmaps = count(ksubmap(0:nosubmaps_tot-1))
     nolocpix = nolocmaps * nosubpix_max
@@ -98,7 +98,7 @@ CONTAINS
 
        if (ierr /= 0) call abort_mpi('Failed to allocate locmap')
 
-       memory_locmap = (nsize_locmap+1) * (nmap*8.+nmap**2*8.+8)
+       memory_locmap = (nsize_locmap+1) * dble(nmap*8+nmap**2*8+8)
 
     end if
 
@@ -137,7 +137,7 @@ CONTAINS
     !
     integer :: ierr
     integer :: nsend, nrecv, itask, offset, ioffset, i
-    real(sp) :: memsum, mem_min, mem_max
+    real(dp) :: memsum, mem_min, mem_max
 
     if (allreduce) then
        nsend_gather = 0
@@ -151,7 +151,7 @@ CONTAINS
        if (allocated(displs_gather)) deallocate(displs_gather)
        allocate(recvcounts_gather(ntasks), displs_gather(ntasks), stat=ierr)
        if (ierr /= 0) stop 'No room for allgatherv counts'
-       memory_all2all = ntasks*2*4.
+       memory_all2all = dble(ntasks)*2*4
 
        call mpi_allgather(nsend_gather, 1, MPI_INTEGER, recvcounts_gather, &
             1, MPI_INTEGER, comm, ierr)
@@ -170,7 +170,7 @@ CONTAINS
        call min_mpi(mem_min); call max_mpi(mem_max)
        call sum_mpi(memsum)
        if (ID == 0 .and. info > 0) then
-          write(*,'(x,a,t32,3(f9.1," MB"))') &
+          write(*,'(1x,a,t32,3(f9.1," MB"))') &
                'Allocated memory for allreduce:', memsum, mem_min, mem_max
        end if
     end if
@@ -206,20 +206,20 @@ CONTAINS
     allocate(submaps_send_ind(nsend_submap), submaps_recv_ind(nrecv_submap), &
          stat=ierr)
     if (ierr /= 0) stop 'No room to concatenate messages'
-    memory_all2all = nmap*nosubpix_cross*(nsend_submap + nrecv_submap)*4.
+    memory_all2all = nmap*nosubpix_cross*dble(nsend_submap + nrecv_submap)*4
 
     allocate(submaps_send_map(nmap, nosubpix_map, nsend_submap), &
          submaps_recv_map(nmap, nosubpix_map, nrecv_submap), stat=ierr)
     if (ierr /= 0) stop 'No room to concatenate messages'
     memory_all2all = memory_all2all &
-         + nmap*nosubpix_map*(nsend_submap + nrecv_submap)*8.
+         + nmap*nosubpix_map*dble(nsend_submap + nrecv_submap)*8
 
     if (use_inmask .or. do_hits) then
        allocate(submaps_send_int_map(nosubpix_map, nsend_submap), &
             submaps_recv_int_map(nosubpix_map, nrecv_submap), stat=ierr)
        if (ierr /= 0) stop 'No room to concatenate messages'
        memory_all2all = memory_all2all &
-            + nosubpix_map*(nsend_submap + nrecv_submap)*4.
+            + nosubpix_map*dble(nsend_submap + nrecv_submap)*4
     end if
 
     if (nosubpix_cross /= nosubpix_map) then
@@ -227,18 +227,18 @@ CONTAINS
             submaps_recv_cross(nmap, nosubpix_cross, nrecv_submap), stat=ierr)
        if (ierr /= 0) stop 'No room to concatenate messages'
        memory_all2all = memory_all2all &
-            + nmap*nosubpix_cross*(nsend_submap + nrecv_submap)*8.
+            + nmap*nosubpix_cross*dble(nsend_submap + nrecv_submap)*8
        if (use_inmask .or. do_hits) then
           allocate(submaps_send_int_cross(nosubpix_cross, nsend_submap), &
                submaps_recv_int_cross(nosubpix_cross, nrecv_submap), stat=ierr)
           if (ierr /= 0) stop 'No room to concatenate messages'
           memory_all2all = memory_all2all &
-               + nosubpix_cross*(nsend_submap + nrecv_submap)*4.
+               + nosubpix_cross*dble(nsend_submap + nrecv_submap)*4
        end if
 
        if (ierr /= 0) stop 'No room to concatenate messages'
        memory_all2all = memory_all2all &
-            + nmap*nmap*nosubpix_cross*(nsend_submap + nrecv_submap)*8.
+            + nmap*nmap*nosubpix_cross*dble(nsend_submap + nrecv_submap)*8
     else
        submaps_send_cross => submaps_send_map
        submaps_recv_cross => submaps_recv_map
@@ -251,7 +251,7 @@ CONTAINS
     allocate(sendcounts(0:ntasks-1), sendoffs(0:ntasks-1), &
          recvcounts(0:ntasks-1), recvoffs(0:ntasks-1), stat=ierr)
     if (ierr /= 0) stop 'No room to concatenate messages (2)'
-    memory_all2all = memory_all2all + ntasks*4*4.
+    memory_all2all = memory_all2all + dble(ntasks*4*4)
 
     offset = 0
     ioffset = 0
@@ -298,7 +298,7 @@ CONTAINS
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
     if (ID == 0 .and. info > 0) then
-       write(*,'(x,a,t32,3(f9.1," MB"))') &
+       write(*,'(1x,a,t32,3(f9.1," MB"))') &
             'Allocated memory for all2allv:', memsum, mem_min, mem_max
     end if
 
@@ -581,7 +581,7 @@ CONTAINS
        ! temporary arrays created
 
        call mpi_type_contiguous( &
-            nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+            int(nmap0 * nosubpix, i4b), MPI_DOUBLE_PRECISION, submap_type, ierr)
        call mpi_type_commit(submap_type, ierr)
 
        call mpi_alltoallv( &
@@ -625,7 +625,8 @@ CONTAINS
                    end do
                 end do
              end if
-             call send_mpi_vec_dp(buffer, nmap*nosubpix, id_tod, id_map)
+             call send_mpi_vec_dp( &
+                  buffer, int(nmap*nosubpix, i4b), id_tod, id_map)
              if (ID == id_map) map(:, :, mrecv) = map(:, :, mrecv) + buffer
           end do
        end do
@@ -641,7 +642,8 @@ CONTAINS
 
     integer, intent(in) :: nosubpix
     real(dp), intent(inout) :: cc(nmap, nmap, nosubpix, nosubmaps)
-    integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0, col
+    integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0
+    integer(i8b) :: col
     real(dp) :: buffer(nmap, nmap, nosubpix)
     integer :: ierr, id_thread, num_threads, submap_type
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
@@ -751,7 +753,8 @@ CONTAINS
           ! temporary arrays created
 
           call mpi_type_contiguous( &
-               nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+               int(nmap0 * nosubpix, i4b), MPI_DOUBLE_PRECISION, submap_type, &
+               ierr)
           call mpi_type_commit(submap_type, ierr)
 
           call mpi_alltoallv( &
@@ -797,7 +800,8 @@ CONTAINS
                    end do
                 end do
              end if
-             call send_mpi_vec_dp(buffer, nmap**2*nosubpix, id_tod, id_map)
+             call send_mpi_vec_dp( &
+                  buffer, int(nmap**2*nosubpix, i4b), id_tod, id_map)
              if (ID == id_map) cc(:, :, :, mrecv) = cc(:, :, :, mrecv) + buffer
           end do
        end do
@@ -1048,7 +1052,7 @@ CONTAINS
        ! temporary arrays created
 
        call mpi_type_contiguous( &
-            nmap * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+            int(nmap * nosubpix, i4b), MPI_DOUBLE_PRECISION, submap_type, ierr)
        call mpi_type_commit(submap_type, ierr)
 
        call mpi_alltoallv( &
@@ -1095,7 +1099,8 @@ CONTAINS
           end if
           do id_tod = 0, ntasks-1
              if (.not. ksubmap_table(i, id_tod)) cycle
-             call send_mpi_vec_dp(buffer, nmap*nosubpix, id_map, id_tod)
+             call send_mpi_vec_dp( &
+                  buffer, int(nmap*nosubpix, i4b), id_map, id_tod)
              if (ID == id_tod) then
                 do k = 1, nosubpix
                    do j = 1, ndegrade

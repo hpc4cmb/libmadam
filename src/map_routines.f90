@@ -24,16 +24,16 @@ CONTAINS
   SUBROUTINE ccmultiply(cc, map, nopix)
     ! Multiply a map by the inverse of the pixel matrix
 
-    real(dp),intent(in) :: cc(nmap, nmap, nopix)
-    real(dp),intent(inout) :: map(nmap, nopix)
     integer, intent(in) :: nopix
+    real(dp), intent(in) :: cc(nmap, nmap, nopix)
+    real(dp), intent(inout) :: map(nmap, nopix)
     integer :: ip
     real(dp) :: tm, qm, um
 
     if (nmap == 1) then
        !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) PRIVATE(ip)
        do ip = 1, nopix
-          if (cc(1, 1, ip) == 0) then
+          if (cc(1, 1, ip) < tiny(cc(1, 1, ip))) then
              map(:, ip) = 0
           else
              map(1, ip) = cc(1, 1, ip) * map(1, ip)
@@ -44,7 +44,7 @@ CONTAINS
        !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) &
        !$OMP     PRIVATE(ip, tm, qm, um)
        do ip = 1, nopix
-          if (cc(1, 1, ip) == 0) then
+          if (cc(1, 1, ip) < tiny(cc(1, 1, ip))) then
              map(:, ip) = 0
           else
              tm = cc(1, 1, ip)*map(1, ip) + &
@@ -65,7 +65,7 @@ CONTAINS
     else
        !$OMP PARALLEL DO DEFAULT(NONE) SHARED(map, cc, nopix) PRIVATE(ip)
        do ip = 1,nopix
-          if (cc(1, 1, ip) == 0) then
+          if (cc(1, 1, ip) < tiny(cc(1, 1, ip))) then
              map(:, ip) = 0
           else
              map(:, ip) = matmul(cc(:, :, ip), map(:, ip))
@@ -87,10 +87,11 @@ CONTAINS
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_cross-1)
     integer, intent(in) :: inmask(0:nopix_cross-1)
 
-    integer  :: ip, noeig, imap
-    integer  :: cov0, cov1, covn
+    integer :: ip, noeig
+    integer(i8b) :: imap
+    integer :: cov0, cov1, covn
     real(dp) :: cdet, trace, tracen, rcnd
-    logical  :: sing
+    logical :: sing
 
     if (info == 3 .and. ID == 0) write(*,*) 'Inverting pixel matrices...'
     if (info > 4) write(*,idf) ID, 'Inverting pixel matrices...'
@@ -108,16 +109,16 @@ CONTAINS
     covn = 0
 
     if (nmap == 1) then
-       where (cc(1, 1, :) /= 0)
+       where (cc(1, 1, :) > tiny(1._dp))
           cc(1, 1, :) = 1._dp / cc(1, 1, :)
        elsewhere
           cc(1, 1, :) = 0
        end where
-       cov1 = count(cc(1, 1, :) /= 0)
+       cov1 = count(abs(cc(1, 1, :)) > tiny(1._dp))
     else
        do ip = 0, nopix_cross-1
 
-          if (all(cc(:, :, ip) == 0)) cycle
+          if (all(abs(cc(:, :, ip)) < tiny(1._dp))) cycle
 
           select case (pixmode_cross)
           case (0) ! absolute determinant
@@ -212,9 +213,9 @@ CONTAINS
     real(dp),intent(inout) :: cc(nmap,nmap, 0:nopix_map-1)
     integer, intent(out) :: mask(0:nopix_map-1)
     real(sp),intent(out) :: crit(0:nopix_map-1)
-    integer :: nstatic ! -RK
 
-    integer  :: ip, cover, imap
+    integer  :: ip, cover, nstatic
+    integer(i8b) :: imap
     real(dp) :: cdet, trace, tracen, rcnd, pcrit
     logical  :: sing
 
@@ -232,7 +233,7 @@ CONTAINS
     if (nmap == 1) then
 !!$OMP DO SCHEDULE(STATIC,nstatic)
        do ip = 0,nopix_map-1
-          if (cc(1, 1, ip) /= 0) then
+          if (cc(1, 1, ip) < tiny(cc(1, 1, ip))) then
              cc(1, 1, ip) = 1._dp / cc(1, 1, ip)
              mask(ip) = 1
              cover = cover + 1
@@ -246,7 +247,7 @@ CONTAINS
 !!$OMP DO SCHEDULE(STATIC,nstatic)
        do ip = 0, nopix_map-1
 
-          if (all(cc(:, :, ip) == 0)) cycle
+          if (all(abs(cc(:, :, ip)) < tiny(1.0_dp))) cycle
 
           select case(pixmode_map)
           case (0) ! determinant
@@ -284,7 +285,7 @@ CONTAINS
              cover = cover + 1
           end if
 
-          if (do_mask) crit(ip) = pcrit
+          if (do_mask) crit(ip) = real(pcrit, sp)
 
        end do
 !!$OMP END DO
@@ -351,7 +352,8 @@ CONTAINS
     real(dp),intent(in) :: map(nmap, 0:nosubpix_map-1, nosubmaps)
     integer, intent(in) :: mask(0:nosubpix_map-1, nosubmaps)
     character(len=16) :: stokes(nmap)
-    integer :: cover, imap
+    integer :: cover
+    integer(i8b) :: imap
 
     cover = count(mask > 0)
     call sum_mpi(cover)
@@ -375,7 +377,8 @@ CONTAINS
 
       character(len=15) :: stdstr(nmap)
       real(dp),intent(in) :: map(nmap, 0:nosubpix_map-1, nosubmaps)
-      integer :: i, j, k
+      integer :: i, j
+      integer(i8b) :: k
       logical :: kcover(0:nosubpix_map-1)
       real(dp) :: summ(nmap), summ2(nmap), std(nmap)
       real(dp) :: mean(nmap), minv(nmap), maxv(nmap), dmap(nmap)
@@ -447,7 +450,7 @@ CONTAINS
 
       real(dp) :: t(nmap), abst
       character(len=15) :: str(nmap)
-      integer :: k
+      integer(i8b) :: k
 
       str = ''
       do k = 1, nmap

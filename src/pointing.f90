@@ -23,9 +23,9 @@ MODULE pointing
   real(dp), public :: memory_pointing = 0
 
   logical, allocatable, public :: ksubmap(:)
-  integer, allocatable, public :: subtable1(:), subtable2(:)
+  integer(i8b), allocatable, public :: subtable1(:), subtable2(:)
 
-  integer, public :: dummy_pixel = -1
+  integer(i8b), public :: dummy_pixel = -1
 
   public init_pointing, close_pointing, reduce_pixels, restore_pixels
 
@@ -38,7 +38,7 @@ CONTAINS
     !
     !Initialize the pointing module and allocate memory for pointing data.
     !
-    integer  :: allocstat
+    integer :: allocstat
     real(dp) :: memory, mem_min, mem_max
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
@@ -47,12 +47,15 @@ CONTAINS
     call check_stat(allocstat, 'subchunk')
     subchunk = 0 ! initialize
 
-    memory_pointing = nosamples_proc*nodetectors*4.
-    memory_pointing = memory_pointing + nosamples_proc*nodetectors*24.
+    memory_pointing = nosamples_proc*nodetectors*dble(4)
+    memory_pointing = memory_pointing + nosamples_proc*nodetectors*dble(8+8+8)
 
     allocate(ksubmap(0:nosubmaps_tot))
     allocate(subtable1(0:nosubmaps_tot))
     allocate(subtable2(0:nosubmaps_tot))
+
+    memory_pointing = memory_pointing + (nosubmaps_tot+1)*dble(4+8+8)
+
     ksubmap  = .true.
     subtable1 = 0
     subtable2 = 0
@@ -77,7 +80,7 @@ CONTAINS
 
   SUBROUTINE close_pointing
 
-    integer :: k, idet
+    integer(i8b) :: k, idet
 
     if (allocated(ksubmap)) deallocate(ksubmap)
     if (allocated(subtable1)) deallocate(subtable1)
@@ -122,7 +125,8 @@ CONTAINS
   SUBROUTINE reduce_pixels
     ! Reduce pixel numbers so that they point to locmap
     !
-    integer :: i, idet, k, ip, ierr
+    integer :: ierr
+    integer(i8b) :: ip, i, k, idet
 
     if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
@@ -175,7 +179,7 @@ CONTAINS
   SUBROUTINE restore_pixels
     ! restore original pixel numbers
     !
-    integer :: i, idet, ip
+    integer(i8b) :: i, ip, idet
 
     if (info.ge.5) write(*,idf) id, 'Restore pixel numbers (a)...'
 

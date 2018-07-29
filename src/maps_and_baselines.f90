@@ -26,8 +26,8 @@ MODULE maps_and_baselines
 
   real(dp), save, public :: memory_maps = 0, memory_baselines = 0
 
-  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
-  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(1x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(1x,a,t32,3(f9.1," MB"))'
 
   public allocate_maps, free_maps, allocate_baselines, free_baselines, free_mask
 
@@ -39,7 +39,7 @@ CONTAINS
   SUBROUTINE allocate_maps
 
     integer :: allocstat
-    real(sp) :: memsum, mem_min, mem_max
+    real(dp) :: memsum, mem_min, mem_max
 
     memory_maps = 0
 
@@ -145,7 +145,7 @@ CONTAINS
   SUBROUTINE allocate_baselines
 
     integer :: allocstat
-    real(sp) :: memsum, mem_min, mem_max
+    real(dp) :: memsum, mem_min, mem_max
 
     memory_baselines = 0
 
@@ -188,7 +188,7 @@ CONTAINS
 
   SUBROUTINE free_baselines
 
-    integer :: k
+    integer(i8b) :: k
 
     if (allocated(yba)) deallocate(yba)
     if (allocated(aa)) deallocate(aa)
