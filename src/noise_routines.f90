@@ -572,7 +572,7 @@ CONTAINS
       integer :: idet, ipsd
 
       integer  :: i, j, ierr, n
-      real(dp) :: plateau
+      real(dp) :: plateau, margin
       real(dp), allocatable :: freqs(:), data(:)
       real(dp), pointer :: psd(:)
 
@@ -626,11 +626,17 @@ CONTAINS
 
       if (radiometers) then
          ! subtract with a small margin
-         spectrum = spectrum - plateau * .999999
+         margin = 1e-6
       else
          ! subtract with a larger margin
-         spectrum = spectrum - plateau * .99
+         margin = 1e-3
       end if
+
+      where (spectrum > plateau * (1 + margin))
+         spectrum = spectrum - plateau
+      elsewhere
+         spectrum = spectrum * margin
+      end where
 
       if (any(spectrum <= 0)) then
          loop_bins : do i = 1, nof
@@ -665,13 +671,15 @@ CONTAINS
   !-----------------------------------------------------------------------
 
 
-  SUBROUTINE cinvmul(ca, aa)
+  SUBROUTINE cinvmul(ca, aa, nna)
 
     real(dp), intent(out) :: ca(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
+    real(dp), intent(in)  :: &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
     if (kfilter) then
-       call convolve_pp(ca, aa, fcov)
+       call convolve_pp(ca, aa, fcov, nna)
     else
        ca = 0
     end if
@@ -682,11 +690,43 @@ CONTAINS
   !-----------------------------------------------------------------------
 
 
-  subroutine convolve_interval(ichunk, idet, x, y, xx, fx, fc)
+  subroutine trim_interval(kstart, noba, idet, nna)
+    ! Adjust kstart and noba to exclude flagged baselines in
+    ! either end of the interval
+    integer, intent(inout) :: kstart, noba
+    integer, intent(in) :: idet
+    real(dp), intent(in)  :: &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
+
+    if (all(nna(:, :, kstart+1:kstart+noba, idet) == 0)) then
+       noba = 0
+       return
+    end if
+
+    do while (noba > 0)
+       if (any(nna(:, :, kstart+1, idet) /= 0)) exit
+       kstart = kstart + 1
+       noba = noba - 1
+    end do
+
+    do while (noba > 0)
+       if (any(nna(:, :, kstart+noba, idet) /= 0)) exit
+       noba = noba - 1
+    end do
+
+    return
+  end subroutine trim_interval
+
+
+
+  subroutine convolve_interval(ichunk, idet, x, y, xx, fx, fc, nna)
     integer, intent(in) :: ichunk, idet
     real(dp), intent(out) :: y(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in) :: x(0:basis_order, noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2 + 1, npsdtot)
+    real(dp), intent(in)  :: &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
+
     real(C_DOUBLE) :: xx(nof)
     complex(C_DOUBLE_COMPLEX) :: fx(nof/2 + 1)
     integer :: noba, kstart, ipsd
@@ -695,11 +735,16 @@ CONTAINS
     kstart = sum(noba_short_pp(1:ichunk-1))
     ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
+    y(0, kstart+1:kstart+noba, idet) = x(0, kstart+1:kstart+noba, idet)
+
     if (ipsd == -1) then
        ! no PSD
-       y(0, kstart+1:kstart+noba, idet) = x(0, kstart+1:kstart+noba, idet)
        return
     end if
+
+    ! Only apply the filter to the unflagged center of the baseline vector
+
+    call trim_interval(kstart, noba, idet, nna)
 
     xx(1:noba) = x(0, kstart+1:kstart+noba, idet)
     xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
@@ -715,7 +760,7 @@ CONTAINS
 
 
 
-  SUBROUTINE convolve_pp(y, x, fc)
+  SUBROUTINE convolve_pp(y, x, fc, nna)
     ! Convolve a baseline vector with the noise prior, one pointing period
     ! at a time. FIXME: should have an option to apply the filter across the
     ! boundaries.
@@ -723,6 +768,9 @@ CONTAINS
     real(dp), intent(out) :: y(noba_short, nodetectors)
     real(dp), intent(in) :: x(noba_short, nodetectors)
     complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
+    real(dp), intent(in)  :: &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
+
     integer :: ichunk, idet, m, no, noba, kstart, ipsd, ierr, id_thread, &
          itask, num_threads
     real(dp) :: x0
@@ -737,7 +785,7 @@ CONTAINS
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
-    !$OMP         baselines_short_time, fc, x, y, nthreads) &
+    !$OMP         baselines_short_time, fc, x, y, nthreads, nna) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, x0, m, no, xx, fx, &
     !$OMP         ipsd, ierr, id_thread, itask, num_threads)
 
@@ -752,7 +800,7 @@ CONTAINS
        do ichunk = 1, ninterval
           itask = itask + 1
           if (modulo(itask, num_threads) /= id_thread) cycle
-          call convolve_interval(ichunk, idet, x, y, xx, fx, fc)
+          call convolve_interval(ichunk, idet, x, y, xx, fx, fc, nna)
        end do
     end do
 
@@ -777,7 +825,7 @@ CONTAINS
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
     integer, parameter :: trymax = 10
-    integer :: ntries(trymax), nempty, nband, itask, id_thread
+    integer :: ntries(trymax), nempty, nband, itask, id_thread, num_threads
     real(sp) :: memsum, mem_min, mem_max
 
     if (precond_width < 1) return
@@ -800,8 +848,8 @@ CONTAINS
        prec_diag = 0
        do idet = 1, nodetectors
           do ichunk = 1, ninterval
-             noba = noba_short_pp(ichunk)
              kstart = sum(noba_short_pp(1:ichunk-1))
+             noba = noba_short_pp(ichunk)
              ipsddet = psd_index_det(idet, baselines_short_time(kstart+1))
              if (ipsddet < 0) then
                 ! No PSD available
@@ -867,24 +915,25 @@ CONTAINS
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
-    !$OMP         baselines_short_time, invcov, id, &
-    !$OMP         sampletime, nof, baselines_short_start, &
-    !$OMP         baselines_short_stop, bandprec, nna, &
+    !$OMP         baselines_short_time, invcov, id, sampletime, nof, &
+    !$OMP         baselines_short_start, baselines_short_stop, bandprec, nna, &
     !$OMP         detectors, nthreads, precond_width) &
-    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, &
-    !$OMP         i, j, k, n, ierr, try, nband, id_thread, itask) &
+    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, i, j, k, n, ierr, try, &
+    !$OMP         nband, id_thread, itask, num_threads) &
     !$OMP     REDUCTION(+:memory_precond, nempty, ntries)
 
     id_thread = omp_get_thread_num()
+    num_threads = omp_get_num_threads()
 
     itask = -1
     do idet = 1, nodetectors
        do ichunk = 1, ninterval
           itask = itask + 1
-          if (modulo(itask, nthreads) /= id_thread) cycle
+          if (modulo(itask, num_threads) /= id_thread) cycle
 
           noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(1:ichunk-1))
+          call trim_interval(kstart, noba, idet, nna)
           ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
           if (ipsd == -1 .or. noba < 1 .or. &
@@ -961,7 +1010,7 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE preconditioning_band(z, r)
+  SUBROUTINE preconditioning_band(z, r, nna)
     !Apply the preconditioner
 
     ! z and r may be 3-dimensional arrays in the calling code but
@@ -969,8 +1018,10 @@ CONTAINS
     ! only works for basis_order == 0.
     real(dp), intent(out), target :: z(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in), target :: r(0:basis_order, noba_short, nodetectors)
-    integer :: j, k, idet, kstart, noba, ichunk, ierr, itask, num_threads
+    real(dp), intent(in)  :: &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
+    integer :: j, k, idet, kstart, noba, ichunk, ierr, itask, num_threads
     integer :: m, no, nband
     real(dp) :: x0
 
@@ -988,12 +1039,12 @@ CONTAINS
        z(0, :, :) = r(0, :, :) * prec_diag
     else if (use_fprecond) then
        ! Apply the filter-based preconditioner
-       call convolve_pp(z, r, fprecond)
+       call convolve_pp(z, r, fprecond, nna)
     else
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
-       !$OMP         id, nof, nshort, detectors, nthreads, fprecond) &
+       !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna) &
        !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, ierr, x0, m, no, &
        !$OMP         xx, fx, nband, id_thread, itask, num_threads)
 
@@ -1007,6 +1058,8 @@ CONTAINS
        do idet = 1, nodetectors
           do ichunk = 1, ninterval
              noba = noba_short_pp(ichunk)
+             kstart = sum(noba_short_pp(1:ichunk-1))
+             call trim_interval(kstart, noba, idet, nna)
              if (noba == 0) cycle
 
              itask = itask + 1
@@ -1014,7 +1067,6 @@ CONTAINS
 
              if (allocated(bandprec(ichunk, idet)%data)) then
                 ! Use the precomputed Cholesky decomposition
-                kstart = sum(noba_short_pp(1:ichunk-1))
                 nband = size(bandprec(ichunk, idet)%data, 1)
                 z(0, kstart+1:kstart+noba, idet) = &
                      r(0, kstart+1:kstart+noba, idet)
@@ -1027,7 +1079,8 @@ CONTAINS
                    call abort_mpi('bad preconditioner2')
                 end if
              else
-                call convolve_interval(ichunk, idet, r, z, xx, fx, fprecond)
+                call convolve_interval( &
+                     ichunk, idet, r, z, xx, fx, fprecond, nna)
              end if
 
           end do

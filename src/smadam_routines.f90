@@ -138,6 +138,7 @@ CONTAINS
     id_thread = omp_get_thread_num()
     firstpix = id_thread * nsize_locmap / omp_get_num_threads()
     lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+    lastpix = min(lastpix, dummy_pixel - 1)
 
     do idet = 1, nodetectors
        if (.not. detflags(idet)) cycle ! not included in this subset
@@ -160,7 +161,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    loccc(1, 1, ip) = loccc(1, 1, ip) + detweight
                 end do
@@ -217,7 +217,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    call dsyr('U', nmap, detweight, weights(:, i, idet), 1, &
                         loccc(:, :, ip), nmap)
@@ -278,6 +277,7 @@ CONTAINS
     id_thread = omp_get_thread_num()
     firstpix = id_thread * nsize_locmap / omp_get_num_threads()
     lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+    lastpix = min(lastpix, dummy_pixel - 1)
 
     do idet = 1, nodetectors
        if (.not. detflags(idet)) cycle ! not included in this subset
@@ -294,7 +294,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    locmap(1, ip) = locmap(1, ip) + tod(i, idet) * detweight
                 end do
@@ -313,7 +312,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    locmap(:, ip) = locmap(:, ip) &
                         + weights(:, i, idet) * tod(i, idet) * detweight
@@ -378,6 +376,7 @@ CONTAINS
        id_thread = omp_get_thread_num()
        firstpix = id_thread * nsize_locmap / omp_get_num_threads()
        lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+       lastpix = min(lastpix, dummy_pixel - 1)
 
        do ival = 1, ninterval
           noba = noba_short_pp(ival)
@@ -397,7 +396,6 @@ CONTAINS
                 if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                 if (.not. surveyflags(i)) cycle
                 ip = pixels(i, idet)
-                if (ip == dummy_pixel) cycle
                 if (ip < firstpix .or. ip > lastpix) cycle
                 lochits(ip) = lochits(ip) + 1
              end do
@@ -684,7 +682,7 @@ CONTAINS
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
     real(dp) :: alpha, beta, pw, apn, detweight
     integer :: i, k, m, ip, istep, idet, order, i0, m0
-    integer :: ival, noba, kstart, ipsd, ichunk
+    integer :: ival, noba, kstart, ipsd, ichunk, istart, istop
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
@@ -706,15 +704,15 @@ CONTAINS
          stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
-    ! Mask out completely flagged intervals
-    rmask = .true.
+    ! Mask out completely flagged intervals and
+    ! flagged baselines from both ends of the intervals
+    rmask = .false.
     do idet = 1, nodetectors
        do ichunk = 1, ninterval
-          noba = noba_short_pp(ichunk)
           kstart = sum(noba_short_pp(1:ichunk-1))
-          if (all(nna(:, :, kstart+1:kstart+noba, idet) == 0)) then
-             rmask(:, kstart+1:kstart+noba, idet) = .false.
-          end if
+          noba = noba_short_pp(ichunk)
+          call trim_interval(kstart, noba, idet, nna)
+          rmask(:, kstart+1:kstart+noba, idet) = .true.
        end do
     end do
 
@@ -731,7 +729,7 @@ CONTAINS
     r = yba
 
     if (basis_order == 0) then
-       call preconditioning_band(z, r)
+       call preconditioning_band(z, r, nna)
     else
        do idet = 1, nodetectors
           do i = 1, noba_short
@@ -883,7 +881,7 @@ CONTAINS
             + get_time_and_reset(12)
 
        if (kfilter) then
-          call cinvmul(ap, p)
+          call cinvmul(ap, p, nna)
        else
           ap = 0
           if (diagfilter /= 0) then
@@ -935,7 +933,7 @@ CONTAINS
             aa(:, 1:noba_short, 1:nodetectors) + alpha*p
 
        if (basis_order == 0) then
-          call preconditioning_band(z, r)
+          call preconditioning_band(z, r, nna)
        else
           do idet = 1, nodetectors
              do i = 1, noba_short
@@ -991,7 +989,7 @@ CONTAINS
       !$OMP         ipsd, detweight, k, pw, m, ip, firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1006,7 +1004,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(1, ip) = locmap(1, ip) + pw
                end do
@@ -1029,7 +1026,7 @@ CONTAINS
       !$OMP         ipsd, detweight, k, pw, m, ip, firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1044,7 +1041,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(1, ip) = locmap(1, ip) + weights(1, m, idet) * pw
                   locmap(2, ip) = locmap(2, ip) + weights(2, m, idet) * pw
@@ -1070,7 +1066,7 @@ CONTAINS
       !$OMP         ipsd, detweight, k, pw, m, ip, firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1085,7 +1081,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(:, ip) = locmap(:, ip) + weights(:, m, idet)*pw
                end do
@@ -1110,7 +1105,7 @@ CONTAINS
       !$OMP         lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1126,7 +1121,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(1, ip) = locmap(1, ip) + detweight &
                        * dot_product(basis_function(:, m-m0), p(:, k, idet))
@@ -1152,7 +1146,7 @@ CONTAINS
       !$OMP         firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1168,7 +1162,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   pw = dot_product(basis_function(:, m-m0), &
                        p(:, k, idet)) * detweight
