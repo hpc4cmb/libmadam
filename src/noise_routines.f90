@@ -348,7 +348,6 @@ CONTAINS
     !$OMP         psdstop, nof, fa, fcov, kread_file) &
     !$OMP     PRIVATE(id_thread, num_threads, ipsdtot, itask, idet, ipsd, &
     !$OMP         aspec, spectrum, f, g, ierr, k, x)
-    !$OMP
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
