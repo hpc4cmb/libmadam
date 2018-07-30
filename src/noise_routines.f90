@@ -105,6 +105,7 @@ CONTAINS
              rms = sqrt(rms / nbin * fsample)
              detectors(idet)%sigmas(ipsd) = rms
              detectors(idet)%plateaus(ipsd) = plateau
+             detectors(idet)%weights(ipsd) = 1 / (plateau * fsample)
           end do
        end do
        deallocate(freqs, data)
