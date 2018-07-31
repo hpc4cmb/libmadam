@@ -273,7 +273,8 @@ CONTAINS
     if (.not. kfirst) then
        dnshort = 1e6
        nshort = int(dnshort  +.5)
-       precond_width = 0
+       precond_width_min = 0
+       precond_width_max = 0
        kfilter = .false.
     end if
 
@@ -640,9 +641,11 @@ CONTAINS
        write (*,fi) 'iter_max',iter_max, 'Maximum number of iterations'
     end if
 
-    write(*,fi) 'precond_width', precond_width, &
-         'Width of the preconditioner band matrix'
-    if (precond_width==0) then
+    write(*,fi) 'precond_width_min', precond_width_min, &
+         'Min width of the preconditioner band matrix'
+    write(*,fi) 'precond_width_max', precond_width_max, &
+         'Max width of the preconditioner band matrix'
+    if (precond_width_max == 0) then
        write(*,*) 'No preconditioning'
     else
        write (*,fk) 'use_fprecond', use_fprecond, 'use C_a preconditioner'

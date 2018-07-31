@@ -289,8 +289,10 @@ CONTAINS
        read(value, *, iostat=ierr) kfilter
     case ('diagfilter')
        read(value, *, iostat=ierr) diagfilter
-    case ('precond_width')
-       read(value, *, iostat=ierr) precond_width
+    case ('precond_width_min')
+       read(value, *, iostat=ierr) precond_width_min
+    case ('precond_width_max')
+       read(value, *, iostat=ierr) precond_width_max
     case ('use_fprecond')
        read(value, *, iostat=ierr) use_fprecond
     case ('rm_monopole')

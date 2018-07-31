@@ -49,7 +49,8 @@ module smadam
   ! openmp
   integer :: nprocs
 
-  integer(i4b) :: subchunk_start, i
+  integer(i8b) :: i
+  integer(i2b) :: subchunk_start
   character(len=SLEN) :: subchunk_file_map, subchunk_file_base
   character(len=SLEN) :: subchunk_file_binmap
   character(len=SLEN) :: subchunk_file_hit, subchunk_file_mask
@@ -99,7 +100,9 @@ contains
     integer(c_long), intent(in), value :: npsdval
     real(c_double), intent(in) :: psdvals(npsdval)
 
-    integer :: idet, pixmin, pixmax, subchunkcounter
+    integer :: idet
+    integer(i2b) :: subchunkcounter
+    integer(i8b) :: pixmin, pixmax
 
     ! set up MPI
 
@@ -137,7 +140,7 @@ contains
     if (temperature_only .and. nnz /= 1) &
          call abort_mpi('temperature_only=T but pointing weights are polarized')
 
-    nmap = nnz
+    nmap = int(nnz, i4b)
 
     call read_detectors(detstring, ndet, detweights, npsd, npsdtot, &
          psdstarts, npsdbin, psdfreqs, npsdval, psdvals)
@@ -187,7 +190,7 @@ contains
 
     loop_subchunk : do subchunkcounter = subchunk_start, nsubchunk
        ! isubchunk == 0 means full data and it is the last set to run
-       isubchunk = modulo(subchunkcounter + 1, nsubchunk + 1)
+       isubchunk = modulo(subchunkcounter + 1_i2b, nsubchunk + 1_i2b)
 
        subchunk_file_map = file_map
        subchunk_file_binmap = file_binmap
@@ -587,7 +590,8 @@ contains
     type(c_ptr), intent(in), value :: pixweights
     type(c_ptr), intent(in), value :: signal
 
-    integer :: i, n
+    integer :: n
+    integer(i8b) :: i
 
     ! set up MPI
 
@@ -633,7 +637,7 @@ contains
        path_output = trim(adjustl(path_output))
     end if
 
-    nmap = nnz
+    nmap = int(nnz, i4b)
 
     call c_f_pointer(timestamps, sampletime, (/nsamp/))
     call c_f_pointer(pix, pixels, (/nsamp, ndet/))
@@ -921,9 +925,9 @@ contains
 
     type(detset_type) :: detset
     type(survey_type) :: survey
-    integer(i8b) :: nhit_det, nhit_survey
+    integer(i8b) :: nhit_det, nhit_survey, i
     integer :: idetset, idet, jdet, isurvey
-    integer :: i, j, nmap_save, ncc_save
+    integer :: j, nmap_save, ncc_save
     logical :: do_binmap_save, kfirst_save, temperature_only_save
     logical :: concatenate_messages_save
     character(len=SLEN) :: file_binmap_save, file_hit_save

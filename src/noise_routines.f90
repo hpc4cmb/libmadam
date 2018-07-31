@@ -47,6 +47,9 @@ MODULE noise_routines
   public cinvmul, build_filter, close_filter, &
        construct_preconditioner, preconditioning_band, interpolate_psd
 
+  ! LAPACK
+  external DPBTRF, DBTRS
+
 CONTAINS
 
   subroutine measure_noise_weights(radiometers)
@@ -222,7 +225,7 @@ CONTAINS
 
     nof_min = nofilter
     ! Ensure that the filter is long enough for the preconditioner
-    if (precond_width > nof_min-1) nof_min = precond_width + 1
+    if (precond_width_max > nof_min-1) nof_min = precond_width_max + 1
 
     nof = 1
     do
@@ -301,7 +304,6 @@ CONTAINS
     integer, parameter :: kmax = 2
     integer :: i, k, idet, nolines, nocols, num_threads, itask
     real(dp) :: fa, x
-    real(dp) :: slope, fmin, fknee, sigma
     logical :: kread_file
     real(dp), allocatable :: aspec(:), f(:), g(:), spectrum(:), &
          ftable(:), spectrum_table(:, :)
@@ -385,8 +387,6 @@ CONTAINS
              if (kread_file) then
                 call get_spectrum_file
              else
-                !call get_spectrum_powerlaw
-                !call get_spectrum_toast(idet, ipsd)
                 call get_spectrum_interp(idet, ipsd, f, spectrum)
              end if
 
@@ -434,19 +434,6 @@ CONTAINS
     if (info > 4) write(*,*) 'Done'
 
   CONTAINS
-
-    SUBROUTINE get_spectrum_powerlaw()
-
-      do i = 1, nof
-         if (f(i) > fmin) then
-            spectrum(i) = sigma*sigma/fsample*(f(i)/fknee)**(slope)
-         else
-            spectrum(i) = sigma*sigma/fsample*(fmin/fknee)**(slope)
-         end if
-      end do
-
-    END SUBROUTINE get_spectrum_powerlaw
-
 
     SUBROUTINE read_spectrum()
 
@@ -546,7 +533,7 @@ CONTAINS
       !
       ! Find the spectrum for detector idet by logarithmic interpolation
       !
-      integer  :: i, k, icol
+      integer :: i, k, icol
       real(dp) :: p, logf, logspec
 
       if (nocols > 1) then
@@ -584,7 +571,7 @@ CONTAINS
       integer, intent(in) :: idet, ipsd
       real(dp), intent(inout) :: f(nof), spectrum(nof)
 
-      integer  :: i, j, ierr, n
+      integer :: i, j, n
       real(dp) :: plateau, margin
       real(dp), allocatable :: freqs(:), data(:)
       real(dp), pointer :: psd(:)
@@ -642,7 +629,7 @@ CONTAINS
          margin = 1e-6
       else
          ! subtract with a larger margin
-         margin = 1e-2
+         margin = 1e-3
       end if
 
       where (spectrum > plateau * (1 + margin))
@@ -837,11 +824,11 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
-    integer, parameter :: trymax = 10
-    integer :: ntries(trymax), nempty, nband, itask, id_thread, num_threads
-    real(dp) :: memsum, mem_min, mem_max
+    integer :: nempty, nband, itask, id_thread, num_threads, trymax
+    integer, allocatable :: ntries(:)
+    real(dp) :: memsum, mem_min, mem_max, p, p_tot
 
-    if (precond_width < 1) return
+    if (precond_width_max < 1) return
 
     call reset_time(16)
 
@@ -850,7 +837,7 @@ CONTAINS
 
     memory_precond = 0
 
-    if (.not. kfilter .or. precond_width == 1) then
+    if (.not. kfilter .or. precond_width_max == 1) then
        use_diagonal = .true.
        if (.not. allocated(prec_diag)) then
           allocate(prec_diag(noba_short, nodetectors), stat=ierr)
@@ -921,6 +908,9 @@ CONTAINS
        invcov(:, ipsd) = xx
     end do
 
+    trymax = precond_width_max / precond_width_min + 1
+    allocate(ntries(trymax), stat=ierr)
+    if (ierr /= 0) stop 'No room for ntries'
     nempty = 0
     ntries = 0
     memory_precond = 0
@@ -930,9 +920,9 @@ CONTAINS
     !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
     !$OMP         baselines_short_time, invcov, id, sampletime, nof, &
     !$OMP         baselines_short_start, baselines_short_stop, bandprec, nna, &
-    !$OMP         detectors, nthreads, precond_width) &
+    !$OMP         detectors, nthreads, precond_width_min, precond_width_max) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, i, j, k, n, ierr, try, &
-    !$OMP         nband, id_thread, itask, num_threads) &
+    !$OMP         nband, id_thread, itask, num_threads, p, p_tot) &
     !$OMP     REDUCTION(+:memory_precond, nempty, ntries)
 
     id_thread = omp_get_thread_num()
@@ -955,11 +945,27 @@ CONTAINS
              cycle
           end if
 
+          ! Rough guess for the width of the preconditioner based on
+          ! total power in the band
+
+          p_tot = sum(invcov(:nof/2, ipsd)**2)
           try = 1
           loop_try : do
              ! Rows from kstart+1 to kstart+noba for one band-diagonal
              ! submatrix.  Do the computation in double precision
-             nband = min(noba, try * precond_width)
+             nband = min(noba, try * precond_width_min)
+             if (nband >= precond_width_max) then
+                nband = precond_width_max
+                exit
+             end if
+             p = sum(invcov(:nband, ipsd)**2)
+             if (1 - p / p_tot < 1e-5) exit
+             try = try + 1
+          end do loop_try
+
+          ! Compute the Cholesky decomposition
+
+          do
              allocate(bandprec(ichunk, idet)%data(nband, noba), stat=ierr)
              if (ierr /= 0) stop 'No room for bandprec block'
 
@@ -972,13 +978,15 @@ CONTAINS
              ! Cholesky decompose
              call DPBTRF( &
                   'L', noba, nband-1, bandprec(ichunk, idet)%data, nband, ierr)
-             if (ierr == 0 .or. try == trymax .or. nband == noba) then
-                exit loop_try
-             end if
+
+             if (ierr == 0 .or. nband == precond_width_max) exit
+
+             ! Not positive definite, increase preconditioner width
 
              deallocate(bandprec(ichunk, idet)%data)
+             nband = min(nband + precond_width_min, precond_width_max)
              try = try + 1
-          end do loop_try
+          end do
 
           ntries(try) = ntries(try) + 1
           if (ierr /= 0) then
@@ -1015,12 +1023,12 @@ CONTAINS
        print *, 'Constructed ', sum(ntries), ' band preconditioners.'
        do try = 1, trymax
           if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
-               try*precond_width
+               try*precond_width_min
        end do
        print *, '    Skipped ', nempty, ' empty intervals.'
     end if
 
-    deallocate(invcov)
+    deallocate(invcov, ntries)
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 
     if (info > 5) write(*, idf) ID, 'Done'
@@ -1049,7 +1057,7 @@ CONTAINS
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
 
-    if (precond_width < 1) then
+    if (precond_width_max < 1) then
        z = r
        return
     end if

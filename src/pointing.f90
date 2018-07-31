@@ -122,7 +122,8 @@ CONTAINS
   SUBROUTINE reduce_pixels
     ! Reduce pixel numbers so that they point to locmap
     !
-    integer :: i, idet, k, ip, ierr
+    integer :: i, idet, k, ierr
+    integer(i8b) :: ip
 
     if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
@@ -175,7 +176,8 @@ CONTAINS
   SUBROUTINE restore_pixels
     ! restore original pixel numbers
     !
-    integer :: i, idet, ip
+    integer :: i, idet
+    integer(i8b) :: ip
 
     if (info.ge.5) write(*,idf) id, 'Restore pixel numbers (a)...'
 

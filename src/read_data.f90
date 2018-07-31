@@ -206,8 +206,11 @@ CONTAINS
     integer(c_long), intent(in) :: periods(nperiod)
     integer(c_long), intent(in) :: nsamp
 
-    integer :: ierr, iperiod, idet
-    integer(i8b) :: ninterval_max, len, i, ngood, nflag, nzeroweight
+    integer :: ierr, iperiod, idet, nbad_interval, nbad
+    integer(i8b) :: ninterval_max, len, i, ngood, nflag, nzeroweight, &
+         istart, istop
+    real(dp), parameter :: fraclim = 1e-3
+    real(dp) :: frac
 
     if (id == 0 .and. info > 1) write (*,'(/,a,/)') 'Examining periods'
 
@@ -243,11 +246,38 @@ CONTAINS
           if (all(weights(:, i, idet) == 0) .and. &
                .not. pixels(i, idet) < 0) then
              nzeroweight = nzeroweight + 1
-             pixels(i,idet) = -1
+             pixels(i, idet) = -1
           end if
        end do
     end do
     call sum_mpi(nzeroweight)
+
+    ! Flag periods that are nearly completely flagged
+    istart = 1
+    nbad_interval = 0
+    nbad = 0
+    do iperiod = 1, nperiod
+       istop = istart + intervals(iperiod) - 1
+       do idet = 1, nodetectors
+          ngood = count(pixels(istart:istop, idet) >= 0)
+          if (ngood == 0) cycle
+          frac = dble(ngood) / intervals(iperiod)
+          if (frac < fraclim) then
+             pixels(istart:istop, idet) = -1
+             nbad_interval = nbad_interval + 1
+             nbad = nbad + ngood
+          end if
+       end do
+       istart = istop + 1
+    end do
+    call sum_mpi(nbad_interval)
+    call sum_mpi(nbad)
+    if (id == 0 .and. info > 0) then
+       write (*, '(a,i0,a,i0,a,f6.3,a)') &
+            'Flagged ', nbad, ' samples on ', nbad_interval, &
+            ' periods that had less than ', fraclim * 100, &
+            '% of unflagged samples'
+    end if
 
     ngood = 0
     nflag = 0
