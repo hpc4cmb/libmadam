@@ -48,7 +48,7 @@ MODULE noise_routines
        construct_preconditioner, preconditioning_band, interpolate_psd
 
   ! LAPACK
-  external DPBTRF, DBTRS
+  external DPBTRF, DPBTRS
 
 CONTAINS
 
