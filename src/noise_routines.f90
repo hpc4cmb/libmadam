@@ -824,8 +824,9 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
-    integer :: nempty, nband, itask, id_thread, num_threads, trymax
-    integer, allocatable :: ntries(:)
+    integer :: nempty, nband, itask, id_thread, num_threads
+    integer, parameter :: trymax = 1000
+    integer :: ntries(trymax)
     real(dp) :: memsum, mem_min, mem_max, p, p_tot
 
     if (precond_width_max < 1) return
@@ -908,9 +909,6 @@ CONTAINS
        invcov(:, ipsd) = xx
     end do
 
-    trymax = precond_width_max / precond_width_min + 1
-    allocate(ntries(trymax), stat=ierr)
-    if (ierr /= 0) stop 'No room for ntries'
     nempty = 0
     ntries = 0
     memory_precond = 0
@@ -960,6 +958,7 @@ CONTAINS
              end if
              p = sum(invcov(:nband, ipsd)**2)
              if (1 - p / p_tot < 1e-5) exit
+             if (try == trymax) exit
              try = try + 1
           end do loop_try
 
@@ -983,9 +982,10 @@ CONTAINS
 
              ! Not positive definite, increase preconditioner width
 
+             if (try == trymax) exit
+             try = try + 1
              deallocate(bandprec(ichunk, idet)%data)
              nband = min(nband + precond_width_min, precond_width_max)
-             try = try + 1
           end do
 
           ntries(try) = ntries(try) + 1
@@ -1028,7 +1028,7 @@ CONTAINS
        print *, '    Skipped ', nempty, ' empty intervals.'
     end if
 
-    deallocate(invcov, ntries)
+    deallocate(invcov)
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 
     if (info > 5) write(*, idf) ID, 'Done'
