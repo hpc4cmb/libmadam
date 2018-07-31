@@ -276,6 +276,8 @@ CONTAINS
        precond_width_min = 0
        precond_width_max = 0
        kfilter = .false.
+    else
+       precond_width_max = max(precond_width_min, precond_width_max)
     end if
 
     ! Data divided by pointing periods
