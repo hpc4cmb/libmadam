@@ -139,7 +139,7 @@ CONTAINS
     end if
 
     allocate(x(n_in), y(n_in), stat=ierr)
-    if (ierr /= 0) stop 'No room to interpolate the PSD'
+    if (ierr /= 0) call abort_mpi('No room to interpolate the PSD')
 
     x = log(freq(startbin:))
     y = log(psd(startbin:))
@@ -235,7 +235,7 @@ CONTAINS
     if (ID == 0) write(*,*) 'FFT length =', nof
 
     allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
-    if (ierr /= 0) stop 'No room for fx and xx'
+    if (ierr /= 0) call abort_mpi('No room for fx and xx')
 
     memory_filter = (nof/2+1)*16. + nof*8
 
@@ -252,7 +252,7 @@ CONTAINS
 
     call free_bandprec
     allocate(bandprec(ninterval, nodetectors), stat=ierr)
-    if (ierr /= 0) stop 'No room for bandprec'
+    if (ierr /= 0) call abort_mpi('No room for bandprec')
   end subroutine allocate_bandprec
 
 
@@ -327,7 +327,7 @@ CONTAINS
     allocate(fcov(nof/2+1, npsdtot), & ! Fourier inverse of the noise filter
          psddet(npsdtot), psdind(npsdtot), psdstart(npsdtot), psdstop(npsdtot), &
          stat=ierr)
-    if (ierr /= 0) stop 'No room for fcov'
+    if (ierr /= 0) call abort_mpi('No room for fcov')
     memory_filter = memory_filter + (nof/2+1)*npsdtot*16. + npsdtot*24.
 
     memsum = memory_filter / 2**20
@@ -355,13 +355,14 @@ CONTAINS
     num_threads = omp_get_num_threads()
 
     allocate(aspec(nof/2+1), spectrum(nof), f(nof), g(nof), stat=ierr)
-    if (ierr /= 0) stop 'No room for aspec'
+    if (ierr /= 0) call abort_mpi('No room for aspec')
 
     ipsdtot = 0
     itask = -1
     do idet = 1, nodetectors
        if (.not. allocated(detectors(idet)%psds)) then
-          stop 'All detectors must have at least one PSD to build the filter'
+          call abort_mpi( &
+               'All detectors must have at least one PSD to build the filter')
        end if
        do ipsd = 1, detectors(idet)%npsd
           ipsdtot = ipsdtot + 1
@@ -456,28 +457,33 @@ CONTAINS
 
          read (17, *, iostat=ierr) nolines, nocols
          if (ierr /= 0) then
-            write (*,*) 'ERROR, ' // trim(file_spectrum) // &
-                 ' is not formatted correctly'
-            stop
+            call abort_mpi('ERROR, ' // trim(file_spectrum) // &
+                 ' is not formatted correctly')
          end if
 
          allocate(ftable(nolines), spectrum_table(nolines, nodetectors), &
               dtemp(nocols+1, nolines), stemp(nocols), sigmas(nocols), &
               stat=ierr)
-         if (ierr /= 0) stop 'No room to read the noise spectra'
+         if (ierr /= 0) call abort_mpi('No room to read the noise spectra')
 
          ! get names of detectors
          read (17, *, iostat=ierr) stemp
-         if (ierr /= 0) stop 'Failed to read detector names from spectrum file'
+         if (ierr /= 0) then
+            call abort_mpi('Failed to read detector names from spectrum file')
+         end if
 
          ! get detector noise levels
          read (17, *, iostat=ierr) sigmas
-         if (ierr /= 0) stop &
-              'Failed to read detector noise levels from spectrum file'
+         if (ierr /= 0) then
+            call abort_mpi( &
+                 'Failed to read detector noise levels from spectrum file')
+         end if
 
          ! get the table of psds
          read (17, *, iostat=ierr) dtemp
-         if (ierr /= 0) stop 'Failed to read the table from spectrum file'
+         if (ierr /= 0) then
+            call abort_mpi('Failed to read the table from spectrum file')
+         end if
 
          close(17)
 
@@ -488,9 +494,8 @@ CONTAINS
             ! detector # idet
             do icol = 1, nocols+1
                if (icol > nocols) then
-                  write (*,*) 'ERROR: ' // trim(detectors(idet)%name) // &
-                       ' not in ' // trim(file_spectrum)
-                  stop
+                  call abort_mpi('ERROR: ' // trim(detectors(idet)%name) // &
+                       ' not in ' // trim(file_spectrum))
                end if
                if (index(stemp(icol),trim(detectors(idet)%name)) > 0) exit
             end do
@@ -517,7 +522,7 @@ CONTAINS
       if (id /= 0) then
          allocate(ftable(nolines), spectrum_table(nolines, nodetectors), &
               stat=ierr)
-         if (ierr /= 0) stop 'No room for ftable'
+         if (ierr /= 0) call abort_mpi('No room for ftable')
       end if
 
       call broadcast_mpi(ftable, nolines, 0)
@@ -793,7 +798,7 @@ CONTAINS
     num_threads = omp_get_num_threads()
 
     allocate(fx(nof/2+1), xx(nof), stat=ierr)
-    if (ierr /= 0) stop 'No room for Fourier transform'
+    if (ierr /= 0) call abort_mpi('No room for Fourier transform')
 
     itask = -1
     do idet = 1, nodetectors
@@ -824,7 +829,7 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
     real(dp), allocatable :: invcov(:, :)
-    integer :: nempty, nband, itask, id_thread, num_threads
+    integer :: nempty, nfail, nband, itask, id_thread, num_threads
     integer, parameter :: trymax = 1000
     integer :: ntries(trymax)
     real(dp) :: memsum, mem_min, mem_max, p, p_tot
@@ -842,7 +847,7 @@ CONTAINS
        use_diagonal = .true.
        if (.not. allocated(prec_diag)) then
           allocate(prec_diag(noba_short, nodetectors), stat=ierr)
-          if (ierr /= 0) stop 'No room for prec_diag'
+          if (ierr /= 0) call abort_mpi('No room for prec_diag')
        end if
        memory_precond = noba_short*nodetectors*8.
 
@@ -874,7 +879,7 @@ CONTAINS
     ! Build fprecond to act as a fall back option
     if (allocated(fprecond)) deallocate(fprecond)
     allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
-    if (ierr /= 0) stop 'No room for fprecond'
+    if (ierr /= 0) call abort_mpi('No room for fprecond')
     fprecond = 0
     memory_precond = memory_precond + (nof/2+1)*npsdtot*16.
     ipsd = 0
@@ -893,7 +898,7 @@ CONTAINS
     use_diagonal = .false.
 
     allocate(invcov(nof, npsdtot), stat=ierr)
-    if (ierr /= 0) stop 'No room for invcov'
+    if (ierr /= 0) call abort_mpi('No room for invcov')
     invcov = 0
 
     call allocate_bandprec
@@ -910,6 +915,7 @@ CONTAINS
     end do
 
     nempty = 0
+    nfail = 0
     ntries = 0
     memory_precond = 0
 
@@ -921,7 +927,7 @@ CONTAINS
     !$OMP         detectors, nthreads, precond_width_min, precond_width_max) &
     !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, i, j, k, n, ierr, try, &
     !$OMP         nband, id_thread, itask, num_threads, p, p_tot) &
-    !$OMP     REDUCTION(+:memory_precond, nempty, ntries)
+    !$OMP     REDUCTION(+:memory_precond, nempty, ntries, nfail)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
@@ -952,10 +958,7 @@ CONTAINS
              ! Rows from kstart+1 to kstart+noba for one band-diagonal
              ! submatrix.  Do the computation in double precision
              nband = min(noba, try * precond_width_min)
-             if (nband >= precond_width_max) then
-                nband = precond_width_max
-                exit
-             end if
+             if (nband == noba  .or. nband == precond_width_max) exit
              p = sum(invcov(:nband, ipsd)**2)
              if (1 - p / p_tot < 1e-5) exit
              if (try == trymax) exit
@@ -966,7 +969,7 @@ CONTAINS
 
           do
              allocate(bandprec(ichunk, idet)%data(nband, noba), stat=ierr)
-             if (ierr /= 0) stop 'No room for bandprec block'
+             if (ierr /= 0) call abort_mpi('No room for bandprec block')
 
              bandprec(ichunk, idet)%data = spread( &
                   invcov(1:nband, ipsd), 2, noba)
@@ -975,24 +978,29 @@ CONTAINS
                   + nna(0, 0, kstart+1:kstart+noba, idet)
 
              ! Cholesky decompose
+
              call DPBTRF( &
                   'L', noba, nband-1, bandprec(ichunk, idet)%data, nband, ierr)
 
-             if (ierr == 0 .or. nband == precond_width_max) exit
+             if (ierr == 0) exit
 
-             ! Not positive definite, increase preconditioner width
+             ! Not positive definite
+
+             deallocate(bandprec(ichunk, idet)%data)
 
              if (try == trymax) exit
+             if (nband == noba .or. nband == precond_width_max) exit
+
+             ! Increase preconditioner width
+
              try = try + 1
-             deallocate(bandprec(ichunk, idet)%data)
              nband = min(nband + precond_width_min, precond_width_max)
           end do
 
-          ntries(try) = ntries(try) + 1
           if (ierr /= 0) then
              print *,'Cholesky decomposition failed for ', &
-                  trim(detectors(idet)%name)
-             deallocate(bandprec(ichunk, idet)%data)
+                  trim(detectors(idet)%name), ',  noba = ', noba
+             nfail = nfail + 1
 !!$             ! DEBUG begin
 !!$             write (1000+id, *) trim(detectors(idet)%name), ierr, noba
 !!$             do i = 1, noba
@@ -1002,6 +1010,7 @@ CONTAINS
 !!$             end do
 !!$             ! DEBUG end
           else
+             ntries(try) = ntries(try) + 1
              memory_precond = memory_precond + nband*noba*8
           end if
        end do
@@ -1019,12 +1028,14 @@ CONTAINS
 
     call sum_mpi(ntries, trymax)
     call sum_mpi(nempty)
+    call sum_mpi(nfail)
     if (id == 0) then
        print *, 'Constructed ', sum(ntries), ' band preconditioners.'
        do try = 1, trymax
           if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
                try*precond_width_min
        end do
+       print *, '            ', nfail, ' failed (using C_a)'
        print *, '    Skipped ', nempty, ' empty intervals.'
     end if
 
@@ -1081,7 +1092,7 @@ CONTAINS
        num_threads = omp_get_num_threads()
 
        allocate(fx(nof/2+1), xx(nof), stat=ierr)
-       if (ierr /= 0) stop 'No room for Fourier transform'
+       if (ierr /= 0) call abort_mpi('No room for Fourier transform')
 
        itask = -1
        do idet = 1, nodetectors
