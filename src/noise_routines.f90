@@ -703,6 +703,8 @@ CONTAINS
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
+    return ! DEBUG
+
     if (all(nna(:, :, kstart+1:kstart+noba, idet) == 0)) then
        noba = 0
        return

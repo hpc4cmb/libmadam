@@ -695,6 +695,7 @@ CONTAINS
     integer(i8b) :: npix_thread, firstpix, lastpix, itask
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
+    real(dp), allocatable :: resid(:)
 
     if (info > 4) write(*,idf) ID,'Begin iteration...'
 
@@ -706,7 +707,7 @@ CONTAINS
          ap(0:basis_order, noba_short, nodetectors), &
          z(0:basis_order, noba_short, nodetectors), &
          rmask(0:basis_order, noba_short, nodetectors), &
-         stat=ierr)
+         resid(nodetectors), stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
     ! Mask out completely flagged intervals and
@@ -746,6 +747,12 @@ CONTAINS
     p = z
     rz = sum(r * z, mask=rmask)
     rr = sum(r * r, mask=rmask)
+    ! DEBUG begin
+    do idet = 1, nodetectors
+       resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
+    end do
+    write(10000+id, '(100es15.5)') resid
+    ! DEBUG end
 
     if (checknan) then
        if (isnan(rz)) print *,id,' : ERROR: rz is nan'
@@ -947,6 +954,13 @@ CONTAINS
           end do
        end if
 
+       ! DEBUG begin
+       do idet = 1, nodetectors
+          resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
+       end do
+       write(10000+id, '(100es15.5)') resid
+       ! DEBUG end
+
        rzo = rz
        rz = sum(r * z, mask=rmask)
        rr = sum(r * r, mask=rmask)
@@ -967,7 +981,7 @@ CONTAINS
 
     deallocate(ap_all_threads)
 
-    deallocate(r, p, ap, z)
+    deallocate(r, p, ap, z, resid)
 
     noiter = istep
     if (id == 0 .and. info > 0) then
