@@ -335,7 +335,7 @@ CONTAINS
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
     if (ID == 0 .and. info > 0) then
-       write(*,'(x,a,t32,3(f9.1," MB"))') &
+       write(*,'(1x,a,t32,3(f9.1," MB"))') &
             'Allocated memory for filter:', memsum, mem_min, mem_max
     end if
 
@@ -998,8 +998,11 @@ CONTAINS
           end do
 
           if (ierr /= 0) then
-             print *,'Cholesky decomposition failed for ', &
-                  trim(detectors(idet)%name), ',  noba = ', noba
+             write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
+                  'Cholesky decomposition failed for ' // &
+                  trim(detectors(idet)%name) // ', noba = ', noba, ', t = ', &
+                  baselines_short_time(kstart+1), ' - ', &
+                  baselines_short_time(kstart+noba)
              nfail = nfail + 1
 !!$             ! DEBUG begin
 !!$             write (1000+id, *) trim(detectors(idet)%name), ierr, noba
@@ -1022,7 +1025,7 @@ CONTAINS
     call min_mpi(mem_min); call max_mpi(mem_max)
     call sum_mpi(memsum)
     if (ID == 0 .and. info > 0) then
-       write(*,'(x,a,t32,3(f9.1," MB"))') &
+       write(*,'(1x,a,t32,3(f9.1," MB"))') &
             'Allocated memory for precond:', memsum, mem_min, mem_max
     end if
 
@@ -1035,8 +1038,8 @@ CONTAINS
           if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
                try*precond_width_min
        end do
-       print *, '            ', nfail, ' failed (using C_a)'
-       print *, '    Skipped ', nempty, ' empty intervals.'
+       if (nfail > 0) print *, '            ', nfail, ' failed (using C_a)'
+       if (nempty > 0) print *, '    Skipped ', nempty, ' empty intervals.'
     end if
 
     deallocate(invcov)
