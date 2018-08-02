@@ -295,6 +295,8 @@ CONTAINS
        read(value, *, iostat=ierr) precond_width_max
     case ('use_fprecond')
        read(value, *, iostat=ierr) use_fprecond
+    case ('use_cgprecond')
+       read(value, *, iostat=ierr) use_cgprecond
     case ('rm_monopole')
        read(value, *, iostat=ierr) rm_monopole
 

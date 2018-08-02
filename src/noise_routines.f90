@@ -24,6 +24,7 @@ MODULE noise_routines
   real(dp), allocatable :: xx(:)
   complex(dp), allocatable :: fx(:)
   complex(dp), allocatable, target :: fcov(:, :), fprecond(:, :)
+  real(dp), allocatable :: invcov(:, :)
 
   !Store interpolated spectra
   real(dp), allocatable :: freqtab(:), spectab(:, :)
@@ -279,6 +280,7 @@ CONTAINS
     if (.not. kfilter) return
 
     if (allocated(fcov)) deallocate(fcov)
+    if (allocated(invcov)) deallocate(invcov)
     if (allocated(fprecond)) deallocate(fprecond)
     if (allocated(psddet)) deallocate(psddet)
     if (allocated(psdind)) deallocate(psdind)
@@ -830,7 +832,6 @@ CONTAINS
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: i, j, k, kstart, n, noba, idet, ichunk, ipsd, ierr, try, ipsddet
-    real(dp), allocatable :: invcov(:, :)
     integer :: nempty, nfail, nband, itask, id_thread, num_threads
     integer, parameter :: trymax = 1000
     integer :: ntries(trymax)
@@ -899,6 +900,7 @@ CONTAINS
 
     use_diagonal = .false.
 
+    if (allocated(invcov)) deallocate(invcov)
     allocate(invcov(nof, npsdtot), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for invcov')
     invcov = 0
@@ -916,111 +918,107 @@ CONTAINS
        invcov(:, ipsd) = xx
     end do
 
-    nempty = 0
-    nfail = 0
-    ntries = 0
-    memory_precond = 0
+    if (.not. use_cgprecond) then
+       nempty = 0
+       nfail = 0
+       ntries = 0
+       memory_precond = 0
 
-    !$OMP PARALLEL NUM_THREADS(nthreads) &
-    !$OMP     DEFAULT(NONE) &
-    !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
-    !$OMP         baselines_short_time, invcov, id, sampletime, nof, &
-    !$OMP         baselines_short_start, baselines_short_stop, bandprec, nna, &
-    !$OMP         detectors, nthreads, precond_width_min, precond_width_max) &
-    !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, i, j, k, n, ierr, try, &
-    !$OMP         nband, id_thread, itask, num_threads, p, p_tot) &
-    !$OMP     REDUCTION(+:memory_precond, nempty, ntries, nfail)
+       !$OMP PARALLEL NUM_THREADS(nthreads) &
+       !$OMP     DEFAULT(NONE) &
+       !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
+       !$OMP         baselines_short_time, invcov, id, sampletime, nof, &
+       !$OMP         baselines_short_start, baselines_short_stop, bandprec, nna, &
+       !$OMP         detectors, nthreads, precond_width_min, precond_width_max) &
+       !$OMP     PRIVATE(idet, ichunk, noba, kstart, ipsd, i, j, k, n, ierr, try, &
+       !$OMP         nband, id_thread, itask, num_threads, p, p_tot) &
+       !$OMP     REDUCTION(+:memory_precond, nempty, ntries, nfail)
 
-    id_thread = omp_get_thread_num()
-    num_threads = omp_get_num_threads()
+       id_thread = omp_get_thread_num()
+       num_threads = omp_get_num_threads()
 
-    itask = -1
-    do idet = 1, nodetectors
-       do ichunk = 1, ninterval
-          itask = itask + 1
-          if (modulo(itask, num_threads) /= id_thread) cycle
+       itask = -1
+       do idet = 1, nodetectors
+          do ichunk = 1, ninterval
+             itask = itask + 1
+             if (modulo(itask, num_threads) /= id_thread) cycle
 
-          noba = noba_short_pp(ichunk)
-          kstart = sum(noba_short_pp(1:ichunk-1))
-          call trim_interval(kstart, noba, idet, nna)
-          ipsd = psd_index(idet, baselines_short_time(kstart+1))
+             noba = noba_short_pp(ichunk)
+             kstart = sum(noba_short_pp(1:ichunk-1))
+             call trim_interval(kstart, noba, idet, nna)
+             ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
-          if (ipsd == -1 .or. noba < 1 .or. &
-               all(nna(0, 0, kstart+1:kstart+noba, idet) == 0)) then
-             nempty = nempty + 1
-             cycle
-          end if
+             if (ipsd == -1 .or. noba < 1 .or. &
+                  all(nna(0, 0, kstart+1:kstart+noba, idet) == 0)) then
+                nempty = nempty + 1
+                cycle
+             end if
 
-          ! Rough guess for the width of the preconditioner based on
-          ! total power in the band
+             ! Rough guess for the width of the preconditioner based on
+             ! total power in the band
 
-          p_tot = sum(invcov(:nof/2, ipsd)**2)
-          try = 1
-          loop_try : do
-             ! Rows from kstart+1 to kstart+noba for one band-diagonal
-             ! submatrix.  Do the computation in double precision
-             nband = min(noba, try * precond_width_min)
-             if (nband == noba  .or. nband == precond_width_max) exit
-             p = sum(invcov(:nband, ipsd)**2)
-             if (1 - p / p_tot < 1e-5) exit
-             if (try == trymax) exit
-             try = try + 1
-          end do loop_try
+             p_tot = sum(invcov(:nof/2, ipsd)**2)
+             try = 1
+             loop_try : do
+                ! Rows from kstart+1 to kstart+noba for one band-diagonal
+                ! submatrix.  Do the computation in double precision
+                nband = min(noba, try * precond_width_min)
+                if (nband == noba  .or. nband == precond_width_max) exit
+                p = sum(invcov(:nband, ipsd)**2)
+                if (1 - p / p_tot < 1e-5) exit
+                if (try == trymax) exit
+                try = try + 1
+             end do loop_try
 
-          ! Compute the Cholesky decomposition
+             ! Compute the Cholesky decomposition
 
-          do
-             allocate(bandprec(ichunk, idet)%data(nband, noba), stat=ierr)
-             if (ierr /= 0) call abort_mpi('No room for bandprec block')
+             do
+                call get_cholesky_decomposition( &
+                     bandprec(ichunk, idet)%data, nband, noba, &
+                     invcov(1, ipsd), nna(0, 0, kstart+1, idet), ierr)
 
-             bandprec(ichunk, idet)%data = spread( &
-                  invcov(1:nband, ipsd), 2, noba)
-             bandprec(ichunk, idet)%data(1, :) = &
-                  bandprec(ichunk, idet)%data(1, :) &
-                  + nna(0, 0, kstart+1:kstart+noba, idet)
+                if (ierr == 0) exit
 
-             ! Cholesky decompose
+                ! Not positive definite
 
-             call DPBTRF( &
-                  'L', noba, nband-1, bandprec(ichunk, idet)%data, nband, ierr)
+                if (try == trymax) exit
+                if (nband == noba .or. nband == precond_width_max) exit
 
-             if (ierr == 0) exit
+                ! Increase preconditioner width
 
-             ! Not positive definite
+                try = try + 1
+                nband = min(nband + precond_width_min, precond_width_max)
+             end do
 
-             deallocate(bandprec(ichunk, idet)%data)
-
-             if (try == trymax) exit
-             if (nband == noba .or. nband == precond_width_max) exit
-
-             ! Increase preconditioner width
-
-             try = try + 1
-             nband = min(nband + precond_width_min, precond_width_max)
+             if (ierr /= 0) then
+                write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
+                     'Cholesky decomposition failed for ' // &
+                     trim(detectors(idet)%name) // ', noba = ', noba, ', t = ', &
+                     baselines_short_time(kstart+1), ' - ', &
+                     baselines_short_time(kstart+noba)
+                nfail = nfail + 1
+             else
+                ntries(try) = ntries(try) + 1
+                memory_precond = memory_precond + nband*noba*8
+             end if
           end do
-
-          if (ierr /= 0) then
-             write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
-                  'Cholesky decomposition failed for ' // &
-                  trim(detectors(idet)%name) // ', noba = ', noba, ', t = ', &
-                  baselines_short_time(kstart+1), ' - ', &
-                  baselines_short_time(kstart+noba)
-             nfail = nfail + 1
-!!$             ! DEBUG begin
-!!$             write (1000+id, *) trim(detectors(idet)%name), ierr, noba
-!!$             do i = 1, noba
-!!$                write (1000+id, *) &
-!!$                     i, invcov(i, ipsd), nna(0, 0, kstart+i, idet), &
-!!$                     baselines_short_time(kstart+i)
-!!$             end do
-!!$             ! DEBUG end
-          else
-             ntries(try) = ntries(try) + 1
-             memory_precond = memory_precond + nband*noba*8
-          end if
        end do
-    end do
-    !$OMP END PARALLEL
+       !$OMP END PARALLEL
+
+       call sum_mpi(ntries, trymax)
+       call sum_mpi(nempty)
+       call sum_mpi(nfail)
+       if (id == 0) then
+          print *, 'Constructed ', sum(ntries), ' band preconditioners.'
+          do try = 1, trymax
+             if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
+                  try*precond_width_min
+          end do
+          if (nfail > 0) print *, '            ', nfail, ' failed (using CG)'
+          if (nempty > 0) print *, '    Skipped ', nempty, ' empty intervals.'
+       end if
+
+    end if
 
     memsum = memory_precond / 2**20
     mem_min = memsum; mem_max = memsum
@@ -1031,20 +1029,6 @@ CONTAINS
             'Allocated memory for precond:', memsum, mem_min, mem_max
     end if
 
-    call sum_mpi(ntries, trymax)
-    call sum_mpi(nempty)
-    call sum_mpi(nfail)
-    if (id == 0) then
-       print *, 'Constructed ', sum(ntries), ' band preconditioners.'
-       do try = 1, trymax
-          if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
-               try*precond_width_min
-       end do
-       if (nfail > 0) print *, '            ', nfail, ' failed (using C_a)'
-       if (nempty > 0) print *, '    Skipped ', nempty, ' empty intervals.'
-    end if
-
-    deallocate(invcov)
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 
     if (info > 5) write(*, idf) ID, 'Done'
@@ -1067,14 +1051,16 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
     integer :: j, k, idet, kstart, noba, ichunk, ierr, itask, num_threads
-    integer :: m, no, nband
+    integer :: m, no, nband, ipsd
     real(dp) :: x0
+    real(dp),  allocatable :: blockm(:, :)
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
 
+    z = r
+
     if (precond_width_max < 1) then
-       z = r
        return
     end if
 
@@ -1089,9 +1075,10 @@ CONTAINS
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
-       !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna) &
+       !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
+       !$OMP         baselines_short_time, invcov, fcov, checknan) &
        !$OMP     PRIVATE(idet, ichunk, kstart, noba, j, k, ierr, x0, m, no, &
-       !$OMP         xx, fx, nband, id_thread, itask, num_threads)
+       !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, blockm)
 
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
@@ -1106,6 +1093,7 @@ CONTAINS
              kstart = sum(noba_short_pp(1:ichunk-1))
              call trim_interval(kstart, noba, idet, nna)
              if (noba == 0) cycle
+             ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
              itask = itask + 1
              if (modulo(itask, num_threads) /= id_thread) cycle
@@ -1113,26 +1101,20 @@ CONTAINS
              if (allocated(bandprec(ichunk, idet)%data)) then
                 ! Use the precomputed Cholesky decomposition
                 nband = size(bandprec(ichunk, idet)%data, 1)
-                z(0, kstart+1:kstart+noba, idet) = &
-                     r(0, kstart+1:kstart+noba, idet)
-                call DPBTRS( &
-                     'L', noba, nband-1, 1, bandprec(ichunk, idet)%data, &
-                     nband, z(0, kstart+1, idet), noba, ierr)
-                if (ierr /= 0) then
-                   print *, id, ' : failed to Cholesky solve. argument # ', &
-                        -ierr, ' had an illegal value'
-                   call abort_mpi('bad preconditioner2')
-                end if
+                call apply_cholesky_decomposition( &
+                     noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
+                     nband, bandprec(ichunk, idet)%data)
              else
-                call convolve_interval( &
-                     ichunk, idet, r, z, xx, fx, fprecond, nna)
+                ! Use CG iteration to apply the preconditioner
+                call apply_CG_preconditioner( &
+                     noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
+                     z(0, kstart+1, idet), r(0, kstart+1, idet), &
+                     invcov(1, ipsd), fx, xx)
              end if
-
           end do
        end do
 
-       deallocate(fx)
-       deallocate(xx)
+       deallocate(fx, xx)
 
        !$OMP END PARALLEL
     end if
@@ -1140,6 +1122,158 @@ CONTAINS
     cputime_precond = cputime_precond + get_time(16)
 
   END SUBROUTINE preconditioning_band
+
+
+
+  subroutine apply_cholesky_decomposition(noba, z, r, nband, blockm)
+    integer, intent(in) :: noba
+    real(dp), intent(out) :: z(noba)
+    real(dp), intent(in) :: r(noba)
+    integer, intent(in) :: nband
+    real(dp), intent(in) :: blockm(nband, noba)
+    integer :: ierr
+
+    z = r
+    call DPBTRS('L', noba, nband-1, 1, blockm, nband, z, noba, ierr)
+    if (ierr /= 0) then
+       print *, id, ' : failed to Cholesky solve. argument # ', &
+            -ierr, ' had an illegal value'
+       call abort_mpi('bad preconditioner2')
+    end if
+
+  end subroutine apply_cholesky_decomposition
+
+
+
+  subroutine get_cholesky_decomposition(blockm, nband, noba, invcov, nna, ierr)
+    !
+    ! Calculate the Cholesky decomposition of a band-diagonal matrix
+    !
+    real(dp), allocatable, intent(out) :: blockm(:, :)
+    integer, intent(in) :: nband, noba
+    real(dp), intent(in) :: invcov(noba), nna(noba)
+    integer, intent(out) :: ierr
+
+    if (allocated(blockm)) deallocate(blockm)
+    allocate(blockm(nband, noba), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for Cholesky decomposition')
+
+    blockm = spread(invcov(1:nband), 2, noba)
+    blockm(1, :) = blockm(1, :) + nna
+
+    ! Cholesky decompose
+
+    call DPBTRF('L', noba, nband-1, blockm, nband, ierr)
+
+    if (ierr /= 0) deallocate(blockm)
+
+  end subroutine get_cholesky_decomposition
+
+
+
+  subroutine apply_CG_preconditioner(noba, nof, fcov, nna, x, b, invcov, fx, xx)
+    !
+    ! Apply the preconditioner using CG iteration
+    !
+    integer, intent(in) :: noba, nof
+    complex(dp), intent(in) :: fcov(nof/2+1)
+    real(dp), intent(in) :: nna(noba), invcov(noba)
+    real(dp), intent(out) :: x(noba)
+    real(dp), intent(in) :: b(noba)
+    real(C_DOUBLE), intent(inout) :: xx(nof)
+    complex(C_DOUBLE_COMPLEX), intent(inout) :: fx(nof/2 + 1)
+
+    real(dp), allocatable :: resid(:), prop(:), Aprop(:), zresid(:), precond(:)
+    real(dp) :: alpha, beta, rr, rr0, rr_old, rz, rz_old, Anorm
+    integer :: iter, ierr, i
+    ! iteration limits for applying the preconditioner.  We do not need
+    ! perfect convergence because the top level CG iteration uses the
+    ! Polak-Ribiere formula to allow for a changing preconditioner
+    real(dp), parameter :: cglimit = 1e-6
+    integer, parameter :: itermax = 100
+
+    allocate(resid(noba), prop(noba), Aprop(noba), zresid(noba), &
+         precond(noba), stat=ierr)
+    if (ierr /= 0) call abort_mpi('not enough memory to apply preconditioner')
+
+    x = 0
+    resid = b - x
+    rr = dot_product(resid, resid)
+    if (rr == 0) return
+    rr0 = rr
+
+    where (nna /= 0)
+       precond = nna + invcov(1)
+    elsewhere
+       precond = invcov(1)
+    end where
+    precond = 1 / precond
+    call apply_precond(resid, zresid)
+    rz = dot_product(resid, zresid)
+
+    prop = zresid
+    iter = 1
+    do
+       call apply_A(prop, Aprop)
+       Anorm = dot_product(prop, Aprop)
+       alpha = rz / Anorm
+       x = x + alpha * prop
+       resid = resid - alpha * Aprop
+       rr_old = rr
+       rr = dot_product(resid, resid)
+       !print *,'  iter = ', iter, ', rr / rr0 = ', rr / rr0
+       if (rr / rr0 < cglimit .or. iter == itermax) exit
+       call apply_precond(resid, zresid)
+       rz_old = rz
+       rz = dot_product(resid, zresid)
+       beta = rz / rz_old
+       rz_old = rz
+       prop = zresid + beta * prop
+       iter = iter + 1
+    end do
+
+    deallocate(resid, prop, Aprop, zresid, precond)
+
+  contains
+
+    subroutine apply_precond(x, z)
+      !
+      ! Apply the preconditioner to `x` and return the result in `z`.
+      !
+      real(dp), intent(in) :: x(noba)
+      real(dp), intent(out) :: z(noba)
+
+      z = precond * x
+    end subroutine apply_precond
+
+    subroutine apply_A(x, y)
+      !
+      ! Apply the square matrix `A` to `x` and place the result in `y`
+      !
+      real(dp), intent(in) :: x(noba)
+      real(dp), intent(out) :: y(noba)
+      call convolve(x, fcov, y)
+      y = y + nna*x
+    end subroutine apply_A
+
+    subroutine convolve(x, fc, y)
+      !
+      ! Convolve `x` with filter `fc` and place result in `y`.
+      !
+      real(dp), intent(in) :: x(noba)
+      complex(dp) :: fc(nof/2 + 1)
+      real(dp), intent(out) :: y(noba)
+      xx(:noba) = x - sum(x)/noba
+      xx(noba+1:) = 0
+      call dfft(fx, xx)
+      fx = fx*fc
+      call dfftinv(xx, fx)
+      y = xx(:noba)
+      y = y - sum(y) / noba
+    end subroutine convolve
+
+  end subroutine apply_CG_preconditioner
+
 
 
   !---------------------------------------------------------------------------

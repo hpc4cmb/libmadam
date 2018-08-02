@@ -681,10 +681,11 @@ CONTAINS
     real(dp), intent(inout):: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
 
-    real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :)
+    real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :), &
+         ro(:, :, :)
     logical, allocatable :: rmask(:, :, :)
-    real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
-    real(dp) :: alpha, beta, pw, apn, detweight
+    real(dp) :: rz, rzinit, rzo, pap, rr, rrinit, rz2
+    real(dp) :: alpha, beta, pw, apn, detweight, beta2
     integer :: i, k, m, istep, idet, order, i0, m0
     integer(i8b) :: ip
     integer :: ival, noba, kstart, ipsd, ichunk
@@ -707,6 +708,7 @@ CONTAINS
          ap(0:basis_order, noba_short, nodetectors), &
          z(0:basis_order, noba_short, nodetectors), &
          rmask(0:basis_order, noba_short, nodetectors), &
+         ro(0:basis_order, noba_short, nodetectors), &
          resid(nodetectors), stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
@@ -827,11 +829,10 @@ CONTAINS
     if (ID==0 .and. info > 1) then
        write(*,*)
        write(*,*) 'CG iteration begins'
-       write(*,'(x,a,es25.15)') 'rzinit =', rzinit
        write(*,'(x,a,es25.15)') 'rrinit =', rrinit
        write(*,'(x,a,es25.15)') '  <rr> =', ybalim
-       write(*,'(a4,4a16,a10)') &
-            'iter', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
+       write(*,'(a4,4a16,a12)') &
+            'iter', 'rr/rrinit', 'rz2/rz', 'alpha', 'beta', 'time'
     end if
 
     if (isnan(rz)) then
@@ -939,6 +940,7 @@ CONTAINS
        call sum_mpi(pap)
 
        alpha = rz/pap
+       ro = r ! Keep a copy for Polak-Ribiere beta
        r = r - alpha*ap
 
        aa(:, 1:noba_short, 1:nodetectors) = &
@@ -955,24 +957,30 @@ CONTAINS
        end if
 
        ! DEBUG begin
-       do idet = 1, nodetectors
-          resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
-       end do
-       write(10000+id, '(100es15.5)') resid
+       !do idet = 1, nodetectors
+       !   resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
+       !end do
+       !write(10000+id, '(100es15.5)') resid
        ! DEBUG end
 
        rzo = rz
        rz = sum(r * z, mask=rmask)
+       rz2 = sum(ro * z, mask=rmask)
        rr = sum(r * r, mask=rmask)
        call sum_mpi(rz)
+       call sum_mpi(rz2)
        call sum_mpi(rr)
-       beta = rz / rzo
+       ! This is the Fletcher-Reeves formula that
+       ! assumes stationary preconditioning
+       !beta = rz / rzo
+       ! This is the Polak-Ribiere formula that
+       ! allows for updates to the preconditioner
+       beta = (rz - rz2) / rzo
 
-       if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f6.3,"s)")') &
-            istep, rz/rzinit, rr/rrinit, alpha, beta, get_time_and_reset(99)
+       if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
+            istep, rr/rrinit, rz2/rz, alpha, beta, get_time_and_reset(99)
 
-       if ((rz/rzinit < cglimit .or. rr/rrinit < cglimit) &
-            .and. istep > iter_min) exit
+       if (rr/rrinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
 
        p = z + beta*p
@@ -981,7 +989,7 @@ CONTAINS
 
     deallocate(ap_all_threads)
 
-    deallocate(r, p, ap, z, resid)
+    deallocate(r, p, ap, z, resid, ro)
 
     noiter = istep
     if (id == 0 .and. info > 0) then
