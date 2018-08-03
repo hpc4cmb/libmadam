@@ -367,7 +367,7 @@ CONTAINS
 
     if (ID==idwr) then
        call fits_close(out)
-       write(*,*) 'Map written in '//trim(file_map)
+       write(*,'(1x,a)') 'Map written in '//trim(file_map)
     end if
 
     cputime_output = cputime_output + get_time(10)
@@ -509,7 +509,7 @@ CONTAINS
 
     if (ID==idwr) then
        call fits_close(out)
-       write(*,*) 'Map written in '//trim(file_map)
+       write(*,'(1x,a)') 'Map written in '//trim(file_map)
     end if
 
     deallocate(sbuffer,ibuffer)
@@ -778,7 +778,7 @@ CONTAINS
 
     if (ID == idwr) then
        call fits_close(out)
-       write(*,*) 'Binned map written in ' // trim(file_binmap)
+       write(*,'(1x,a)') 'Binned map written in ' // trim(file_binmap)
     end if
 
     cputime_output = cputime_output + get_time(10)
@@ -902,7 +902,7 @@ CONTAINS
 
     if (ID==idwr) then
        call fits_close(out)
-       write(*,*) 'Mask written in '//trim(file_mask)
+       write(*,'(1x,a)') 'Mask written in '//trim(file_mask)
     end if
 
     deallocate(sbuffer,ibuffer)
@@ -1015,8 +1015,7 @@ CONTAINS
 
     if (ID == idwr) then
        call fits_close(out)
-
-       write(*,*) 'Hit count written in ' // trim(file_hit)
+       write(*,'(1x,a)') 'Hit count written in ' // trim(file_hit)
     end if
 
     deallocate(ibuffer)
@@ -1165,7 +1164,7 @@ CONTAINS
 
     if (ID==idwr) then
        call fits_close(out)
-       write(*,*) 'Pixel matrix written in ' // trim(outfile)
+       write(*,'(1x,a)') 'Pixel matrix written in ' // trim(outfile)
     end if
 
     deallocate(dbuffer)
@@ -1313,7 +1312,7 @@ CONTAINS
 
     if (ID==idwr) then
        call fits_close(out)
-       write(*,*) 'Leakage matrix written in ' // trim(outfile)
+       write(*,'(1x,a)') 'Leakage matrix written in ' // trim(outfile)
     end if
 
     deallocate(dbuffer)

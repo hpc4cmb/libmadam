@@ -688,7 +688,7 @@ CONTAINS
     real(dp) :: alpha, beta, pw, apn, detweight, beta2
     integer :: i, k, m, istep, idet, order, i0, m0
     integer(i8b) :: ip
-    integer :: ival, noba, kstart, ipsd, ichunk
+    integer :: ival, noba, kstart, kstop, ipsd, ichunk
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
@@ -718,9 +718,13 @@ CONTAINS
     do idet = 1, nodetectors
        do ichunk = 1, ninterval
           kstart = sum(noba_short_pp(1:ichunk-1))
-          noba = noba_short_pp(ichunk)
-          call trim_interval(kstart, noba, idet, nna)
-          rmask(:, kstart+1:kstart+noba, idet) = .true.
+          kstop = kstart + noba_short_pp(ichunk)
+          do
+             call trim_interval(kstart, kstop, noba, idet, nna)
+             if (noba == 0) exit
+             rmask(:, kstart+1:kstart+noba, idet) = .true.
+             kstart = kstart + noba
+          end do
        end do
     end do
 
