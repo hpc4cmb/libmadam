@@ -36,7 +36,9 @@ MODULE noise_routines
   type bandprec_pointer
      real(dp), allocatable :: data(:, :)
   end type bandprec_pointer
-  type(bandprec_pointer), allocatable :: bandprec(:, :)
+  ! Allow up to NSUBMAX sub-intervals for filtering and preconditioning
+  integer, parameter :: NSUBMAX = 100
+  type(bandprec_pointer), allocatable :: bandprec(:, :, :)
   real(dp), allocatable, target :: prec_diag(:, :)
 
   ! PSD information
@@ -252,21 +254,23 @@ CONTAINS
     integer :: ierr
 
     call free_bandprec
-    allocate(bandprec(ninterval, nodetectors), stat=ierr)
+    allocate(bandprec(NSUBMAX, ninterval, nodetectors), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for bandprec')
   end subroutine allocate_bandprec
 
 
 
   subroutine free_bandprec
-    integer :: ichunk, idet
+    integer :: ichunk, idet, isub
 
     if (allocated(bandprec)) then
-       do ichunk = 1, ninterval
-          do idet = 1, nodetectors
-             if (allocated(bandprec(ichunk, idet)%data)) then
-                deallocate(bandprec(ichunk, idet)%data)
-             end if
+       do idet = 1, nodetectors
+          do ichunk = 1, ninterval
+             do isub = 1, NSUBMAX
+                if (allocated(bandprec(isub, ichunk, idet)%data)) then
+                   deallocate(bandprec(isub, ichunk, idet)%data)
+                end if
+             end do
           end do
        end do
        deallocate(bandprec)
@@ -855,10 +859,11 @@ CONTAINS
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: i, j, k, kstart, kstop, n, noba, idet, ichunk, ipsd, ierr, try, &
-         ipsddet, nempty, nfail, nband, itask, id_thread, num_threads
+         ipsddet, nempty, nfail, nband, itask, id_thread, num_threads, isub
     integer, parameter :: trymax = 1000
     integer :: ntries(trymax)
     real(dp) :: memsum, mem_min, mem_max, p, p_tot
+    real(dp), parameter :: plim = 1 - 1e-5
 
     if (precond_width_max < 1) return
 
@@ -942,7 +947,6 @@ CONTAINS
     end do
 
     if (.not. use_cgprecond) then
-       call abort_mpi('band preconditioner does not yet work with split intervals')
        nempty = 0
        nfail = 0
        ntries = 0
@@ -951,11 +955,13 @@ CONTAINS
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(nodetectors, ninterval, noba_short_pp, &
-       !$OMP         baselines_short_time, invcov, id, sampletime, nof, &
-       !$OMP         baselines_short_start, baselines_short_stop, bandprec, nna, &
-       !$OMP         detectors, nthreads, precond_width_min, precond_width_max) &
+       !$OMP         baselines_short_time, invcov, id, nof, &
+       !$OMP         baselines_short_start, baselines_short_stop, bandprec, &
+       !$OMP         nna, detectors, nthreads, precond_width_min, &
+       !$OMP         precond_width_max) &
        !$OMP     PRIVATE(idet, ichunk, noba, kstart, kstop, ipsd, i, j, k, n, &
-       !$OMP         ierr, try, nband, id_thread, itask, num_threads, p, p_tot) &
+       !$OMP         ierr, try, nband, id_thread, itask, num_threads, p, p_tot, &
+       !$OMP         isub) &
        !$OMP     REDUCTION(+:memory_precond, nempty, ntries, nfail)
 
        id_thread = omp_get_thread_num()
@@ -969,7 +975,8 @@ CONTAINS
 
              kstart = sum(noba_short_pp(1:ichunk-1))
              kstop = kstart + noba_short_pp(ichunk)
-             do
+             isub = 1
+             loop_subchunk : do
                 call trim_interval(kstart, kstop, noba, idet, nna)
                 if (noba == 0) exit
                 ipsd = psd_index(idet, baselines_short_time(kstart+1))
@@ -985,36 +992,42 @@ CONTAINS
 
                 p_tot = sum(invcov(:nof/2, ipsd)**2)
                 try = 1
+                ierr = -1
                 loop_try : do
                    ! Rows from kstart+1 to kstart+noba for one band-diagonal
                    ! submatrix.  Do the computation in double precision
                    nband = min(noba, try * precond_width_min)
-                   if (nband == noba  .or. nband == precond_width_max) exit
+                   nband = min(nband, precond_width_max)
                    p = sum(invcov(:nband, ipsd)**2)
-                   if (1 - p / p_tot < 1e-5) exit
+                   if (p > plim * p_tot) then
+                      ierr = 0
+                      exit
+                   end if
+                   if (nband == noba  .or. nband == precond_width_max) exit
                    if (try == trymax) exit
                    try = try + 1
                 end do loop_try
 
-                ! Compute the Cholesky decomposition
+                if (ierr == 0) then
+                   ! Compute the Cholesky decomposition
+                   do
+                      call get_cholesky_decomposition( &
+                           bandprec(isub, ichunk, idet)%data, nband, noba, &
+                           invcov(1, ipsd), nna(0, 0, kstart+1, idet), ierr)
 
-                do
-                   call get_cholesky_decomposition( &
-                        bandprec(ichunk, idet)%data, nband, noba, &
-                        invcov(1, ipsd), nna(0, 0, kstart+1, idet), ierr)
+                      if (ierr == 0) exit
 
-                   if (ierr == 0) exit
+                      ! Not positive definite
 
-                   ! Not positive definite
+                      if (try == trymax) exit
+                      if (nband == noba .or. nband == precond_width_max) exit
 
-                   if (try == trymax) exit
-                   if (nband == noba .or. nband == precond_width_max) exit
+                      ! Increase preconditioner width
 
-                   ! Increase preconditioner width
-
-                   try = try + 1
-                   nband = min(nband + precond_width_min, precond_width_max)
-                end do
+                      try = try + 1
+                      nband = min(nband + precond_width_min, precond_width_max)
+                   end do
+                end if
 
                 if (ierr /= 0) then
                    write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
@@ -1029,7 +1042,8 @@ CONTAINS
                 end if
 
                 kstart = kstart + noba
-             end do
+                isub = isub + 1
+             end do loop_subchunk
           end do
        end do
        !$OMP END PARALLEL
@@ -1041,7 +1055,7 @@ CONTAINS
           print *, 'Constructed ', sum(ntries), ' band preconditioners.'
           do try = 1, trymax
              if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
-                  try*precond_width_min
+                  min(try*precond_width_min, precond_width_max)
           end do
           if (nfail > 0) print *, '            ', nfail, ' failed (using CG)'
           if (nempty > 0) print *, '    Skipped ', nempty, ' empty intervals.'
@@ -1080,7 +1094,7 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
     integer :: j, k, idet, kstart, kstop, noba, ichunk, ierr, itask, &
-         num_threads, m, nband, ipsd
+         num_threads, m, nband, ipsd, isub
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
@@ -1105,7 +1119,7 @@ CONTAINS
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
        !$OMP         baselines_short_time, invcov, fcov, checknan) &
        !$OMP     PRIVATE(idet, ichunk, kstart, kstop, noba, j, k, ierr, m, &
-       !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd)
+       !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub)
 
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
@@ -1121,17 +1135,18 @@ CONTAINS
 
              kstart = sum(noba_short_pp(1:ichunk-1))
              kstop = kstart + noba_short_pp(ichunk)
+             isub = 1
              loop_subchunk : do
                 call trim_interval(kstart, kstop, noba, idet, nna)
                 if (noba == 0) exit loop_subchunk
                 ipsd = psd_index(idet, baselines_short_time(kstart+1))
 
-                if (allocated(bandprec(ichunk, idet)%data)) then
+                if (allocated(bandprec(isub, ichunk, idet)%data)) then
                    ! Use the precomputed Cholesky decomposition
-                   nband = size(bandprec(ichunk, idet)%data, 1)
+                   nband = size(bandprec(isub, ichunk, idet)%data, 1)
                    call apply_cholesky_decomposition( &
                         noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
-                        nband, bandprec(ichunk, idet)%data)
+                        nband, bandprec(isub, ichunk, idet)%data)
                 else
                    ! Use CG iteration to apply the preconditioner
                    call apply_CG_preconditioner( &
@@ -1140,6 +1155,7 @@ CONTAINS
                         invcov(1, ipsd), fx, xx)
                 end if
                 kstart = kstart + noba
+                isub = isub + 1
              end do loop_subchunk
           end do
        end do
