@@ -1030,11 +1030,11 @@ CONTAINS
                 end if
 
                 if (ierr /= 0) then
-                   write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
-                        'Cholesky decomposition failed for ' // &
-                        trim(detectors(idet)%name) // ', noba = ', noba, ', t = ', &
-                        baselines_short_time(kstart+1), ' - ', &
-                        baselines_short_time(kstart+noba)
+                   !write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
+                   !     'Cholesky decomposition failed for ' // &
+                   !     trim(detectors(idet)%name) // ', noba = ', noba, ', t = ', &
+                   !     baselines_short_time(kstart+1), ' - ', &
+                   !     baselines_short_time(kstart+noba)
                    nfail = nfail + 1
                 else
                    ntries(try) = ntries(try) + 1
