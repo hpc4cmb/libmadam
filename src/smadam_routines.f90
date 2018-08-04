@@ -330,7 +330,7 @@ CONTAINS
     if (kfirst) call collect_map(map, nosubpix_map)
 
     if (do_binmap) call collect_map(binmap, nosubpix_map)
-    if (kfirst)    call collect_map(wamap, nosubpix_cross)
+    if (kfirst) call collect_map(wamap, nosubpix_cross)
 
     cputime_send_maps = cputime_send_maps + get_time(10)
 
@@ -687,7 +687,7 @@ CONTAINS
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit, rz2
     real(dp) :: alpha, beta, pw, apn, detweight, beta2
     integer :: i, k, m, istep, idet, order, i0, m0
-    integer(i8b) :: ip
+    integer(i8b) :: ip, ngood
     integer :: ival, noba, kstart, kstop, ipsd, ichunk
     real(dp), pointer :: basis_function(:, :)
 
@@ -727,6 +727,7 @@ CONTAINS
           end do
        end do
     end do
+    ngood = count(rmask)
 
     memory_cg = max(noba_short*nodetectors*32., memory_cg)
 
@@ -753,12 +754,6 @@ CONTAINS
     p = z
     rz = sum(r * z, mask=rmask)
     rr = sum(r * r, mask=rmask)
-    ! DEBUG begin
-    !do idet = 1, nodetectors
-    !   resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
-    !end do
-    !write(10000+id, '(100es15.5)') resid
-    ! DEBUG end
 
     if (checknan) then
        if (isnan(rz)) print *,id,' : ERROR: rz is nan'
@@ -818,6 +813,8 @@ CONTAINS
 
     call sum_mpi(rz)
     call sum_mpi(rr)
+    call sum_mpi(ybalim)
+    call sum_mpi(ngood)
 
     rzinit = rz
     rrinit = rr
@@ -835,6 +832,7 @@ CONTAINS
        write(*,*) 'CG iteration begins'
        write(*,'(x,a,es25.15)') 'rrinit =', rrinit
        write(*,'(x,a,es25.15)') '  <rr> =', ybalim
+       write(*,'(x,a,i25)') ' ngood =', ngood
        write(*,'(a4,4a16,a12)') &
             'iter', 'rr/rrinit', 'rz2/rz', 'alpha', 'beta', 'time'
     end if
@@ -959,13 +957,6 @@ CONTAINS
              end do
           end do
        end if
-
-       ! DEBUG begin
-       !do idet = 1, nodetectors
-       !   resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
-       !end do
-       !write(10000+id, '(100es15.5)') resid
-       ! DEBUG end
 
        rzo = rz
        rz = sum(r * z, mask=rmask)

@@ -328,11 +328,11 @@ contains
           call time_stamp
 
           if (use_inmask) then
-             if (subchunkcounter == subchunk_start) then
-                call tic
-                call read_inmask(inmask)
-                if (id == 0) call toc('read_inmask')
-             end if
+             ! Must read the mask for every subchunk
+             ! because the ksubmap table may change
+             call tic
+             call read_inmask(inmask)
+             if (id == 0) call toc('read_inmask')
              call tic
              call scatter_mask(inmask, nosubpix_cross)
              if (id == 0) call toc('scatter_mask')
