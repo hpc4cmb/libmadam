@@ -754,10 +754,10 @@ CONTAINS
     rz = sum(r * z, mask=rmask)
     rr = sum(r * r, mask=rmask)
     ! DEBUG begin
-    do idet = 1, nodetectors
-       resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
-    end do
-    write(10000+id, '(100es15.5)') resid
+    !do idet = 1, nodetectors
+    !   resid(idet) = sum(r(:, :, idet) ** 2, mask=rmask(:, :, idet))
+    !end do
+    !write(10000+id, '(100es15.5)') resid
     ! DEBUG end
 
     if (checknan) then
