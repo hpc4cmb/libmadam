@@ -685,7 +685,7 @@ CONTAINS
          ro(:, :, :)
     logical, allocatable :: rmask(:, :, :)
     real(dp) :: rz, rzinit, rzo, pap, rr, rrinit, rz2
-    real(dp) :: alpha, beta, pw, apn, detweight, beta2
+    real(dp) :: alpha, beta, pw, apn, detweight
     integer :: i, k, m, istep, idet, order, i0, m0
     integer(i8b) :: ip, ngood
     integer :: ival, noba, kstart, kstop, ipsd, ichunk

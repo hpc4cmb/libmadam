@@ -1231,7 +1231,7 @@ CONTAINS
 
     real(dp), allocatable :: resid(:), prop(:), Aprop(:), zresid(:), precond(:)
     real(dp) :: alpha, beta, rr, rr0, rr_old, rz, rz_old, Anorm
-    integer :: iter, ierr, i
+    integer :: iter, ierr
     ! iteration limits for applying the preconditioner.  We do not need
     ! perfect convergence because the top level CG iteration uses the
     ! Polak-Ribiere formula to allow for a changing preconditioner
