@@ -46,8 +46,9 @@ contains
   subroutine write_covmat(outroot)
     character(len=*), intent(in) :: outroot
 
-    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, ipix, ibase, &
-         jpix, jbase, i, j, kstart, noba, lag
+    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, ibase, &
+         jbase, i, j, kstart, kstop, noba, lag
+    integer(i8b) :: ipix, jpix
     real(dp) :: detweight, mm, ptf1
     character(len=SLEN) :: outfile
     logical :: there
@@ -77,10 +78,10 @@ contains
 
        INQUIRE(file=outfile, exist=there)
        IF (there) THEN
-          IF (id == 0) WRITE (*,'(x,a," EXISTS! skipping ...")') TRIM(outfile)
+          IF (id == 0) WRITE (*,'(1x,a," EXISTS! skipping ...")') TRIM(outfile)
           cycle loop_detector
        ELSE
-          IF (id == 0) WRITE (*,'(x,"Computing ",a)') trim(outfile)
+          IF (id == 0) WRITE (*,'(1x,"Computing ",a)') trim(outfile)
        END IF
 
        call tic
@@ -92,67 +93,69 @@ contains
        call tic(555)
 
        loop_chunk : do ichunk = 1, ninterval ! global indices
-          noba = noba_short_pp(ichunk) ! baselines on this pointing period
           kstart = sum(noba_short_pp(1:ichunk-1)) ! first baseline, local index
-          ipsd = psd_index(idet, baselines_short_time(kstart+1))
-          ipsd_det = psd_index_det(idet, baselines_short_time(kstart+1))
-          if (ipsd_det < 0) cycle loop_chunk
-          ! ALWAYS use the optimal weights, even if the map has some
-          ! other weighting scheme
-          detweight = 1 / detectors(idet)%sigmas(ipsd_det)**2
-          if (detweight == 0) cycle loop_chunk
+          kstop = kstart + noba_short_pp(ichunk)
+          loop_subchunk : do
+             call trim_interval(kstart, kstop, noba, idet, nna)
+             if (noba == 0) exit
+             ipsd = psd_index(idet, baselines_short_time(kstart+1))
+             ipsd_det = psd_index_det(idet, baselines_short_time(kstart+1))
+             if (ipsd_det < 0) cycle loop_chunk
+             ! ALWAYS use the optimal weights, even if the map has some
+             ! other weighting scheme
+             detweight = 1 / detectors(idet)%sigmas(ipsd_det)**2
+             if (detweight == 0) cycle loop_chunk
 
-          call get_ptf(idet, kstart, noba, detweight)
+             call get_ptf(idet, kstart, noba, detweight)
 
-          call get_hitmap(idet, kstart, noba)
+             call get_hitmap(idet, kstart, noba)
 
-          call get_middlematrix(fcov, ipsd, detweight, noba)
+             call get_middlematrix(fcov, ipsd, detweight, noba)
 
-          ! double loop over all non-zeros in P^T F
+             ! double loop over all non-zeros in P^T F
 
-          call reset_time(10)
+             call reset_time(10)
 
-          loop_pix : do ipix = 0, nolocpix-1
-             if (local_hitmap(ipix) == 0) cycle loop_pix
-             loop_pix2 : do jpix = ipix, nolocpix-1
-                if (local_hitmap(jpix) == 0) cycle loop_pix2
-                loop_baseline : do i = 1, local_hitmap(ipix)
-                   ibase = local_basehitmap(i, ipix)
-                   loop_baseline2 : do j = 1, local_hitmap(jpix)
-                      jbase = local_basehitmap(j, jpix)
+             loop_pix : do ipix = 0, nolocpix-1
+                if (local_hitmap(ipix) == 0) cycle loop_pix
+                loop_pix2 : do jpix = ipix, nolocpix-1
+                   if (local_hitmap(jpix) == 0) cycle loop_pix2
+                   loop_baseline : do i = 1, local_hitmap(ipix)
+                      ibase = local_basehitmap(i, ipix)
+                      loop_baseline2 : do j = 1, local_hitmap(jpix)
+                         jbase = local_basehitmap(j, jpix)
 
-                      lag = abs(jbase - ibase) + 1
-                      mm = -middlematrix(lag, 1)
+                         lag = abs(jbase - ibase) + 1
+                         mm = -middlematrix(lag, 1)
 
-                      if (nmap == 1) then
-                         local_covmat(1, 1, jpix, ipix) = &
-                              local_covmat(1, 1, jpix, ipix) &
-                              + mm * local_ptf(1, ibase, ipix) &
-                              * local_ptf(1, jbase, jpix)
-                      else
-                         ptf1 = mm * local_ptf(1, ibase, ipix)
-                         local_covmat(1:3, 1, jpix, ipix) = &
-                              local_covmat(1:3, 1, jpix, ipix) &
-                              + local_ptf(1:3, jbase, jpix) * ptf1
+                         if (nmap == 1) then
+                            local_covmat(1, 1, jpix, ipix) = &
+                                 local_covmat(1, 1, jpix, ipix) &
+                                 + mm * local_ptf(1, ibase, ipix) &
+                                 * local_ptf(1, jbase, jpix)
+                         else
+                            ptf1 = mm * local_ptf(1, ibase, ipix)
+                            local_covmat(1:3, 1, jpix, ipix) = &
+                                 local_covmat(1:3, 1, jpix, ipix) &
+                                 + local_ptf(1:3, jbase, jpix) * ptf1
 
-                         ptf1 = mm * local_ptf(2, ibase, ipix)
-                         local_covmat(1:3, 2, jpix, ipix) = &
-                              local_covmat(1:3, 2, jpix, ipix) &
-                              + local_ptf(1:3, jbase, jpix) * ptf1
+                            ptf1 = mm * local_ptf(2, ibase, ipix)
+                            local_covmat(1:3, 2, jpix, ipix) = &
+                                 local_covmat(1:3, 2, jpix, ipix) &
+                                 + local_ptf(1:3, jbase, jpix) * ptf1
 
-                         ptf1 = mm * local_ptf(3, ibase, ipix)
-                         local_covmat(1:3, 3, jpix, ipix) = &
-                              local_covmat(1:3, 3, jpix, ipix) &
-                              + local_ptf(1:3, jbase, jpix) * ptf1
-                      end if
-
-                   end do loop_baseline2
-                end do loop_baseline
-             end do loop_pix2
-          end do loop_pix
-
+                            ptf1 = mm * local_ptf(3, ibase, ipix)
+                            local_covmat(1:3, 3, jpix, ipix) = &
+                                 local_covmat(1:3, 3, jpix, ipix) &
+                                 + local_ptf(1:3, jbase, jpix) * ptf1
+                         end if
+                      end do loop_baseline2
+                   end do loop_baseline
+                end do loop_pix2
+             end do loop_pix
+             kstart = kstart + noba
+          end do loop_subchunk
           cputime_accumulate = cputime_accumulate + get_time(10)
-
        end do loop_chunk
 
        ! Free workspace
@@ -203,7 +206,8 @@ contains
     integer(i4b), intent(in) :: idet
     real(dp), intent(in) :: detweight
 
-    integer(i4b) :: k, i, ip
+    integer(i4b) :: i
+    integer(i8b) :: ip, k
 
     ! Add white noise to the diagonal
 
@@ -261,9 +265,10 @@ contains
     ! create a global pixel-pixel matrix, accumulate the local
     ! contributions and write the matrix out
     character(len=*), intent(in) :: covmatfile
-    integer(i4b) :: ierr, mypix1, mypix2, row, col, isend, map1, pix1, &
-         pix2, ip1, ip2, evenodd, itarget, isource, nelem
-    integer(i8b) :: firstpix, lastpix, npix, npix_proc
+    integer(i4b) :: ierr, mypix1, mypix2, isend, map1, evenodd, itarget, &
+         isource, nelem
+    integer(i8b) :: firstpix, lastpix, npix, npix_proc, ip1, ip2, pix1, pix2, &
+         row, col
     real(dp), allocatable, target :: covmat1(:, :), covmat2(:, :)
     real(dp), pointer :: covmat_send(:, :), covmat_recv(:, :)
     INTEGER(i4b) :: filemode, fileinfo, outfilehandle, count, &
@@ -274,7 +279,7 @@ contains
 
     npix = 12 * nside_map**2
     npix_proc = ceiling(dble(npix) / ntasks)
-    nelem = npix * nmap * npix_proc * nmap
+    nelem = int(npix * nmap * npix_proc * nmap, i4b)
 
     allocate(covmat1(npix*nmap, npix_proc*nmap), &
          covmat2(npix*nmap, npix_proc*nmap), stat=ierr)
@@ -386,7 +391,7 @@ contains
          'native', fileinfo, ierr)
     IF (ierr /= 0) CALL abort_mpi('Unable to establish view to covmat file')
 
-    count = npix * nmap * (lastpix - firstpix + 1) * nmap
+    count = int(npix * nmap * (lastpix - firstpix + 1) * nmap, i4b)
     if (count > 0) then
        CALL mpi_file_write(outfilehandle, covmat_recv, count, MPI_REAL8, &
             status, ierr)
@@ -410,7 +415,8 @@ contains
   subroutine get_hitmap(idet, kstart, noba)
     ! construct a hitmap for the current pointing period
     integer(i4b), intent(in) :: idet, kstart, noba
-    integer(i4b) :: ip, ierr, k, i, hitmax, nhit
+    integer(i4b) :: ierr, k, i, hitmax, nhit
+    integer(i8b) :: ip
     integer(i4b), save :: hitmax_max = 0
 
     call reset_time(10)
@@ -478,7 +484,8 @@ contains
     ! Accumulate P^T F
     integer(i4b), intent(in) :: idet, kstart, noba
     real(dp) :: detweight
-    integer(i4b) :: ip, ierr, k, i
+    integer(i4b) :: ierr, k, i
+    integer(i8b) :: ip
     integer(i4b), save :: nobamax = 0
 
     call reset_time(10)

@@ -224,7 +224,7 @@ CONTAINS
 
     if (.not. kfilter) return
 
-    nofilter = noba_short_pp_max
+    nofilter = 2 * noba_short_pp_max
 
     nof_min = nofilter
     ! Ensure that the filter is long enough for the preconditioner
