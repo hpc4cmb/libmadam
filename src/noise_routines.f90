@@ -21,8 +21,8 @@ MODULE noise_routines
        cputime_filter = 0, cputime_precond = 0, &
        cputime_prec_construct = 0
 
-  real(dp), allocatable :: xx(:)
-  complex(dp), allocatable :: fx(:)
+  !real(dp), allocatable :: xx(:)
+  !complex(dp), allocatable :: fx(:)
   complex(dp), allocatable, target :: fcov(:, :), fprecond(:, :)
   real(dp), allocatable :: invcov(:, :)
 
@@ -237,10 +237,10 @@ CONTAINS
     end do
     if (ID == 0) write(*,*) 'FFT length =', nof
 
-    allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
-    if (ierr /= 0) call abort_mpi('No room for fx and xx')
+    !allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
+    !if (ierr /= 0) call abort_mpi('No room for fx and xx')
 
-    memory_filter = (nof/2+1)*16. + nof*8
+    memory_filter = ((nof/2+1)*16. + nof*8) * nthreads
 
     call init_fourier(nof)
 
@@ -290,8 +290,8 @@ CONTAINS
     if (allocated(psdind)) deallocate(psdind)
     if (allocated(psdstart)) deallocate(psdstart)
     if (allocated(psdstop)) deallocate(psdstop)
-    if (allocated(fx)) deallocate(fx)
-    if (allocated(xx)) deallocate(xx)
+    !if (allocated(fx)) deallocate(fx)
+    !if (allocated(xx)) deallocate(xx)
     if (allocated(prec_diag)) deallocate(prec_diag)
     call free_bandprec
 
@@ -814,6 +814,7 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
+    type(C_PTR) :: pxx, pfx
 
     call reset_time(14)
 
@@ -824,13 +825,17 @@ CONTAINS
     !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
     !$OMP         baselines_short_time, fc, x, y, nthreads, nna) &
     !$OMP     PRIVATE(idet, ichunk, m, xx, fx, ierr, id_thread, itask, &
-    !$OMP         num_threads)
+    !$OMP         num_threads, pxx, pfx)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
 
-    allocate(fx(nof/2+1), xx(nof), stat=ierr)
-    if (ierr /= 0) call abort_mpi('No room for Fourier transform')
+    !allocate(fx(nof/2+1), xx(nof), stat=ierr)
+    !if (ierr /= 0) call abort_mpi('No room for Fourier transform')
+    pxx = fftw_alloc_real(int(nof, C_SIZE_T))
+    pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    call c_f_pointer(pxx, xx, [nof])
+    call c_f_pointer(pfx, fx, [nof/2 + 1])
 
     itask = -1
     do idet = 1, nodetectors
@@ -841,7 +846,9 @@ CONTAINS
        end do
     end do
 
-    deallocate(fx, xx)
+    !deallocate(fx, xx)
+    call fftw_free(pxx)
+    call fftw_free(pfx)
 
     !$OMP END PARALLEL
 
@@ -864,6 +871,10 @@ CONTAINS
     integer :: ntries(trymax)
     real(dp) :: memsum, mem_min, mem_max, p, p_tot
     real(dp), parameter :: plim = 1 - 1e-5
+
+    real(C_DOUBLE), pointer :: xx(:) => NULL()
+    complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
+    type(C_PTR) :: pxx, pfx
 
     if (precond_width_max < 1) return
 
@@ -935,16 +946,30 @@ CONTAINS
 
     call allocate_bandprec
 
+    !$OMP PARALLEL NUM_THREADS(nthreads) &
+    !$OMP     DEFAULT(NONE) &
+    !$OMP     SHARED(nof, npsdtot, fcov, invcov) &
+    !$OMP     PRIVATE(id_thread, num_threads, ipsd, pxx, pfx, xx, fx)
+
+    id_thread = omp_get_thread_num()
+    num_threads = omp_get_num_threads()
+
+    pxx = fftw_alloc_real(int(nof, C_SIZE_T))
+    pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    call c_f_pointer(pxx, xx, [nof])
+    call c_f_pointer(pfx, fx, [nof/2 + 1])
+
     do ipsd = 1, npsdtot
-       call dfftinv(xx, fcov(:, ipsd)) ! C_a inverse into real domain
-       ! DEBUG begin
-       !do i = 1, nof/2
-       !   write (1000+100*id+ipsd, *) i, &
-       !        real(fcov(i, ipsd)), imag(fcov(i, ipsd)), xx(i)
-       !end do
-       ! DEBUG end
+       if (modulo(ipsd-1, num_threads) /= id_thread) cycle
+       fx = fcov(:, ipsd)
+       call dfftinv(xx, fx) ! C_a inverse into real domain
        invcov(:, ipsd) = xx
     end do
+
+    call fftw_free(pxx)
+    call fftw_free(pfx)
+
+    !$OMP END PARALLEL
 
     if (.not. use_cgprecond) then
        nempty = 0
@@ -1095,9 +1120,11 @@ CONTAINS
 
     integer :: j, k, idet, kstart, kstop, noba, ichunk, ierr, itask, &
          num_threads, m, nband, ipsd, isub
+    real(dp) :: t1, t2, tf
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
+    type(C_PTR) :: pxx, pfx
 
     z = r
 
@@ -1119,13 +1146,20 @@ CONTAINS
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
        !$OMP         baselines_short_time, invcov, fcov, checknan) &
        !$OMP     PRIVATE(idet, ichunk, kstart, kstop, noba, j, k, ierr, m, &
-       !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub)
+       !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub, &
+       !$OMP         t1, t2, tf, pxx, pfx)
 
+       !t1 = get_time(55)
+       !tf = 0
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
 
-       allocate(fx(nof/2+1), xx(nof), stat=ierr)
-       if (ierr /= 0) call abort_mpi('No room for Fourier transform')
+       !allocate(fx(nof/2+1), xx(nof), stat=ierr)
+       !if (ierr /= 0) call abort_mpi('No room for Fourier transform')
+       pxx = fftw_alloc_real(int(nof, C_SIZE_T))
+       pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+       call c_f_pointer(pxx, xx, [nof])
+       call c_f_pointer(pfx, fx, [nof/2 + 1])
 
        itask = -1
        do idet = 1, nodetectors
@@ -1152,7 +1186,12 @@ CONTAINS
                    call apply_CG_preconditioner( &
                         noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
                         z(0, kstart+1, idet), r(0, kstart+1, idet), &
-                        invcov(1, ipsd), fx, xx)
+                        invcov(1, ipsd), fx, xx, tf)
+                   ! DEBUG begin
+                   !print *, id, ' : ', id_thread, ' : preconditioned det = ',&
+                   !     idet, ', chunk = ', ichunk, ', isub = ', isub, &
+                   !     ', task = ', itask, ', in ', t2 - t1, ' s'
+                   ! DEBUG end
                 end if
                 kstart = kstart + noba
                 isub = isub + 1
@@ -1160,8 +1199,13 @@ CONTAINS
           end do
        end do
 
-       deallocate(fx, xx)
+       !deallocate(fx, xx)
+       call fftw_free(pxx)
+       call fftw_free(pfx)
 
+       !t2 = get_time(55)
+       !print *, id, ' : ', id_thread, ' : applied preconditioner in = ', &
+       !     t2 - t1, ' s. Filter time = ', tf
        !$OMP END PARALLEL
     end if
 
@@ -1217,7 +1261,8 @@ CONTAINS
 
 
 
-  subroutine apply_CG_preconditioner(noba, nof, fcov, nna, x, b, invcov, fx, xx)
+  subroutine apply_CG_preconditioner( &
+       noba, nof, fcov, nna, x, b, invcov, fx, xx, tf)
     !
     ! Apply the preconditioner using CG iteration
     !
@@ -1226,6 +1271,7 @@ CONTAINS
     real(dp), intent(in) :: nna(noba), invcov(noba)
     real(dp), intent(out) :: x(noba)
     real(dp), intent(in) :: b(noba)
+    real(dp), intent(inout) :: tf
     real(C_DOUBLE), intent(inout) :: xx(nof)
     complex(C_DOUBLE_COMPLEX), intent(inout) :: fx(nof/2 + 1)
 
@@ -1260,7 +1306,7 @@ CONTAINS
     prop = zresid
     iter = 1
     do
-       call apply_A(prop, Aprop)
+       call apply_A(prop, Aprop, tf)
        Anorm = dot_product(prop, Aprop)
        alpha = rz / Anorm
        x = x + alpha * prop
@@ -1291,28 +1337,34 @@ CONTAINS
       z = precond * x
     end subroutine apply_precond
 
-    subroutine apply_A(x, y)
+    subroutine apply_A(x, y, tf)
       !
       ! Apply the square matrix `A` to `x` and place the result in `y`
       !
       real(dp), intent(in) :: x(noba)
       real(dp), intent(out) :: y(noba)
-      call convolve(x, fcov, y)
+      real(dp), intent(inout) :: tf
+      call convolve(x, fcov, y, tf)
       y = y + nna*x
     end subroutine apply_A
 
-    subroutine convolve(x, fc, y)
+    subroutine convolve(x, fc, y, tf)
       !
       ! Convolve `x` with filter `fc` and place result in `y`.
       !
       real(dp), intent(in) :: x(noba)
       complex(dp) :: fc(nof/2 + 1)
       real(dp), intent(out) :: y(noba)
+      real(dp), intent(inout) :: tf
+      real(dp) :: t1, t2
       xx(:noba) = x - sum(x)/noba
       xx(noba+1:) = 0
+      !t1 = get_time(56)
       call dfft(fx, xx)
       fx = fx*fc
       call dfftinv(xx, fx)
+      !t2 = get_time(56)
+      !tf = tf + t2 - t1
       y = xx(:noba)
       y = y - sum(y) / noba
     end subroutine convolve

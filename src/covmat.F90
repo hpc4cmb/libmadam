@@ -16,6 +16,8 @@
 
 MODULE covmat
 
+  use, intrinsic :: iso_c_binding
+
   USE commonparam
   USE planck_config, ONLY : i4b, i8b, sp, dp
   USE fourier
@@ -535,6 +537,15 @@ contains
 
     integer(i4b), save :: last_ipsd = -1, last_noba = -1, noba_max = 0
 
+    real(C_DOUBLE), pointer :: xx(:) => NULL()
+    complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
+    type(C_PTR) :: pxx, pfx
+
+    pxx = fftw_alloc_real(int(nof, C_SIZE_T))
+    pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    call c_f_pointer(pxx, xx, [nof])
+    call c_f_pointer(pfx, fx, [nof/2 + 1])
+
     if (ipsd == last_ipsd .and. noba == last_noba) return
 
     call reset_time(10)
@@ -562,11 +573,15 @@ contains
 
     ! Adding the white noise term in Fourier domain means adding
     ! a constant offset
-    call dfftinv(xx, 1/(fcov(:, ipsd) + nshort * detweight))
-    middlematrix(:,1) = xx(1:noba)
+    fx = 1 / (fcov(:, ipsd) + nshort * detweight)
+    call dfftinv(xx, fx)
+    middlematrix(:, 1) = xx(1:noba)
 
     last_ipsd = ipsd
     last_noba = noba
+
+    call fftw_free(pxx)
+    call fftw_free(pfx)
 
     cputime_middlematrix = cputime_middlematrix + get_time(10)
 
