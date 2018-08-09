@@ -1164,34 +1164,28 @@ CONTAINS
        itask = -1
        do idet = 1, nodetectors
           do ichunk = 1, ninterval
-             itask = itask + 1
-             if (modulo(itask, num_threads) /= id_thread) cycle
-
              kstart = sum(noba_short_pp(1:ichunk-1))
              kstop = kstart + noba_short_pp(ichunk)
              isub = 1
              loop_subchunk : do
                 call trim_interval(kstart, kstop, noba, idet, nna)
                 if (noba == 0) exit loop_subchunk
-                ipsd = psd_index(idet, baselines_short_time(kstart+1))
-
-                if (allocated(bandprec(isub, ichunk, idet)%data)) then
-                   ! Use the precomputed Cholesky decomposition
-                   nband = size(bandprec(isub, ichunk, idet)%data, 1)
-                   call apply_cholesky_decomposition( &
-                        noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
-                        nband, bandprec(isub, ichunk, idet)%data)
-                else
-                   ! Use CG iteration to apply the preconditioner
-                   call apply_CG_preconditioner( &
-                        noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
-                        z(0, kstart+1, idet), r(0, kstart+1, idet), &
-                        invcov(1, ipsd), fx, xx, tf)
-                   ! DEBUG begin
-                   !print *, id, ' : ', id_thread, ' : preconditioned det = ',&
-                   !     idet, ', chunk = ', ichunk, ', isub = ', isub, &
-                   !     ', task = ', itask, ', in ', t2 - t1, ' s'
-                   ! DEBUG end
+                itask = itask + 1
+                if (modulo(itask, num_threads) == id_thread) then
+                   ipsd = psd_index(idet, baselines_short_time(kstart+1))
+                   if (allocated(bandprec(isub, ichunk, idet)%data)) then
+                      ! Use the precomputed Cholesky decomposition
+                      nband = size(bandprec(isub, ichunk, idet)%data, 1)
+                      call apply_cholesky_decomposition( &
+                           noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
+                           nband, bandprec(isub, ichunk, idet)%data)
+                   else
+                      ! Use CG iteration to apply the preconditioner
+                      call apply_CG_preconditioner( &
+                           noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
+                           z(0, kstart+1, idet), r(0, kstart+1, idet), &
+                           invcov(1, ipsd), fx, xx, tf)
+                   end if
                 end if
                 kstart = kstart + noba
                 isub = isub + 1
