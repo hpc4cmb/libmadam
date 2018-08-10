@@ -24,7 +24,8 @@ MODULE maps_and_baselines
   real(dp), allocatable, public :: map(:, :), binmap(:, :)
   real(sp), allocatable, public :: crit(:)
 
-  real(dp), save, public :: memory_maps = 0, memory_baselines = 0
+  real(dp), save, public :: memory_maps = 0, memory_baselines = 0, &
+        memory_basis_functions = 0
 
   character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
   character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
@@ -199,8 +200,10 @@ CONTAINS
           if (.not. basis_functions(k)%copy) then
              deallocate(basis_functions(k)%arr)
           end if
+          basis_functions(k)%arr => NULL()
        end do
        deallocate(basis_functions)
+       memory_basis_functions = 0
     end if
 
   END SUBROUTINE free_baselines

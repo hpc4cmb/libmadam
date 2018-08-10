@@ -6,7 +6,8 @@ MODULE parameter_control
   use mpi_wrappers
   use noise_routines, only : interpolate_psd, measure_noise_weights
   use pointing, only : subchunk
-  use maps_and_baselines, only : memory_baselines, memory_maps
+  use maps_and_baselines, only : memory_baselines, memory_maps, &
+       memory_basis_functions
 
   implicit none
   private
@@ -14,9 +15,8 @@ MODULE parameter_control
   public init_parameters, init_parallelization, start_timeloop, &
        write_parameters, baseline_times
 
-  real(dp), save, public :: memory_basis_functions = 0
-  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
-  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(1x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(1x,a,t32,3(f9.1," MB"))'
 
 CONTAINS
 
@@ -751,7 +751,7 @@ CONTAINS
     integer(i8b) :: nsamp, order, my_offset
     integer(i8b) :: sublen, suboffset, sub_start, sub_end, isub
     real(dp) :: dn, dn0, r, dr, rstart, ninv
-    real(dp), pointer :: basis_function(:,:)
+    real(dp), pointer :: basis_function(:, :)
     real(sp) :: memsum, mem_min, mem_max
 
     call wait_mpi
@@ -803,7 +803,7 @@ CONTAINS
                   intervals(i), noba_short
              write (*,*) id, ' : last baseline =', baselines_short(m)
              print *,id, ' : noba_short_pp(i) = ', noba_short_pp(i)
-             do k=1,noba_short_pp(i)
+             do k = 1, noba_short_pp(i)
                 print *, k, baselines_short(m-k+1)
              end do
              call exit_with_status(1)

@@ -712,22 +712,7 @@ CONTAINS
          resid(nodetectors), stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
-    ! Mask out completely flagged intervals and
-    ! flagged baselines from both ends of the intervals
-    rmask = .false.
-    do idet = 1, nodetectors
-       do ichunk = 1, ninterval
-          kstart = sum(noba_short_pp(1:ichunk-1))
-          kstop = kstart + noba_short_pp(ichunk)
-          do
-             call trim_interval(kstart, kstop, noba, idet, nna)
-             if (noba == 0) exit
-             rmask(:, kstart+1:kstart+noba, idet) = .true.
-             kstart = kstart + noba
-          end do
-       end do
-    end do
-    ngood = count(rmask)
+    call build_rmask()
 
     memory_cg = max(noba_short*nodetectors*32., memory_cg)
 
@@ -741,75 +726,13 @@ CONTAINS
 
     r = yba
 
-    if (basis_order == 0) then
-       call preconditioning_band(z, r, nna)
-    else
-       do idet = 1, nodetectors
-          do i = 1, noba_short
-             z(:, i, idet) = matmul(nna_inv(:, :, i, idet), r(:, i, idet))
-          end do
-       end do
-    end if
+    call apply_preconditioner(z, r)
 
     p = z
     rz = sum(r * z, mask=rmask)
     rr = sum(r * r, mask=rmask)
 
-    if (checknan) then
-       if (isnan(rz)) print *,id,' : ERROR: rz is nan'
-
-       ybaloop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(yba(order, i, idet))) then
-                   print *,id,' : yba has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   exit ybaloop
-                end if
-             end do
-          end do
-       end do ybaloop ! yba
-
-       rloop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(r(order, i, idet))) then
-                   print *,id,' : r has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   exit rloop
-                end if
-             end do
-          end do
-       end do rloop ! r
-
-       zloop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(z(order, i, idet))) then
-                   print *,id,' : z has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   print *,id,' : nna_inv = ', &
-                        nna_inv(:, :, i, idet)
-                   print *,id,' : nna = ', nna(:, :, i, idet)
-                   print *,id,' : r = ', r(:, i, idet)
-                   exit zloop
-                end if
-             end do
-          end do
-       end do zloop ! z
-
-       ploop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(p(order, i, idet))) then
-                   print *,id,' : p has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   exit ploop
-                end if
-             end do
-          end do
-       end do ploop ! p
-    end if ! checknan
+    if (checknan) call check_nan_before_iterate
 
     call sum_mpi(rz)
     call sum_mpi(rr)
@@ -842,8 +765,9 @@ CONTAINS
        return
     end if
 
-    npix_thread = ceiling(dble(nsize_locmap) / nthreads)
+    ! Prepare for threading
 
+    npix_thread = ceiling(dble(nsize_locmap) / nthreads)
     allocate( &
          ap_all_threads(0:basis_order, noba_short, nodetectors, 0:nthreads-1), &
          stat=ierr)
@@ -851,12 +775,16 @@ CONTAINS
 
     call reset_time(99)
 
+    ! PCG iterations
+
     istep = 0
     do
        if (istep >= iter_max) exit
        istep = istep + 1
 
        call reset_time(12)
+
+       ! 1) evaluate A.p
 
        ! From baseline to map
 
@@ -938,25 +866,27 @@ CONTAINS
 
        cputime_cga_2 = cputime_cga_2 + get_time(12)
 
+       ! 2) Evaluate p^T.A.p
+
        pap = sum(p*ap, mask=rmask)
        call sum_mpi(pap)
 
+       ! 3) alpha = r.z / (p^T.A.p)
+
        alpha = rz/pap
        ro = r ! Keep a copy for Polak-Ribiere beta
-       r = r - alpha*ap
+
+       ! 4) update `aa` and `r`
 
        aa(:, 1:noba_short, 1:nodetectors) = &
             aa(:, 1:noba_short, 1:nodetectors) + alpha*p
+       r = r - alpha*ap
 
-       if (basis_order == 0) then
-          call preconditioning_band(z, r, nna)
-       else
-          do idet = 1, nodetectors
-             do i = 1, noba_short
-                z(:, i, idet) = matmul(nna_inv(:, :, i, idet), r(:, i, idet))
-             end do
-          end do
-       end if
+       ! 5) Precondition
+
+       call apply_preconditioner(z, r)
+
+       ! 6) Check for convergence
 
        rzo = rz
        rz = sum(r * z, mask=rmask)
@@ -978,6 +908,8 @@ CONTAINS
        if (rr/rrinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
 
+       ! 7) Update search direction, `p`
+
        p = z + beta*p
 
     end do
@@ -998,6 +930,98 @@ CONTAINS
     if (info > 4) write(*,idf) ID,'Done'
 
   contains
+
+    subroutine apply_preconditioner(z, r)
+      real(dp), intent(in) :: r(0:basis_order, noba_short, nodetectors)
+      real(dp), intent(out) :: z(0:basis_order, noba_short, nodetectors)
+      integer :: i, idet
+      if (basis_order == 0) then
+         call preconditioning_band(z, r, nna)
+      else
+         do idet = 1, nodetectors
+            do i = 1, noba_short
+               z(:, i, idet) = matmul(nna_inv(:, :, i, idet), r(:, i, idet))
+            end do
+         end do
+      end if
+    end subroutine apply_preconditioner
+
+    subroutine build_rmask()
+      ! Mask out completely flagged intervals and
+      ! flagged baselines from both ends of the intervals
+      rmask = .false.
+      do idet = 1, nodetectors
+         do ichunk = 1, ninterval
+            kstart = sum(noba_short_pp(1:ichunk-1))
+            kstop = kstart + noba_short_pp(ichunk)
+            do
+               call trim_interval(kstart, kstop, noba, idet, nna)
+               if (noba == 0) exit
+               rmask(:, kstart+1:kstart+noba, idet) = .true.
+               kstart = kstart + noba
+            end do
+         end do
+      end do
+      ngood = count(rmask)
+    end subroutine build_rmask
+
+    subroutine check_nan_before_iterate()
+      ! Checking for NaNs helps localize problems but can consume time.
+      if (isnan(rz)) print *,id,' : ERROR: rz is nan'
+
+      ybaloop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(yba(order, i, idet))) then
+                  print *,id,' : yba has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  exit ybaloop
+               end if
+            end do
+         end do
+      end do ybaloop ! yba
+
+      rloop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(r(order, i, idet))) then
+                  print *,id,' : r has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  exit rloop
+               end if
+            end do
+         end do
+      end do rloop ! r
+
+      zloop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(z(order, i, idet))) then
+                  print *,id,' : z has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  print *,id,' : nna_inv = ', &
+                       nna_inv(:, :, i, idet)
+                  print *,id,' : nna = ', nna(:, :, i, idet)
+                  print *,id,' : r = ', r(:, i, idet)
+                  exit zloop
+               end if
+            end do
+         end do
+      end do zloop ! z
+
+      ploop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(p(order, i, idet))) then
+                  print *,id,' : p has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  exit ploop
+               end if
+            end do
+         end do
+      end do ploop ! p
+    end subroutine check_nan_before_iterate
+
 
     ! Specific implementations of the CG iteration loop
 
