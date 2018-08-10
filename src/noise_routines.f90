@@ -127,27 +127,34 @@ CONTAINS
     real(dp), intent(in) :: freq(:), psd(:), targetfreq(:)
     real(dp), intent(out) :: targetpsd(:)
 
-    real(dp), allocatable :: x(:), y(:)
+    real(dp), allocatable :: logfreq(:), logpsd(:)
     real(dp) :: flog, r
 
     integer :: n_in, n_out, i, ierr, j, startbin
 
-    n_in = size(freq)
-    n_out = size(targetfreq)
-
-    startbin = 1
-    if (freq(1) == 0) then
-       n_in = n_in -1
-       startbin = 2
+    if (size(freq) /= size(psd)) then
+       call abort_mpi('freq and psd do not have the same shape')
     end if
 
-    allocate(x(n_in), y(n_in), stat=ierr)
+    if (size(targetfreq) /= size(targetpsd)) then
+       call abort_mpi('target freq and psd do not have the same shape')
+    end if
+
+    n_in = size(freq)
+    n_out = size(targetfreq)
+    allocate(logfreq(n_in), logpsd(n_in), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room to interpolate the PSD')
 
-    x = log(freq(startbin:))
-    y = log(psd(startbin:))
+    if (all(freq == 0)) call abort_mpi('input freqs are all zero.')
+    startbin = 1
+    do while (freq(startbin) == 0)
+       startbin = startbin + 1
+    end do
 
-    j = 1
+    logfreq = log(freq)
+    logpsd = log(psd)
+
+    j = startbin
     do i = 1, n_out
        if (targetfreq(i) == 0) then
           targetpsd(i) = 0
@@ -155,16 +162,16 @@ CONTAINS
        end if
        flog = log(targetfreq(i))
        if (j < n_in - 1) then
-          do while (x(j+1) < flog)
+          do while (logfreq(j+1) < flog)
              j = j + 1
              if (j == n_in - 1) exit
           end do
        end if
-       r = (flog - x(j)) / (x(j+1) - x(j))
-       targetpsd(i) = exp(y(j) * (1._dp - r) + y(j + 1) * r)
+       r = (flog - logfreq(j)) / (logfreq(j+1) - logfreq(j))
+       targetpsd(i) = exp(logpsd(j) * (1._dp - r) + logpsd(j + 1) * r)
     end do
 
-    deallocate(x, y)
+    deallocate(logfreq, logpsd)
 
   end subroutine interpolate_psd
 
