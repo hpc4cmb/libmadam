@@ -905,6 +905,7 @@ CONTAINS
        if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
             istep, rr/rrinit, rz2/rz, alpha, beta, get_time_and_reset(99)
 
+       if (rr/rrinit > 1e3) call abort_mpi('CG is diverging')
        if (rr/rrinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
 
