@@ -124,6 +124,7 @@ CONTAINS
     !
     integer :: i, idet, k, ierr
     integer(i8b) :: ip
+    !logical, allocatable :: bbuffer(:)
 
     if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
@@ -140,9 +141,7 @@ CONTAINS
 
     if (allreduce) then
        ! Flag all hit submaps on every process
-       call mpi_allreduce(MPI_IN_PLACE, ksubmap, nosubmaps_tot, MPI_LOGICAL, &
-            MPI_LOR, comm, ierr)
-       if (ierr /= 0) call abort_mpi('Reducing ksubmaps failed.')
+       call sum_mpi(ksubmap)
     end if
 
     subtable1 = -1

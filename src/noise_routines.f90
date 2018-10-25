@@ -1080,7 +1080,7 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call sum_mpi(ntries, trymax)
+       call sum_mpi(ntries)
        call sum_mpi(nempty)
        call sum_mpi(nfail)
        if (id == 0) then

@@ -484,10 +484,7 @@ CONTAINS
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, locmap, nmap*nosubpix_max*nolocmaps, &
-            MPI_DOUBLE_PRECISION, MPI_SUM, comm, ierr)
-       if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to collect map with allreduce')
+       call sum_mpi(locmap)
        if (ndegrade == 1) then
           !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
           !$OMP     PRIVATE(i, j, k, m, id_thread) &
@@ -649,11 +646,7 @@ CONTAINS
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, loccc, &
-            nmap*nmap*nosubpix_max*nolocmaps, MPI_DOUBLE_PRECISION, MPI_SUM, &
-            comm, ierr)
-       if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to collect cc with allreduce')
+       call sum_mpi(loccc)
        if (ndegrade == 1) then
           !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
           !$OMP     PRIVATE(i, j, k, m, id_thread) &
@@ -820,10 +813,7 @@ CONTAINS
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, lochits, nosubpix_max*nolocmaps, &
-            MPI_INTEGER, MPI_SUM, comm, ierr)
-       if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to collect hits with allreduce')
+       call sum_mpi(lochits)
        m = 0
        k = 0
        if (ndegrade == 1) then
