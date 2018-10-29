@@ -379,12 +379,12 @@ CONTAINS
 
        id_thread = omp_get_thread_num()
        firstpix = id_thread * nsize_locmap / omp_get_num_threads()
-       lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+       lastpix = (id_thread + 1) * nsize_locmap / omp_get_num_threads() - 1
        lastpix = min(lastpix, dummy_pixel - 1)
 
        do ival = 1, ninterval
           noba = noba_short_pp(ival)
-          kstart = sum(noba_short_pp(1:ival-1))
+          kstart = sum(noba_short_pp(1:ival - 1))
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) then
              print *, id,' : WARNING: there is no PSD for det # ', idet, &
@@ -395,7 +395,7 @@ CONTAINS
           end if
           detweight = detectors(idet)%weights(ipsd)
           if (detweight == 0) cycle
-          do k = kstart+1, kstart+noba
+          do k = kstart + 1, kstart + noba
              do i = baselines_short_start(k), baselines_short_stop(k)
                 if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                 if (.not. surveyflags(i)) cycle

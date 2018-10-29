@@ -51,58 +51,58 @@ CONTAINS
     map = 0
     cc = 0
     outmask = 0
-    memory_maps = memory_maps + (nmap**2*8+nmap*8+4)*nopix_map
+    memory_maps = memory_maps + (nmap ** 2. * 8. + nmap * 8. + 4.) * nopix_map
 
     if (do_binmap .or. nsurvey > 0 .or. ndetset > 0) then
        allocate(binmap(nmap, 0:nopix_map-1), stat=allocstat)
        call check_stat(allocstat, 'binmap')
        binmap = 0
-       memory_maps = memory_maps + nmap*nopix_map*8
+       memory_maps = memory_maps + nmap * nopix_map * 8
     else
        allocate(binmap(nmap, 0:0))
     end if
 
     if (do_hits) then
        allocate(nohits(0:nopix_map-1, 1), stat=allocstat)
-       memory_maps = memory_maps + nopix_map*4
+       memory_maps = memory_maps + nopix_map * 4.
        call check_stat(allocstat, 'nohits')
        nohits = 0
     else
-       allocate(nohits(0:0,1))
+       allocate(nohits(0:0, 1))
     end if
 
     if (do_mask) then
-       allocate(crit(0:nopix_map-1), stat=allocstat)
+       allocate(crit(0:nopix_map - 1), stat=allocstat)
        call check_stat(allocstat, 'crit')
        crit = 0
-       memory_maps = memory_maps + nopix_map*4
+       memory_maps = memory_maps + nopix_map * 4.
     else
        allocate(crit(0:0))
     end if
 
     if (use_inmask) then
        if (.not. allocated(inmask)) then
-          allocate(inmask(0:nopix_cross-1), stat=allocstat)
+          allocate(inmask(0:nopix_cross - 1), stat=allocstat)
           call check_stat(allocstat, 'inmask')
           inmask = 0
-          memory_maps = memory_maps + nopix_cross*4
+          memory_maps = memory_maps + nopix_cross * 4.
        end if
     else
        if (.not. allocated(inmask)) allocate(inmask(0:0))
     end if
 
     if (kfirst) then
-       allocate(cca(nmap, nmap, 0:nopix_cross-1),  &
-            wamap(nmap, 0:nopix_cross-1), stat=allocstat)
+       allocate(cca(nmap, nmap, 0:nopix_cross - 1),  &
+            wamap(nmap, 0:nopix_cross - 1), stat=allocstat)
        call check_stat(allocstat, 'cca and wamap')
        cca = 0
        wamap = 0
-       memory_maps = memory_maps + (nmap**2*8+nmap*8)*nopix_cross
+       memory_maps = memory_maps + (nmap ** 2. * 8. + nmap * 8.) * nopix_cross
     else
        allocate(cca(nmap, nmap, 0:0), wamap(nmap, 0:0))
     endif
 
-    memsum = memory_maps / 2**20
+    memsum = memory_maps / 2. ** 20.
     mem_min = memsum
     mem_max = memsum
     call min_mpi(mem_min)

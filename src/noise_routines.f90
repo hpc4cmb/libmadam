@@ -167,8 +167,15 @@ CONTAINS
              if (j == n_in - 1) exit
           end do
        end if
-       r = (flog - logfreq(j)) / (logfreq(j+1) - logfreq(j))
-       targetpsd(i) = exp(logpsd(j) * (1._dp - r) + logpsd(j + 1) * r)
+       if (psd(j) > 0 .and. psd(j+1) > 0) then
+          ! Logarithmic interpolation
+          r = (flog - logfreq(j)) / (logfreq(j+1) - logfreq(j))
+          targetpsd(i) = exp(logpsd(j) * (1._dp - r) + logpsd(j + 1) * r)
+       else
+          ! Linear interpolation
+          r = (targetfreq(i) - freq(j)) / (freq(j+1) - freq(j))
+          targetpsd(i) = psd(j) * (1._dp - r) + psd(j + 1) * r
+       end if
     end do
 
     deallocate(logfreq, logpsd)

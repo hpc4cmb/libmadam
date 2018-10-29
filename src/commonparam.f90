@@ -77,8 +77,8 @@ MODULE commonparam
   type(basis_function_type), allocatable :: basis_functions(:)
   real(dp), pointer :: basis_function(:, :)
 
-  integer, parameter :: NDETMAX=1000
-  integer, parameter :: NDETSETMAX=1000
+  integer, parameter :: NDETMAX=10000
+  integer, parameter :: NDETSETMAX=10000
   type detset_type
      character(len=SLEN) :: name
      character(len=SLEN) :: detectors(NDETMAX)

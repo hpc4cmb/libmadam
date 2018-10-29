@@ -38,7 +38,7 @@ CONTAINS
     !
     !Initialize the pointing module and allocate memory for pointing data.
     !
-    integer  :: allocstat
+    integer :: allocstat
     real(dp) :: memory, mem_min, mem_max
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
@@ -47,8 +47,8 @@ CONTAINS
     call check_stat(allocstat, 'subchunk')
     subchunk = 0 ! initialize
 
-    memory_pointing = nosamples_proc*nodetectors*4.
-    memory_pointing = memory_pointing + nosamples_proc*nodetectors*24.
+    memory_pointing = nosamples_proc * nodetectors * 4.
+    memory_pointing = memory_pointing + nosamples_proc * nodetectors * 24.
 
     allocate(ksubmap(0:nosubmaps_tot))
     allocate(subtable1(0:nosubmaps_tot))
@@ -57,13 +57,13 @@ CONTAINS
     subtable1 = 0
     subtable2 = 0
 
-    dummy_pixel = 12*nside_max**2
+    dummy_pixel = 12 * nside_max ** 2
 
-    memory = memory_pointing / 2d0**20
+    memory = memory_pointing / 2d0 ** 20
 
     mem_min = memory; mem_max = memory
-    call min_mpi(mem_min); call max_mpi(mem_max)
-
+    call min_mpi(mem_min)
+    call max_mpi(mem_max)
     call sum_mpi(memory)
 
     if (id == 0 .and. info > 0) write(*,'(a,t32,3(f12.1," MB"))')   &
@@ -149,21 +149,21 @@ CONTAINS
     k = -1
     do i = 0, nosubmaps_tot
        if (ksubmap(i)) then
-          k = k+1
-          subtable1(i) = i-k
-          subtable2(k) = i-k
+          k = k + 1
+          subtable1(i) = i - k
+          subtable2(k) = i - k
        end if
     end do
 
     do idet = 1, nodetectors
        do i = 1, nosamples_proc
           if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
-          ip = pixels(i, idet)/nosubpix_max
-          pixels(i, idet) = pixels(i, idet) - subtable1(ip)*nosubpix_max
+          ip = pixels(i, idet) / nosubpix_max
+          pixels(i, idet) = pixels(i, idet) - subtable1(ip) * nosubpix_max
        end do
     end do
 
-    dummy_pixel = (nosubmaps_tot-subtable1(nosubmaps_tot)) * nosubpix_max
+    dummy_pixel = (nosubmaps_tot - subtable1(nosubmaps_tot)) * nosubpix_max
 
     if (info > 4) write(*,idf) id, 'Done'
 
@@ -184,14 +184,14 @@ CONTAINS
        do i = 1, nosamples_proc
           if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet) / nosubpix_max
-          pixels(i, idet) = pixels(i, idet) + subtable2(ip)*nosubpix_max
+          pixels(i, idet) = pixels(i, idet) + subtable2(ip) * nosubpix_max
        end do
     end do
 
     ksubmap = .true.
     subtable1 = 0
     subtable2 = 0
-    dummy_pixel = 12*nside_max**2
+    dummy_pixel = 12 * nside_max ** 2
 
     if (info > 4) write(*,idf) id, 'Done'
 

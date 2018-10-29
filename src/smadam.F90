@@ -139,6 +139,7 @@ contains
          call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
     if (temperature_only .and. nnz /= 1) &
          call abort_mpi('temperature_only=T but pointing weights are polarized')
+    if (ndet > NDETMAX) call abort_mpi('ndet > NDETMAX')
 
     nmap = int(nnz, i4b)
 
