@@ -433,12 +433,16 @@ CONTAINS
 
           end do
 
-          aspec = 1.d0 / (fa*aspec)
+          where (abs(aspec) > 1e-30)
+             aspec = 1.d0 / (fa * aspec)
+          elsewhere
+             aspec = 0
+          end where
           aspec(1) = 0
           fcov(:, ipsdtot) = aspec
 
           ! RK edit: check for NaNs
-          do i = 1, nof/2+1
+          do i = 1, nof / 2 + 1
              if (isnan(abs(fcov(i, ipsdtot)))) &
                   call abort_mpi('NaN in fcov. Check input PSD and sigma.')
           end do
@@ -1186,6 +1190,9 @@ CONTAINS
                 if (noba == 0) exit loop_subchunk
                 itask = itask + 1
                 if (modulo(itask, num_threads) == id_thread) then
+                   ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
+                   if (ipsd < 0) cycle
+                   if (detectors(idet)%weights(ipsd) == 0) cycle
                    ipsd = psd_index(idet, baselines_short_time(kstart+1))
                    if (allocated(bandprec(isub, ichunk, idet)%data)) then
                       ! Use the precomputed Cholesky decomposition
@@ -1302,12 +1309,8 @@ CONTAINS
     if (rr == 0) return
     rr0 = rr
 
-    where (nna /= 0)
-       precond = nna + invcov(1)
-    elsewhere
-       precond = invcov(1)
-    end where
-    precond = 1 / precond
+    precond = nna + invcov(1)
+    where (precond /= 0) precond = 1 / precond
     call apply_precond(resid, zresid)
     rz = dot_product(resid, zresid)
 
