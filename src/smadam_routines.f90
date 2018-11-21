@@ -252,7 +252,7 @@ CONTAINS
     real(dp), intent(inout) :: map(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: binmap(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
+    real(c_float), intent(in) :: tod(nosamples_proc, nodetectors)
     integer :: i, ierr, firstpix, lastpix, idet, ival, noba, kstart
     integer(i8b) :: ip
     integer :: ipsd, k
@@ -428,7 +428,7 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
+    real(c_float), intent(in) :: tod(nosamples_proc, nodetectors)
     real(dp) :: detweight, bf, invvar
     integer(i8b) :: i, k, ip, j, order, order2, i0, imap, n, workspace_length
     integer(i8b) :: ntot, nbad, ngood
@@ -1537,7 +1537,7 @@ CONTAINS
     !
     ! Subtract baselines from the TOD
 
-    real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
+    real(c_float), intent(inout) :: tod(nosamples_proc, nodetectors)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, idet, order, i0
     real(dp), pointer :: basis_function(:, :)
@@ -1583,7 +1583,7 @@ CONTAINS
     !
     ! Subtract baselines from the TOD
 
-    real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
+    real(c_float), intent(inout) :: tod(nosamples_proc, nodetectors)
     real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, idet, order, i0
     real(dp), pointer :: basis_function(:, :)

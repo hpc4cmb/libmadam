@@ -11,11 +11,10 @@ MODULE tod_storage
   implicit none
   private
 
-  real(c_double), pointer, public :: tod(:, :)
+  real(c_float), pointer, public :: tod(:, :)
+  real(c_double), pointer, public :: sampletime(:)
 
   real(dp), save, public :: memory_tod = 0
-
-  real(c_double), pointer, public :: sampletime(:)
 
   character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")', &
        mstr3='(x,a,t32,3(f10.1," MB"))'
@@ -33,10 +32,10 @@ CONTAINS
     real(sp) :: memsum, mem_min, mem_max
 
     ! Stored signal
-    memory_tod = nosamples_proc*nodetectors*8.
+    memory_tod = nosamples_proc * nodetectors * 4.
 
     ! Time stamps
-    memory_tod = memory_tod + nosamples_proc*8.
+    memory_tod = memory_tod + nosamples_proc * 8.
 
     allocate(surveyflags(nosamples_proc), stat=allocstat)
     call check_stat(allocstat, 'surveyflags')

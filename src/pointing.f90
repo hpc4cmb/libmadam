@@ -10,8 +10,8 @@ MODULE pointing
   implicit none
   private
 
-  integer(c_long), pointer, public :: pixels(:, :)
-  real(c_double), pointer, public :: weights(:, :, :)
+  integer(c_int), pointer, public :: pixels(:, :)
+  real(c_float), pointer, public :: weights(:, :, :)
 
   ! Next two are used for sub ring maps
 
@@ -48,7 +48,7 @@ CONTAINS
     subchunk = 0 ! initialize
 
     memory_pointing = nosamples_proc * nodetectors * 4.
-    memory_pointing = memory_pointing + nosamples_proc * nodetectors * 24.
+    memory_pointing = memory_pointing + nosamples_proc * nodetectors * 16.
 
     allocate(ksubmap(0:nosubmaps_tot))
     allocate(subtable1(0:nosubmaps_tot))
