@@ -11,7 +11,7 @@ MODULE tod_storage
   implicit none
   private
 
-  real(c_float), pointer, public :: tod(:, :)
+  real(c_double), pointer, public :: tod(:, :)
   real(c_double), pointer, public :: sampletime(:)
 
   real(dp), save, public :: memory_tod = 0
@@ -32,7 +32,7 @@ CONTAINS
     real(sp) :: memsum, mem_min, mem_max
 
     ! Stored signal
-    memory_tod = nosamples_proc * nodetectors * 4.
+    memory_tod = nosamples_proc * nodetectors * 8.
 
     ! Time stamps
     memory_tod = memory_tod + nosamples_proc * 8.
