@@ -87,8 +87,8 @@ CONTAINS
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_cross-1)
     integer, intent(in) :: inmask(0:nopix_cross-1)
 
-    integer  :: ip, noeig, imap
-    integer  :: cov0, cov1, covn
+    integer  :: ip, noeig, imap, istart
+    integer  :: cov0, cov1, covn, ndec
     real(dp) :: cdet, trace, tracen, rcnd
     logical  :: sing
 
@@ -106,6 +106,7 @@ CONTAINS
     cov0 = 0
     cov1 = 0
     covn = 0
+    ndec = 0
 
     if (nmap == 1) then
        where (cc(1, 1, :) /= 0)
@@ -119,10 +120,13 @@ CONTAINS
 
           if (all(cc(:, :, ip) == 0)) cycle
 
+          call test_decoupling(cc(:, :, ip), nmap, istart)
+          if (istart /= 1) ndec = ndec + 1
+
           select case (pixmode_cross)
           case (0) ! absolute determinant
-             call invert_LU(cc(:, :, ip), cdet, sing, nmap)
-
+             call invert_LU(cc(istart:, istart:, ip), cdet, sing, &
+                  nmap - istart + 1)
              if (cdet < pixlim_cross .or. sing) then
                 cc(:, :, ip) = 0
              else
@@ -130,34 +134,36 @@ CONTAINS
              end if
           case (1) ! scaled determinant
              trace = 0
-             do imap = 1, nmap
+             do imap = istart, nmap
                 trace = trace + cc(imap, imap, ip)
              end do
 
              if (abs(trace) < 1.e-30) then
                 tracen = 0
              else
-                tracen = (nmap/trace)**nmap
+                tracen = (nmap / trace) ** nmap
              end if
 
-             call invert_LU(cc(:, :, ip), cdet, sing, nmap)
-
-             if (cdet*tracen < pixlim_cross .or. sing) then
+             call invert_LU(cc(istart:, istart:, ip), cdet, sing, &
+                  nmap - istart + 1)
+             if (cdet * tracen < pixlim_cross .or. sing) then
                 cc(:, :, ip) = 0
              else
                 covn = covn + 1
              end if
           case (2) ! rcond
-             call invert_eig(cc(:, :, ip), cdet, rcnd, sing, nmap)
-
+             call invert_eig(cc(istart:, istart:, ip), cdet, rcnd, sing, &
+                  nmap - istart + 1)
              if (rcnd < pixlim_cross .or. sing) then
                 cc(:, :, ip) = 0
              else
                 covn = covn + 1
              end if
           case (3) ! use only T
-             if (cc(1, 1, ip) > 1.e-20) then
-                cc(1, 1, ip) = 1.d0 / cc(1, 1, ip)
+             if (cc(1, 1, ip) > 1e-30) then
+                if (istart == 1) then
+                   cc(1, 1, ip) = 1.d0 / cc(1, 1, ip)
+                end if
                 cc(:, 2:nmap, ip) = 0
                 cc(2:nmap, 1, ip) = 0
                 covn = covn + 1
@@ -166,8 +172,8 @@ CONTAINS
              end if
           case (4) ! invert the non-singular part
              call invert_eig_s( &
-                  cc(:, :, ip), cdet, rcnd, noeig, pixlim_cross, nmap)
-
+                  cc(istart:, istart:, ip), cdet, rcnd, noeig, pixlim_cross, &
+                  nmap - istart + 1)
              if (noeig == nmap) then
                 covn = covn + 1
              else
@@ -182,17 +188,20 @@ CONTAINS
     call sum_mpi(covn)
     call sum_mpi(cov1)
     call sum_mpi(cov0)
+    call sum_mpi(ndec)
 
     if (ID == 0 .and. info > 1) then
        if (pixmode_cross == 4 .and. nmap > 1) then
           write(*,*)
-          write(*,'(i9,a)') covn,' pixels fully solved'
-          write(*,'(i9,a)') cov1,' pixels partly solved'
-          write(*,'(i9,a)') cov0,' pixels unsolved'
+          write(*,'(i9,a)') covn, ' pixels fully solved'
+          write(*,'(i9,a)') cov1, ' pixels partly solved'
+          write(*,'(i9,a)') cov0, ' pixels unsolved'
+          write(*,'(i9,a)') ndec, ' pixels had decoupled intensity'
        else
           write(*,*)
-          write(*,'(i9,a)') cov1+covn,' pixels solved'
+          write(*,'(i9,a)') cov1 + covn, ' pixels solved'
           write(*,'(i9,a)') cov0,     ' pixels unsolved'
+          write(*,'(i9,a)') ndec, ' pixels had decoupled intensity'
        end if
     end if
 
@@ -214,7 +223,7 @@ CONTAINS
     real(sp),intent(out) :: crit(0:nopix_map-1)
     integer :: nstatic ! -RK
 
-    integer  :: ip, cover, imap
+    integer  :: ip, cover, imap, istart, ndec
     real(dp) :: cdet, trace, tracen, rcnd, pcrit
     logical  :: sing
 
@@ -224,6 +233,7 @@ CONTAINS
     call reset_time(10)
 
     cover = 0
+    ndec = 0
 
     nstatic = max(1, ceiling(dble(nopix_map)/nthreads)) ! -RK
 !!$OMP PARALLEL DEFAULT(PRIVATE) &
@@ -231,7 +241,7 @@ CONTAINS
 !!$OMP      REDUCTION(+:cover)
     if (nmap == 1) then
 !!$OMP DO SCHEDULE(STATIC,nstatic)
-       do ip = 0,nopix_map-1
+       do ip = 0, nopix_map - 1
           if (cc(1, 1, ip) /= 0) then
              cc(1, 1, ip) = 1._dp / cc(1, 1, ip)
              mask(ip) = 1
@@ -248,29 +258,32 @@ CONTAINS
 
           if (all(cc(:, :, ip) == 0)) cycle
 
+          call test_decoupling(cc(:, :, ip), nmap, istart)
+          if (istart /= 1) ndec = ndec + 1
+
           select case(pixmode_map)
           case (0) ! determinant
-             call invert_LU(cc(:, :, ip), cdet, sing, nmap)
+             call invert_LU(cc(istart:, istart:, ip), cdet, sing, &
+                  nmap - istart + 1)
              pcrit = cdet
           case(1) ! scaled determinant
              trace = 0
-             do imap = 1,nmap
+             do imap = istart, nmap
                 trace = trace + cc(imap, imap, ip)
              end do
 
-             if (abs(trace) < 1.e-30) then
+             if (abs(trace) < 1e-30) then
                 tracen = 0
              else
-                tracen = (nmap/trace)**nmap
+                tracen = (nmap / trace) ** nmap
              end if
 
-             call invert_LU(cc(:, :, ip), cdet, sing, nmap)
-
-             pcrit = cdet*tracen
-
+             call invert_LU(cc(istart:, istart:, ip), cdet, sing, &
+                  nmap - istart + 1)
+             pcrit = cdet * tracen
           case(2) ! rcond
-             call invert_eig(cc(:, :, ip), cdet, rcnd, sing, nmap)
-
+             call invert_eig(cc(istart:, istart:, ip), cdet, rcnd, sing, &
+                  nmap - istart + 1)
              pcrit = rcnd
           case default
              stop 'Unknown pixmode_map'
@@ -292,11 +305,13 @@ CONTAINS
 !!$OMP END PARALLEL
 
     call sum_mpi(cover)
+    call sum_mpi(ndec)
 
     if (ID == 0 .and. info >= 2) then
        write(*,*)
-       write(*,'(i9,a)') cover,                ' pixels solved'
-       write(*,'(i9,a)') 12*nside_map**2-cover,' pixels unsolved'
+       write(*,'(i9,a)') cover, ' pixels solved'
+       write(*,'(i9,a)') 12 * nside_map ** 2 - cover, ' pixels unsolved'
+       write(*,'(i9,a)') ndec, ' pixels had decoupled intensity'
     end if
 
     cputime_inv = cputime_inv + get_time(10)
