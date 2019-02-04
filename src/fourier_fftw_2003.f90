@@ -80,14 +80,15 @@ CONTAINS
 
     ! Destroying the FFTW plans was disabled for a while, after
     ! observing inexplicable segfaults in some environments.
+    ! 2018-12-14 : the segfaults are back. Disabling fftq_destroy_plan
 
     if (c_associated(plan)) then
-       call fftw_destroy_plan(plan)
+       !call fftw_destroy_plan(plan)
        plan = C_NULL_PTR
     end if
 
     if (c_associated(plan_inv)) then
-       call fftw_destroy_plan(plan_inv)
+       !call fftw_destroy_plan(plan_inv)
        plan_inv = C_NULL_PTR
     end if
 
