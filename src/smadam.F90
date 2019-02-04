@@ -564,6 +564,11 @@ contains
        call close_pointing()
        call free_mask()
        call free_tod()
+       do i = 1, ndetset
+          if (allocated(detsets(i)%detectors)) then
+             deallocate(detsets(i)%detectors)
+          end if
+       end do
     end if
 
     call close_mpi()
@@ -910,6 +915,12 @@ contains
     if (allocated(baselines_short)) deallocate(baselines_short)
     if (allocated(baselines_short_start)) &
          deallocate(baselines_short_start, baselines_short_stop)
+
+    do i = 1, ndetset
+       if (allocated(detsets(i)%detectors)) then
+          deallocate(detsets(i)%detectors)
+       end if
+    end do
 
     call close_filter()
     call close_output()

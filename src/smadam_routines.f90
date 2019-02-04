@@ -43,7 +43,8 @@ CONTAINS
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_map-1)
     integer, intent(in) :: mask(nosubpix_map, nosubmaps)
     real(dp) :: cca_dummy(1, 1, 1)
-    logical :: detflags_save(NDETMAX), kfirst_save
+    logical, allocatable :: detflags_save(:)
+    logical :: kfirst_save
     real(dp), allocatable :: cc_det(:, :, :), loccc_save(:, :, :)
     integer :: ierr, i, j
     integer(i8b) :: ip
@@ -52,6 +53,8 @@ CONTAINS
          write(*,*) 'Building leakage matrices...'
     if (info > 4) write(*,idf) ID, 'Building leakage matrices...'
 
+    allocate(detflags_save(NDETMAX), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for detflags_save')
     detflags_save = detflags
     detflags = .false.
     detflags(idet) = .true.
@@ -95,6 +98,7 @@ CONTAINS
     deallocate(loccc_save)
     detflags = detflags_save
     kfirst = kfirst_save
+    deallocate(detflags_save)
 
     if (info > 4) write(*,idf) id,'Done'
 

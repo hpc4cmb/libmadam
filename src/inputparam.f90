@@ -92,7 +92,8 @@ CONTAINS
     character(len=SLEN) :: line
 
     nodetectors = ndet
-    allocate(detectors(nodetectors))
+    allocate(detectors(nodetectors), detflags(nodetectors), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for detectors')
 
     n = 1
     do while (detstring(n) /= C_NULL_CHAR)
@@ -370,7 +371,7 @@ CONTAINS
   subroutine parse_detset(line, nopol)
     character(len=*) :: line
     logical, optional :: nopol
-    integer(i4b) :: i, ndet
+    integer(i4b) :: i, ndet, ierr
     character(len=SLEN) :: detname
 
     i = index(line, ':')
@@ -378,11 +379,18 @@ CONTAINS
          'Failed to parse: ' // trim(line) // ' for valid detector set name')
 
     ndetset = ndetset + 1
-    if (ndetset > NDETSETMAX) call abort_mpi(&
-         'Number of detector sets exceeds NDETSETMAX')
+    if (ndetset > NDETSETMAX) then
+       call abort_mpi('Number of detector sets exceeds NDETSETMAX')
+    end if
     detsets(ndetset)%name = trim(adjustl(line(:i-1)))
-    if (len(trim(detsets(ndetset)%name)) == 0) &
-         call abort_mpi('Empty detset name')
+    if (len(trim(detsets(ndetset)%name)) == 0) then
+       call abort_mpi('Empty detset name')
+    end if
+
+    if (.not. allocated(detsets(ndetset)%detectors)) then
+       allocate(detsets(ndetset)%detectors(NDETMAX), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for detector set')
+    end if
 
     line = trim(adjustl(line(i+1:)))
 
@@ -390,6 +398,9 @@ CONTAINS
     do
        i = index(line, ',')
        ndet = ndet + 1
+       if (ndet > NDETMAX) then
+          call abort_mpi('Number of detectors in set exceeds NDETMAX')
+       end if
        if (i /= 0) then
           detname = trim(adjustl(line(:i-1)))
           line = trim(adjustl(line(i+1:)))
@@ -401,6 +412,7 @@ CONTAINS
           ! allow user to name the full detector set
           detsets(0)%name = detsets(ndetset)%name
           ndetset = ndetset - 1
+          deallocate(detsets(ndetset)%detectors)
           return
        end if
 

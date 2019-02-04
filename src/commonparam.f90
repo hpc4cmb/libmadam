@@ -78,16 +78,16 @@ MODULE commonparam
   real(dp), pointer :: basis_function(:, :)
 
   integer, parameter :: NDETMAX=10000
-  integer, parameter :: NDETSETMAX=10000
+  integer, parameter :: NDETSETMAX=1000
   type detset_type
      character(len=SLEN) :: name
-     character(len=SLEN) :: detectors(NDETMAX)
+     character(len=SLEN), allocatable :: detectors(:)
      integer(i4b) :: ndet
      logical :: nopol
   end type detset_type
   type(detset_type) :: detsets(0:NDETSETMAX)
   integer(i4b) :: ndetset
-  logical :: detflags(NDETMAX)
+  logical, allocatable :: detflags(:)
 
   integer, parameter :: NSPANMAX=1000
   integer, parameter :: NSURVEYMAX=1000

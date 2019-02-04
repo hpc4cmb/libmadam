@@ -109,6 +109,7 @@ CONTAINS
        end do
        deallocate(detectors)
     end if
+    if (allocated(detflags)) deallocate(detflags)
 
     buffersize = 0
     nodetectors = 0
