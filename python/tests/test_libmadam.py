@@ -32,8 +32,6 @@ class MadamTest(TestCase):
         if itask == 0:
             print("Warning: unable to import healpy. Output maps are not checked.")
 
-    fcomm = comm.py2f()
-
     if itask == 0:
         print("Running with ", ntask, " MPI tasks")
 
@@ -83,10 +81,7 @@ class MadamTest(TestCase):
                 print("Removing old {}".format(fn))
                 os.remove(fn)
 
-    parstring = madam.dict2parstring(pars)
-
     dets = ["LFI27M", "LFI27S", "LFI28M", "LFI28S"]
-    detstring = madam.dets2detstring(dets)
 
     ndet = len(dets)
 
@@ -138,30 +133,22 @@ class MadamTest(TestCase):
     # Ensure we can successfully call Madam twice with different inputs
     for i in range(2):
         madam.destripe(
-            fcomm,
-            parstring,
-            ndet,
-            detstring,
+            comm,
+            pars,
+            dets,
             weights,
-            nsamp,
-            nnz,
             timestamps,
             pixels,
             pixweights,
             signal,
-            nperiod,
             periods,
             npsd,
-            npsdtot,
             psdstarts,
-            npsdbin,
             psdfreqs,
-            npsdval,
             psdvals,
         )
         nside *= 2
         pars["nside_map"] = nside
-        parstring = madam.dict2parstring(pars)
 
     if itask == 0 and hp is not None:
         good = hmap_tot != 0
@@ -170,8 +157,8 @@ class MadamTest(TestCase):
         hmap = hmap_tot.astype(np.int32)
         bmap = bmap_tot.astype(np.float32)
 
-        hp.write_map("hits.fits", hmap, nest=True, overwrite=True)
-        hp.write_map("binned.fits", bmap, nest=True, overwrite=True)
+        # hp.write_map("hits.fits", hmap, nest=True, overwrite=True)
+        # hp.write_map("binned.fits", bmap, nest=True, overwrite=True)
 
         madam_hmap = hp.read_map("pymaps/madam_pytest_hmap.fits", nest=True)
         madam_bmap = hp.read_map("pymaps/madam_pytest_bmap.fits", nest=True)

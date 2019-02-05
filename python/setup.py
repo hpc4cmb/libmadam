@@ -10,7 +10,7 @@ import numpy as np
 
 
 def get_version():
-    with open("configure.ac", "r") as f:
+    with open("../configure.ac", "r") as f:
         for line in f:
             if line.startswith("#"):
                 continue

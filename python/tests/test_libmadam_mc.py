@@ -32,8 +32,6 @@ class MadamMCTest(TestCase):
         if itask == 0:
             print("Warning: unable to import healpy. Output maps are not checked.")
 
-    fcomm = comm.py2f()
-
     if itask == 0:
         print("Running with ", ntask, " MPI tasks")
 
@@ -68,10 +66,7 @@ class MadamMCTest(TestCase):
             if os.path.isfile(fn):
                 os.remove(fn)
 
-    parstring = madam.dict2parstring(pars)
-
     dets = ["LFI27M", "LFI27S", "LFI28M", "LFI28S"]
-    detstring = madam.dets2detstring(dets)
 
     ndet = len(dets)
 
@@ -133,54 +128,39 @@ class MadamMCTest(TestCase):
     # Basic Madam call with signal # 1
 
     madam.destripe(
-        fcomm,
-        parstring,
-        ndet,
-        detstring,
+        comm,
+        pars,
+        dets,
         weights,
-        nsamp,
-        nnz,
         timestamps,
         pixels,
         pixweights,
         signal,
-        nperiod,
         periods,
         npsd,
-        npsdtot,
         psdstarts,
-        npsdbin,
         psdfreqs,
-        npsdval,
         psdvals,
     )
 
     pars["mcmode"] = True
-    parstring = madam.dict2parstring(pars)
     signal[:] = signal2
 
     # Basic Madam call with signal # 2, this time, cache the parameters, filters e.t.c.
 
     madam.destripe(
-        fcomm,
-        parstring,
-        ndet,
-        detstring,
+        comm,
+        pars,
+        dets,
         weights,
-        nsamp,
-        nnz,
         timestamps,
         pixels,
         pixweights,
         signal,
-        nperiod,
         periods,
         npsd,
-        npsdtot,
         psdstarts,
-        npsdbin,
         psdfreqs,
-        npsdval,
         psdvals,
     )
 
@@ -200,9 +180,7 @@ class MadamMCTest(TestCase):
                     os.remove(fn)
     outpath = outpath.encode("ascii")
 
-    madam.destripe_with_cache(
-        fcomm, ndet, nsamp, nnz, timestamps, pixels, pixweights, signal, outpath
-    )
+    madam.destripe_with_cache(comm, timestamps, pixels, pixweights, signal, outpath)
 
     # Test clearing the caches twice
 
@@ -217,14 +195,8 @@ class MadamMCTest(TestCase):
         hmap = hmap_tot.astype(np.int32)
         bmap = bmap_tot.astype(np.float32)
 
-        try:
-            hp.write_map("hits.fits", hmap, nest=True)
-        except:
-            hp.write_map("hits.fits", hmap, nest=True, overwrite=True)
-        try:
-            hp.write_map("binned.fits", bmap, nest=True)
-        except:
-            hp.write_map("binned.fits", bmap, nest=True, overwrite=True)
+        # hp.write_map("hits.fits", hmap, nest=True, overwrite=True)
+        # hp.write_map("binned.fits", bmap, nest=True, overwrite=True)
 
         madam_hmap = hp.read_map("mc_maps/madam_pytest_hmap.fits", nest=True)
         madam_bmap = hp.read_map("mc_maps/madam_pytest_bmap.fits", nest=True)

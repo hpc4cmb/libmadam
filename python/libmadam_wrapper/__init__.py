@@ -91,27 +91,30 @@ def dets2detstring(dets):
 
 
 def destripe(
-    fcomm,
-    parstring,
-    ndet,
-    detstring,
+    comm,
+    pars,
+    dets,
     weights,
-    nsamp,
-    nnz,
     timestamps,
     pixels,
     pixweights,
     signal,
-    nperiod,
     periods,
     npsd,
-    npsdtot,
     psdstarts,
-    npsdbin,
     psdfreqs,
-    npsdval,
     psdvals,
 ):
+    fcomm = comm.py2f()
+    parstring = dict2parstring(pars)
+    ndet = len(dets)
+    detstring = dets2detstring(dets)
+    nsamp = timestamps.size
+    nperiod = periods.size
+    nnz = pixweights.size // nsamp // ndet
+    npsdbin = psdfreqs.size
+    npsdval = psdvals.size
+    npsdtot = npsdval // npsdbin
     _madam.destripe(
         fcomm,
         parstring,
@@ -138,9 +141,11 @@ def destripe(
     return
 
 
-def destripe_with_cache(
-    fcomm, ndet, nsamp, nnz, timestamps, pixels, pixweights, signal, outpath
-):
+def destripe_with_cache(comm, timestamps, pixels, pixweights, signal, outpath):
+    fcomm = comm.py2f()
+    nsamp = timestamps.size
+    ndet = signal.size // nsamp
+    nnz = pixweights.size // nsamp // ndet
     _madam.destripe_with_cache(
         fcomm, ndet, nsamp, nnz, timestamps, pixels, pixweights, signal, outpath
     )
