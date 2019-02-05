@@ -831,28 +831,31 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx, pfx
+    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     call reset_time(14)
 
     y = x
 
+    ! Allocate FFTW work space outside the threaded region to avoid
+    ! a GCC compiler segfault when freeing the workspace
+    do id_thread = 0, nthreads - 1
+       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    end do
+
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
-    !$OMP         baselines_short_time, fc, x, y, nthreads, nna) &
+    !$OMP         baselines_short_time, fc, x, y, nthreads, nna, pxx, pfx) &
     !$OMP     PRIVATE(idet, ichunk, m, xx, fx, ierr, id_thread, itask, &
-    !$OMP         num_threads, pxx, pfx)
+    !$OMP         num_threads)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
 
-    !allocate(fx(nof/2+1), xx(nof), stat=ierr)
-    !if (ierr /= 0) call abort_mpi('No room for Fourier transform')
-    pxx = fftw_alloc_real(int(nof, C_SIZE_T))
-    pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-    call c_f_pointer(pxx, xx, [nof])
-    call c_f_pointer(pfx, fx, [nof/2 + 1])
+    call c_f_pointer(pxx(id_thread), xx, [nof])
+    call c_f_pointer(pfx(id_thread), fx, [nof/2 + 1])
 
     itask = -1
     do idet = 1, nodetectors
@@ -863,11 +866,12 @@ CONTAINS
        end do
     end do
 
-    !deallocate(fx, xx)
-    call fftw_free(pxx)
-    call fftw_free(pfx)
-
     !$OMP END PARALLEL
+
+    do id_thread = 0, nthreads - 1
+       call fftw_free(pxx(id_thread))
+       call fftw_free(pfx(id_thread))
+    end do
 
     cputime_filter = cputime_filter + get_time(14)
 
@@ -891,7 +895,7 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx, pfx
+    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     if (precond_width_max < 1) return
 
@@ -963,18 +967,23 @@ CONTAINS
 
     call allocate_bandprec
 
+    ! Allocate FFTW work space outside the threaded region to avoid
+    ! a GCC compiler segfault when freeing the workspace
+    do id_thread = 0, nthreads - 1
+       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    end do
+
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
-    !$OMP     SHARED(nof, npsdtot, fcov, invcov) &
-    !$OMP     PRIVATE(id_thread, num_threads, ipsd, pxx, pfx, xx, fx)
+    !$OMP     SHARED(nof, npsdtot, fcov, invcov, pxx, pfx) &
+    !$OMP     PRIVATE(id_thread, num_threads, ipsd, xx, fx)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
 
-    pxx = fftw_alloc_real(int(nof, C_SIZE_T))
-    pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-    call c_f_pointer(pxx, xx, [nof])
-    call c_f_pointer(pfx, fx, [nof/2 + 1])
+    call c_f_pointer(pxx(id_thread), xx, [nof])
+    call c_f_pointer(pfx(id_thread), fx, [nof/2 + 1])
 
     do ipsd = 1, npsdtot
        if (modulo(ipsd-1, num_threads) /= id_thread) cycle
@@ -983,10 +992,12 @@ CONTAINS
        invcov(:, ipsd) = xx
     end do
 
-    call fftw_free(pxx)
-    call fftw_free(pfx)
-
     !$OMP END PARALLEL
+
+    do id_thread = 0, nthreads - 1
+       call fftw_free(pxx(id_thread))
+       call fftw_free(pfx(id_thread))
+    end do
 
     if (.not. use_cgprecond) then
        nempty = 0
@@ -1141,7 +1152,7 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx, pfx
+    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     z = r
 
@@ -1157,26 +1168,29 @@ CONTAINS
        ! Apply the filter-based preconditioner
        call convolve_pp(z, r, fprecond, nna)
     else
+       ! Allocate FFTW work space outside the threaded region to avoid
+       ! a GCC compiler segfault when freeing the workspace
+       do id_thread = 0, nthreads - 1
+          pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+          pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+       end do
+
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
-       !$OMP         baselines_short_time, invcov, fcov, checknan) &
+       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx) &
        !$OMP     PRIVATE(idet, ichunk, kstart, kstop, noba, j, k, ierr, m, &
        !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub, &
-       !$OMP         t1, t2, tf, pxx, pfx)
+       !$OMP         t1, t2, tf)
 
        !t1 = get_time(55)
        !tf = 0
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
 
-       allocate(fx(nof/2+1), xx(nof), stat=ierr)
-       if (ierr /= 0) call abort_mpi('No room for Fourier transform')
-       !pxx = fftw_alloc_real(int(nof, C_SIZE_T))
-       !pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-       !call c_f_pointer(pxx, xx, [nof])
-       !call c_f_pointer(pfx, fx, [nof/2 + 1])
+       call c_f_pointer(pxx(id_thread), xx, [nof])
+       call c_f_pointer(pfx(id_thread), fx, [nof/2 + 1])
 
        itask = -1
        do idet = 1, nodetectors
@@ -1213,14 +1227,12 @@ CONTAINS
           end do
        end do
 
-       deallocate(fx, xx)
-       !call fftw_free(pxx)
-       !call fftw_free(pfx)
-
-       !t2 = get_time(55)
-       !print *, id, ' : ', id_thread, ' : applied preconditioner in = ', &
-       !     t2 - t1, ' s. Filter time = ', tf
        !$OMP END PARALLEL
+
+       do id_thread = 0, nthreads - 1
+          call fftw_free(pxx(id_thread))
+          call fftw_free(pfx(id_thread))
+       end do
     end if
 
     cputime_precond = cputime_precond + get_time(16)

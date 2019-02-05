@@ -63,7 +63,7 @@ CONTAINS
 
     fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_DESTROY_INPUT)
     !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_PRESERVE_INPUT)
-    fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_UNALIGNED)
+    !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_UNALIGNED)
 
     plan = fftw_plan_dft_r2c_1d(nof, in, out, fftw_planning_strategy)
     plan_inv = fftw_plan_dft_c2r_1d(nof, out, in, fftw_planning_strategy)
