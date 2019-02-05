@@ -771,7 +771,6 @@ CONTAINS
   end subroutine trim_interval
 
 
-
   subroutine convolve_interval(ichunk, idet, x, y, xx, fx, fc, nna)
     integer, intent(in) :: ichunk, idet
     real(dp), intent(out) :: y(0:basis_order, noba_short, nodetectors)
@@ -1227,7 +1226,6 @@ CONTAINS
     cputime_precond = cputime_precond + get_time(16)
 
   END SUBROUTINE preconditioning_band
-
 
 
   subroutine apply_cholesky_decomposition(noba, z, r, nband, blockm)
