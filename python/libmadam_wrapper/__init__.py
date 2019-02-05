@@ -19,6 +19,7 @@ TIMESTAMP_TYPE = np.float64
 SIGNAL_TYPE = np.float64
 PIXEL_TYPE = np.int32
 WEIGHT_TYPE = np.float32
+PSD_TYPE = np.float64
 
 REPEATED_KEYS = ["detset", "detset_nopol", "survey"]
 
@@ -54,7 +55,7 @@ _madam.destripe.argtypes = [
     ct.c_long,  # npsdbin
     npc.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
     ct.c_long,  # npsdval
-    npc.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
+    npc.ndpointer(dtype=PSD_TYPE, ndim=1, flags="C_CONTIGUOUS"),
 ]
 
 
@@ -73,6 +74,9 @@ _madam.destripe_with_cache.argtypes = [
 
 
 def dict2parstring(d):
+    """
+    Translate parameter dictionary into a parameter string
+    """
     s = ""
     for key, value in d.items():
         if key in REPEATED_KEYS:
@@ -84,6 +88,9 @@ def dict2parstring(d):
 
 
 def dets2detstring(dets):
+    """
+    Translate a container of detector names into a detector name string
+    """
     s = ""
     for d in dets:
         s += "{};".format(d)
@@ -105,6 +112,11 @@ def destripe(
     psdfreqs,
     psdvals,
 ):
+    """
+    Solve and subtract baseline offsets from signal
+    """
+    if not available:
+        raise RuntimeError("No libmadam available, cannot destripe")
     fcomm = comm.py2f()
     parstring = dict2parstring(pars)
     ndet = len(dets)
@@ -123,10 +135,10 @@ def destripe(
         weights,
         nsamp,
         nnz,
-        timestamps,
-        pixels,
-        pixweights,
-        signal,
+        np.ascontiguousarray(timestamps.reshape(-1), dtype=TIMESTAMP_TYPE),
+        np.ascontiguousarray(pixels.reshape(-1), dtype=PIXEL_TYPE),
+        np.ascontiguousarray(pixweights.reshape(-1), dtype=WEIGHT_TYPE),
+        np.ascontiguousarray(signal.reshape(-1), dtype=SIGNAL_TYPE),
         nperiod,
         periods,
         npsd,
@@ -135,22 +147,38 @@ def destripe(
         npsdbin,
         psdfreqs,
         npsdval,
-        psdvals,
+        np.ascontiguousarray(psdvals.reshape(-1), dtype=PSD_TYPE),
     )
 
     return
 
 
 def destripe_with_cache(comm, timestamps, pixels, pixweights, signal, outpath):
+    """
+    Solve and subtract baseline offsets from signal in Monte Carlo mode
+    """
+    if not available:
+        raise RuntimeError("No libmadam available, cannot destripe")
     fcomm = comm.py2f()
     nsamp = timestamps.size
     ndet = signal.size // nsamp
     nnz = pixweights.size // nsamp // ndet
     _madam.destripe_with_cache(
-        fcomm, ndet, nsamp, nnz, timestamps, pixels, pixweights, signal, outpath
+        fcomm,
+        ndet,
+        nsamp,
+        nnz,
+        np.ascontiguousarray(timestamps.reshape(-1), dtype=TIMESTAMP_TYPE),
+        np.ascontiguousarray(pixels.reshape(-1), dtype=PIXEL_TYPE),
+        np.ascontiguousarray(pixweights.reshape(-1), dtype=WEIGHT_TYPE),
+        np.ascontiguousarray(signal.reshape(-1), dtype=SIGNAL_TYPE),
+        outpath,
     )
     return
 
 
 def clear_caches():
+    """
+    Clear Monte Carlo caches after a destripe() call with mcmode=True
+    """
     _madam.clear_caches()

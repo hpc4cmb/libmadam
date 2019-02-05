@@ -14,6 +14,7 @@ import shutil
 from unittest import TestCase
 
 import numpy as np
+import numpy.testing as npt
 
 import libmadam_wrapper as madam
 
@@ -163,22 +164,8 @@ class MadamTest(TestCase):
         madam_hmap = hp.read_map("pymaps/madam_pytest_hmap.fits", nest=True)
         madam_bmap = hp.read_map("pymaps/madam_pytest_bmap.fits", nest=True)
 
-        good = hmap != 0
-
-        hitdiff = np.std((madam_hmap - hmap)[good])
-        bindiff = np.std((madam_bmap - bmap)[good])
-
-        if hitdiff != 0:
-            print("Hit map check FAILED: hit map difference RMS ", hitdiff)
-            sys.exit(-1)
-        else:
-            print("Hit map check PASSED")
-
-        if bindiff != 0:
-            print("Binned map check FAILED: Binned map difference RMS ", bindiff)
-            sys.exit(-1)
-        else:
-            print("Binned map check PASSED")
+        npt.assert_allclose(madam_hmap, hmap)
+        npt.assert_allclose(madam_bmap, bmap)
 
     if itask == 0:
         shutil.rmtree("pymaps")
