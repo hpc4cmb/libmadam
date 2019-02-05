@@ -15,7 +15,7 @@ def get_version():
             if line.startswith("#"):
                 continue
             if "AC_INIT" in line:
-                ver = line.split()[1:-2]
+                ver = line.split()[1][1:-2]
                 break
     return ver
 
