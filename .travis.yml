@@ -189,8 +189,13 @@ install:
     - ./configure --prefix=$HOME/miniconda
     - make
     - make install
+    - cd python
+    - python setup.py install
+    - cd ..
 
 # Configure, build, and run tests
 
 script:
     - make check
+    - cd python
+    - python setup.py test
