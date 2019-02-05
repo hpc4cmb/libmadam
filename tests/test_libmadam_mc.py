@@ -1,112 +1,24 @@
-#!/usr/bin/env python
+# Copyright (c) 2019 by the parties listed in the AUTHORS
+# file.  All rights reserved.  Use of this source code is governed
+# by a BSD-style license that can be found in the LICENSE file.
 
 from __future__ import division
 from __future__ import print_function
+
+from mpi4py import MPI
+
 import ctypes as ct
 import os
 import sys
-import glob
 import shutil
+from unittest import TestCase
 
 import numpy as np
-import numpy.ctypeslib as npc
+
+import libmadam_wrapper as madam
 
 
-_libdir = os.path.dirname(__file__)
-if not os.path.isdir(os.path.join(_libdir, ".libs")):
-    _libdir = "."
-if not os.path.isdir(os.path.join(_libdir, ".libs")):
-    raise Exception("Cannot find the libtool .libs directory")
-
-path = os.path.join(_libdir, ".libs", "libmadam.so")
-try:
-    print("Trying to import libmadam from", path, end="")
-    sys.stdout.flush()
-    _madam = ct.CDLL(path)
-except:
-    try:
-        path2 = path.replace(".so", ".dylib")
-        print(" FAILED.\nTrying to import libmadam from", path2, end="")
-        sys.stdout.flush()
-        _madam = ct.CDLL(path2)
-    except:
-        print(" FAILED")
-        sys.stdout.flush()
-        raise
-print(" SUCCESS")
-sys.stdout.flush()
-
-
-MADAM_TIMESTAMP_TYPE = np.float64
-MADAM_SIGNAL_TYPE = np.float64
-MADAM_PIXEL_TYPE = np.int32
-MADAM_WEIGHT_TYPE = np.float32
-
-_madam.destripe.restype = None
-_madam.destripe.argtypes = [
-    ct.c_int,  # fcomm
-    ct.c_char_p,  # parstring
-    ct.c_long,  # ndet
-    ct.c_char_p,  # detstring
-    npc.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
-    ct.c_long,  # nsamp
-    ct.c_long,  # nnz
-    npc.ndpointer(dtype=MADAM_TIMESTAMP_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=MADAM_PIXEL_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=MADAM_WEIGHT_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=MADAM_SIGNAL_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    ct.c_long,  # nperiod
-    npc.ndpointer(dtype=np.int64, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=np.int64, ndim=1, flags="C_CONTIGUOUS"),
-    ct.c_long,  # npsdtot
-    npc.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
-    ct.c_long,  # npsdbin
-    npc.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
-    ct.c_long,  # npsdval
-    npc.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
-]
-
-
-_madam.destripe_with_cache.restype = None
-_madam.destripe_with_cache.argtypes = [
-    ct.c_int,  # fcomm
-    ct.c_long,  # ndet
-    ct.c_long,  # nsamp
-    ct.c_long,  # nnz
-    npc.ndpointer(dtype=MADAM_TIMESTAMP_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=MADAM_PIXEL_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=MADAM_WEIGHT_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    npc.ndpointer(dtype=MADAM_SIGNAL_TYPE, ndim=1, flags="C_CONTIGUOUS"),
-    ct.c_char_p,  # outpath
-]
-
-
-def dict2parstring(d):
-
-    s = ""
-    for key, value in d.items():
-        s += "{} = {};".format(key, value)
-
-    return s.encode("ascii")
-
-
-def dets2detstring(dets):
-
-    s = ""
-    for d in dets:
-        s += "{};".format(d)
-
-    return s.encode("ascii")
-
-
-if __name__ == "__main__":
-
-    """
-    When madam.py is ran directly, it performs a quick check of the code by making a hit map and a binned map
-    """
-
-    from mpi4py import MPI
-    import numpy as np
+class MadamMCTest(TestCase):
 
     np.random.seed(9876543)
     comm = MPI.COMM_WORLD
@@ -133,6 +45,7 @@ if __name__ == "__main__":
 
     pars = {}
     pars["base_first"] = 1.0
+    pars["nsubchunk"] = 1
     pars["fsample"] = fsample
     pars["nside_map"] = nside
     pars["nside_cross"] = nside
@@ -155,10 +68,10 @@ if __name__ == "__main__":
             if os.path.isfile(fn):
                 os.remove(fn)
 
-    parstring = dict2parstring(pars)
+    parstring = madam.dict2parstring(pars)
 
     dets = ["LFI27M", "LFI27S", "LFI28M", "LFI28S"]
-    detstring = dets2detstring(dets)
+    detstring = madam.dets2detstring(dets)
 
     ndet = len(dets)
 
@@ -168,20 +81,20 @@ if __name__ == "__main__":
 
     nnz = 1  # number or non zero pointing weights, typically 3 for IQU
 
-    timestamps = np.zeros(nsamp, dtype=MADAM_TIMESTAMP_TYPE)
+    timestamps = np.zeros(nsamp, dtype=madam.TIMESTAMP_TYPE)
     timestamps[:] = np.arange(nsamp) + itask * nsamp
 
-    pixels = np.zeros(ndet * nsamp, dtype=MADAM_PIXEL_TYPE)
+    pixels = np.zeros(ndet * nsamp, dtype=madam.PIXEL_TYPE)
     pixels[:] = np.arange(len(pixels)) % npix
 
-    pixweights = np.zeros(ndet * nsamp * nnz, dtype=MADAM_WEIGHT_TYPE)
+    pixweights = np.zeros(ndet * nsamp * nnz, dtype=madam.WEIGHT_TYPE)
     pixweights[:] = 1
 
-    signal = np.zeros(ndet * nsamp, dtype=MADAM_SIGNAL_TYPE)
+    signal = np.zeros(ndet * nsamp, dtype=madam.SIGNAL_TYPE)
     signal[:] = pixels
     signal[:] += np.random.randn(nsamp * ndet)
 
-    signal2 = np.zeros(ndet * nsamp, dtype=MADAM_SIGNAL_TYPE)
+    signal2 = np.zeros(ndet * nsamp, dtype=madam.SIGNAL_TYPE)
     signal2[:] = pixels % 12
     signal2[:] += np.random.randn(nsamp * ndet)
 
@@ -219,7 +132,7 @@ if __name__ == "__main__":
 
     # Basic Madam call with signal # 1
 
-    _madam.destripe(
+    madam.destripe(
         fcomm,
         parstring,
         ndet,
@@ -243,12 +156,12 @@ if __name__ == "__main__":
     )
 
     pars["mcmode"] = True
-    parstring = dict2parstring(pars)
+    parstring = madam.dict2parstring(pars)
     signal[:] = signal2
 
     # Basic Madam call with signal # 2, this time, cache the parameters, filters e.t.c.
 
-    _madam.destripe(
+    madam.destripe(
         fcomm,
         parstring,
         ndet,
@@ -287,15 +200,15 @@ if __name__ == "__main__":
                     os.remove(fn)
     outpath = outpath.encode("ascii")
 
-    _madam.destripe_with_cache(
+    madam.destripe_with_cache(
         fcomm, ndet, nsamp, nnz, timestamps, pixels, pixweights, signal, outpath
     )
 
     # Test clearing the caches twice
 
-    _madam.clear_caches()
+    madam.clear_caches()
 
-    _madam.clear_caches()
+    madam.clear_caches()
 
     if itask == 0 and hp is not None:
         good = hmap_tot != 0
