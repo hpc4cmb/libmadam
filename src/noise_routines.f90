@@ -1171,12 +1171,12 @@ CONTAINS
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
 
-       !allocate(fx(nof/2+1), xx(nof), stat=ierr)
-       !if (ierr /= 0) call abort_mpi('No room for Fourier transform')
-       pxx = fftw_alloc_real(int(nof, C_SIZE_T))
-       pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-       call c_f_pointer(pxx, xx, [nof])
-       call c_f_pointer(pfx, fx, [nof/2 + 1])
+       allocate(fx(nof/2+1), xx(nof), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for Fourier transform')
+       !pxx = fftw_alloc_real(int(nof, C_SIZE_T))
+       !pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+       !call c_f_pointer(pxx, xx, [nof])
+       !call c_f_pointer(pfx, fx, [nof/2 + 1])
 
        itask = -1
        do idet = 1, nodetectors
@@ -1213,9 +1213,9 @@ CONTAINS
           end do
        end do
 
-       !deallocate(fx, xx)
-       call fftw_free(pxx)
-       call fftw_free(pfx)
+       deallocate(fx, xx)
+       !call fftw_free(pxx)
+       !call fftw_free(pfx)
 
        !t2 = get_time(55)
        !print *, id, ' : ', id_thread, ' : applied preconditioner in = ', &
