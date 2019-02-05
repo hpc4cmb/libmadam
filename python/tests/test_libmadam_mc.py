@@ -59,6 +59,7 @@ class MadamMCTest(TestCase):
     pars["file_root"] = "madam_pytest"
     pars["path_output"] = "./mc_maps/"
     pars["mcmode"] = False
+    pars["info"] = 0
 
     if itask == 0:
         shutil.rmtree("mc_maps", ignore_errors=True)

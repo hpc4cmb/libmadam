@@ -63,6 +63,7 @@ class MadamTest(TestCase):
     pars["iter_max"] = 100
     pars["nsubchunk"] = 2
     pars["allreduce"] = True
+    pars["info"] = 0
 
     # pars[ 'detset' ] = ['LFI27 : LFI27M, LFI27S',
     #                    'LFI28 : LFI28M, LFI28S']
