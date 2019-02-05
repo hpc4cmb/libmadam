@@ -10,8 +10,8 @@ MODULE pointing
   implicit none
   private
 
-  integer(c_long), pointer, public :: pixels(:, :)
-  real(c_double), pointer, public :: weights(:, :, :)
+  integer(c_int), pointer, public :: pixels(:, :)
+  real(c_float), pointer, public :: weights(:, :, :)
 
   ! Next two are used for sub ring maps
 
@@ -20,7 +20,7 @@ MODULE pointing
 
   integer :: buffersize = 0
 
-  real(sp), public :: memory_pointing = 0
+  real(dp), public :: memory_pointing = 0
 
   logical, allocatable, public :: ksubmap(:)
   integer, allocatable, public :: subtable1(:), subtable2(:)
@@ -38,20 +38,17 @@ CONTAINS
     !
     !Initialize the pointing module and allocate memory for pointing data.
     !
-    integer  :: idet, k, allocstat
-    real(dp) :: psi
-    real(sp) :: memory, mem_min, mem_max
+    integer :: allocstat
+    real(dp) :: memory, mem_min, mem_max
 
     if (id == 0 .and. info > 3) write (*,'(a)') ' Initializing pointing'
-
-    if (temperature_only) detectors%kpolar = .false.
 
     allocate(subchunk(nosamples_proc), stat=allocstat)
     call check_stat(allocstat, 'subchunk')
     subchunk = 0 ! initialize
 
-    memory_pointing = nosamples_proc*nodetectors*4.
-    memory_pointing = memory_pointing + nosamples_proc*nodetectors*24.
+    memory_pointing = nosamples_proc * nodetectors * 4.
+    memory_pointing = memory_pointing + nosamples_proc * nodetectors * 16.
 
     allocate(ksubmap(0:nosubmaps_tot))
     allocate(subtable1(0:nosubmaps_tot))
@@ -60,13 +57,13 @@ CONTAINS
     subtable1 = 0
     subtable2 = 0
 
-    dummy_pixel = 12*nside_max**2
+    dummy_pixel = 12 * nside_max ** 2
 
-    memory = memory_pointing / 2d0**20
+    memory = memory_pointing / 2d0 ** 20
 
     mem_min = memory; mem_max = memory
-    call min_mpi(mem_min); call max_mpi(mem_max)
-
+    call min_mpi(mem_min)
+    call max_mpi(mem_max)
     call sum_mpi(memory)
 
     if (id == 0 .and. info > 0) write(*,'(a,t32,3(f12.1," MB"))')   &
@@ -80,7 +77,7 @@ CONTAINS
 
   SUBROUTINE close_pointing
 
-    integer :: k
+    integer :: k, idet
 
     if (allocated(ksubmap)) deallocate(ksubmap)
     if (allocated(subtable1)) deallocate(subtable1)
@@ -99,9 +96,23 @@ CONTAINS
 
     if (allocated(id_submap)) deallocate(id_submap)
 
-    if (allocated(detectors)) deallocate(detectors)
+    if (allocated(detectors)) then
+       do idet = 1, nodetectors
+          deallocate(detectors(idet)%weights)
+          deallocate(detectors(idet)%sigmas)
+          deallocate(detectors(idet)%psdstarts)
+          deallocate(detectors(idet)%plateaus)
+          if (allocated(detectors(idet)%psdfreqs)) then
+             deallocate(detectors(idet)%psdfreqs)
+             deallocate(detectors(idet)%psds)
+          end if
+       end do
+       deallocate(detectors)
+    end if
+    if (allocated(detflags)) deallocate(detflags)
 
     buffersize = 0
+    nodetectors = 0
 
   END SUBROUTINE close_pointing
 
@@ -112,7 +123,9 @@ CONTAINS
   SUBROUTINE reduce_pixels
     ! Reduce pixel numbers so that they point to locmap
     !
-    integer :: i, idet, k, ip, ierr
+    integer :: i, idet, k, ierr
+    integer(i8b) :: ip
+    !logical, allocatable :: bbuffer(:)
 
     if (info > 4) write(*,idf) id, 'Reduce pixel numbers...'
 
@@ -129,9 +142,7 @@ CONTAINS
 
     if (allreduce) then
        ! Flag all hit submaps on every process
-       call mpi_allreduce(MPI_IN_PLACE, ksubmap, nosubmaps_tot, MPI_LOGICAL, &
-            MPI_LOR, comm, ierr)
-       if (ierr /= 0) call abort_mpi('Reducing ksubmaps failed.')
+       call sum_mpi(ksubmap)
     end if
 
     subtable1 = -1
@@ -139,21 +150,21 @@ CONTAINS
     k = -1
     do i = 0, nosubmaps_tot
        if (ksubmap(i)) then
-          k = k+1
-          subtable1(i) = i-k
-          subtable2(k) = i-k
+          k = k + 1
+          subtable1(i) = i - k
+          subtable2(k) = i - k
        end if
     end do
 
     do idet = 1, nodetectors
        do i = 1, nosamples_proc
           if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
-          ip = pixels(i, idet)/nosubpix_max
-          pixels(i, idet) = pixels(i, idet) - subtable1(ip)*nosubpix_max
+          ip = pixels(i, idet) / nosubpix_max
+          pixels(i, idet) = pixels(i, idet) - subtable1(ip) * nosubpix_max
        end do
     end do
 
-    dummy_pixel = (nosubmaps_tot-subtable1(nosubmaps_tot)) * nosubpix_max
+    dummy_pixel = (nosubmaps_tot - subtable1(nosubmaps_tot)) * nosubpix_max
 
     if (info > 4) write(*,idf) id, 'Done'
 
@@ -165,7 +176,8 @@ CONTAINS
   SUBROUTINE restore_pixels
     ! restore original pixel numbers
     !
-    integer :: i, idet, ip
+    integer :: i, idet
+    integer(i8b) :: ip
 
     if (info.ge.5) write(*,idf) id, 'Restore pixel numbers (a)...'
 
@@ -173,14 +185,14 @@ CONTAINS
        do i = 1, nosamples_proc
           if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet) / nosubpix_max
-          pixels(i, idet) = pixels(i, idet) + subtable2(ip)*nosubpix_max
+          pixels(i, idet) = pixels(i, idet) + subtable2(ip) * nosubpix_max
        end do
     end do
 
     ksubmap = .true.
     subtable1 = 0
     subtable2 = 0
-    dummy_pixel = 12*nside_max**2
+    dummy_pixel = 12 * nside_max ** 2
 
     if (info > 4) write(*,idf) id, 'Done'
 

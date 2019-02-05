@@ -25,8 +25,9 @@ CONTAINS
 
     integer, intent(in) :: nof_in
     integer :: fftw_planning_strategy
-    real(C_DOUBLE), allocatable :: in(:)
-    complex(C_DOUBLE_COMPLEX), allocatable :: out(:)
+    real(C_DOUBLE), pointer :: in(:)
+    complex(C_DOUBLE_COMPLEX), pointer :: out(:)
+    type(C_PTR) :: pin, pout
 
     if (nof_in == 0 .or. nof_in == nof) return
 
@@ -35,10 +36,14 @@ CONTAINS
     nof = nof_in
     nofinv = 1 / dble(nof)
 
-    allocate(in(nof), out(nof/2+1), stat=ierr)
-    if (ierr /= 0) then
-       stop 'Unable to allocate working space for Fourier transform'
-    end if
+    !allocate(in(nof), out(nof/2+1), stat=ierr)
+    !if (ierr /= 0) then
+    !   stop 'Unable to allocate working space for Fourier transform'
+    !end if
+    pin = fftw_alloc_real(int(nof, C_SIZE_T))
+    pout = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    call c_f_pointer(pin, in, [nof])
+    call c_f_pointer(pout, out, [nof/2 + 1])
 
     ierr = fftw_import_system_wisdom()
 
@@ -50,19 +55,22 @@ CONTAINS
        end if
     end if
 
-    if (nof <= 65536) then
-       fftw_planning_strategy = FFTW_MEASURE
-    else
-       fftw_planning_strategy = FFTW_ESTIMATE
-    end if
+    !if (nof <= 65536) then
+    fftw_planning_strategy = FFTW_MEASURE
+    !else
+    !   fftw_planning_strategy = FFTW_ESTIMATE
+    !end if
 
-    fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_PRESERVE_INPUT)
-    fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_UNALIGNED)
+    fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_DESTROY_INPUT)
+    !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_PRESERVE_INPUT)
+    !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_UNALIGNED)
 
     plan = fftw_plan_dft_r2c_1d(nof, in, out, fftw_planning_strategy)
     plan_inv = fftw_plan_dft_c2r_1d(nof, out, in, fftw_planning_strategy)
 
-    deallocate(in, out)
+    !deallocate(in, out)
+    call fftw_free(pin)
+    call fftw_free(pout)
 
   END SUBROUTINE init_fourier
 
@@ -70,8 +78,9 @@ CONTAINS
 
   SUBROUTINE close_fourier
 
-    ! Destroying the FFTW plans is disabled for now, after
+    ! Destroying the FFTW plans was disabled for a while, after
     ! observing inexplicable segfaults in some environments.
+    ! 2018-12-14 : the segfaults are back. Disabling fftq_destroy_plan
 
     if (c_associated(plan)) then
        !call fftw_destroy_plan(plan)

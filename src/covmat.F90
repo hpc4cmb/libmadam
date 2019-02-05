@@ -16,6 +16,8 @@
 
 MODULE covmat
 
+  use, intrinsic :: iso_c_binding
+
   USE commonparam
   USE planck_config, ONLY : i4b, i8b, sp, dp
   USE fourier
@@ -27,7 +29,7 @@ MODULE covmat
 
   IMPLICIT NONE
 
-  real(sp), save, public :: memory_ncm = 0, cputime_ncm=0, cputime_hitmap=0, &
+  real(dp), save, public :: memory_ncm = 0, cputime_ncm=0, cputime_hitmap=0, &
        cputime_ptf=0, cputime_middlematrix=0, cputime_accumulate=0, &
        cputime_white=0, cputime_save_matrix=0, cputime_symmetrize=0, &
        cputime_invert_middlematrix=0, cputime_symmetrize_middlematrix=0
@@ -46,8 +48,9 @@ contains
   subroutine write_covmat(outroot)
     character(len=*), intent(in) :: outroot
 
-    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, imap, ipix, ibase, &
-         jmap, jpix, jbase, k, i, j, ip, kstart, noba, lag
+    integer(i4b) :: idet, ichunk, ipsd, ipsd_det, ierr, ibase, &
+         jbase, i, j, kstart, kstop, noba, lag
+    integer(i8b) :: ipix, jpix
     real(dp) :: detweight, mm, ptf1
     character(len=SLEN) :: outfile
     logical :: there
@@ -77,10 +80,10 @@ contains
 
        INQUIRE(file=outfile, exist=there)
        IF (there) THEN
-          IF (id == 0) WRITE (*,'(x,a," EXISTS! skipping ...")') TRIM(outfile)
+          IF (id == 0) WRITE (*,'(1x,a," EXISTS! skipping ...")') TRIM(outfile)
           cycle loop_detector
        ELSE
-          IF (id == 0) WRITE (*,'(x,"Computing ",a)') trim(outfile)
+          IF (id == 0) WRITE (*,'(1x,"Computing ",a)') trim(outfile)
        END IF
 
        call tic
@@ -92,72 +95,69 @@ contains
        call tic(555)
 
        loop_chunk : do ichunk = 1, ninterval ! global indices
-          noba = noba_short_pp(ichunk) ! baselines on this pointing period
           kstart = sum(noba_short_pp(1:ichunk-1)) ! first baseline, local index
-          ipsd = psd_index(idet, baselines_short_time(kstart+1))
-          ipsd_det = psd_index_det(idet, baselines_short_time(kstart+1))
-          if (ipsd_det < 0) cycle loop_chunk
-          ! ALWAYS use the optimal weights, even if the map has some
-          ! other weighting scheme
-          detweight = 1 / detectors(idet)%sigmas(ipsd_det)**2
-          if (detweight == 0) cycle loop_chunk
+          kstop = kstart + noba_short_pp(ichunk)
+          loop_subchunk : do
+             call trim_interval(kstart, kstop, noba, idet, nna)
+             if (noba == 0) exit
+             ipsd = psd_index(idet, baselines_short_time(kstart+1))
+             ipsd_det = psd_index_det(idet, baselines_short_time(kstart+1))
+             if (ipsd_det < 0) cycle loop_chunk
+             ! ALWAYS use the optimal weights, even if the map has some
+             ! other weighting scheme
+             detweight = 1 / detectors(idet)%sigmas(ipsd_det)**2
+             if (detweight == 0) cycle loop_chunk
 
-          call get_ptf(idet, kstart, noba, detweight)
+             call get_ptf(idet, kstart, noba, detweight)
 
-          call get_hitmap(idet, kstart, noba)
+             call get_hitmap(idet, kstart, noba)
 
-          call get_middlematrix(fcov, ipsd, idet, detweight, kstart, noba)
+             call get_middlematrix(fcov, ipsd, detweight, noba)
 
-          ! double loop over all non-zeros in P^T F
+             ! double loop over all non-zeros in P^T F
 
-          call reset_time(10)
+             call reset_time(10)
 
-          loop_pix : do ipix = 0, nolocpix-1
-             if (local_hitmap(ipix) == 0) cycle loop_pix
-             loop_pix2 : do jpix = ipix, nolocpix-1
-                if (local_hitmap(jpix) == 0) cycle loop_pix2
-                loop_baseline : do i = 1, local_hitmap(ipix)
-                   ibase = local_basehitmap(i, ipix)
-                   loop_baseline2 : do j = 1, local_hitmap(jpix)
-                      jbase = local_basehitmap(j, jpix)
+             loop_pix : do ipix = 0, nolocpix-1
+                if (local_hitmap(ipix) == 0) cycle loop_pix
+                loop_pix2 : do jpix = ipix, nolocpix-1
+                   if (local_hitmap(jpix) == 0) cycle loop_pix2
+                   loop_baseline : do i = 1, local_hitmap(ipix)
+                      ibase = local_basehitmap(i, ipix)
+                      loop_baseline2 : do j = 1, local_hitmap(jpix)
+                         jbase = local_basehitmap(j, jpix)
 
-                      lag = abs(jbase - ibase) + 1
-                      if (bfinvert) then
-                         if (lag > wband) cycle loop_baseline2
-                         mm = -middlematrix(lag, ibase)
-                      else
+                         lag = abs(jbase - ibase) + 1
                          mm = -middlematrix(lag, 1)
-                      end if
 
-                      if (nmap == 1) then
-                         local_covmat(1, 1, jpix, ipix) = &
-                              local_covmat(1, 1, jpix, ipix) &
-                              + mm * local_ptf(1, ibase, ipix) &
-                              * local_ptf(1, jbase, jpix)
-                      else
-                         ptf1 = mm * local_ptf(1, ibase, ipix)
-                         local_covmat(1:3, 1, jpix, ipix) = &
-                              local_covmat(1:3, 1, jpix, ipix) &
-                              + local_ptf(1:3, jbase, jpix) * ptf1
+                         if (nmap == 1) then
+                            local_covmat(1, 1, jpix, ipix) = &
+                                 local_covmat(1, 1, jpix, ipix) &
+                                 + mm * local_ptf(1, ibase, ipix) &
+                                 * local_ptf(1, jbase, jpix)
+                         else
+                            ptf1 = mm * local_ptf(1, ibase, ipix)
+                            local_covmat(1:3, 1, jpix, ipix) = &
+                                 local_covmat(1:3, 1, jpix, ipix) &
+                                 + local_ptf(1:3, jbase, jpix) * ptf1
 
-                         ptf1 = mm * local_ptf(2, ibase, ipix)
-                         local_covmat(1:3, 2, jpix, ipix) = &
-                              local_covmat(1:3, 2, jpix, ipix) &
-                              + local_ptf(1:3, jbase, jpix) * ptf1
+                            ptf1 = mm * local_ptf(2, ibase, ipix)
+                            local_covmat(1:3, 2, jpix, ipix) = &
+                                 local_covmat(1:3, 2, jpix, ipix) &
+                                 + local_ptf(1:3, jbase, jpix) * ptf1
 
-                         ptf1 = mm * local_ptf(3, ibase, ipix)
-                         local_covmat(1:3, 3, jpix, ipix) = &
-                              local_covmat(1:3, 3, jpix, ipix) &
-                              + local_ptf(1:3, jbase, jpix) * ptf1
-                      end if
-
-                   end do loop_baseline2
-                end do loop_baseline
-             end do loop_pix2
-          end do loop_pix
-
+                            ptf1 = mm * local_ptf(3, ibase, ipix)
+                            local_covmat(1:3, 3, jpix, ipix) = &
+                                 local_covmat(1:3, 3, jpix, ipix) &
+                                 + local_ptf(1:3, jbase, jpix) * ptf1
+                         end if
+                      end do loop_baseline2
+                   end do loop_baseline
+                end do loop_pix2
+             end do loop_pix
+             kstart = kstart + noba
+          end do loop_subchunk
           cputime_accumulate = cputime_accumulate + get_time(10)
-
        end do loop_chunk
 
        ! Free workspace
@@ -208,7 +208,8 @@ contains
     integer(i4b), intent(in) :: idet
     real(dp), intent(in) :: detweight
 
-    integer(i4b) :: k, i, ip
+    integer(i4b) :: i
+    integer(i8b) :: ip, k
 
     ! Add white noise to the diagonal
 
@@ -266,9 +267,10 @@ contains
     ! create a global pixel-pixel matrix, accumulate the local
     ! contributions and write the matrix out
     character(len=*), intent(in) :: covmatfile
-    integer(i4b) :: ierr, mypix1, mypix2, row, col, isend, map1, map2, pix1, &
-         pix2, ip1, ip2, evenodd, itarget, isource, nelem
-    integer(i8b) :: firstpix, lastpix, npix, npix_proc
+    integer(i4b) :: ierr, mypix1, mypix2, isend, map1, evenodd, itarget, &
+         isource, nelem
+    integer(i8b) :: firstpix, lastpix, npix, npix_proc, ip1, ip2, pix1, pix2, &
+         row, col
     real(dp), allocatable, target :: covmat1(:, :), covmat2(:, :)
     real(dp), pointer :: covmat_send(:, :), covmat_recv(:, :)
     INTEGER(i4b) :: filemode, fileinfo, outfilehandle, count, &
@@ -279,7 +281,7 @@ contains
 
     npix = 12 * nside_map**2
     npix_proc = ceiling(dble(npix) / ntasks)
-    nelem = npix * nmap * npix_proc * nmap
+    nelem = int(npix * nmap * npix_proc * nmap, i4b)
 
     allocate(covmat1(npix*nmap, npix_proc*nmap), &
          covmat2(npix*nmap, npix_proc*nmap), stat=ierr)
@@ -324,8 +326,9 @@ contains
 
              if (local_covmat(1, 1, mypix2, mypix1) == 0) cycle loop_row
 
-             covmat_send(row:row+2, col:col+2) = &
-                  covmat_send(row:row+2, col:col+2) &
+
+             covmat_send(row:row+nmap-1, col:col+nmap-1) = &
+                  covmat_send(row:row+nmap-1, col:col+nmap-1) &
                   + local_covmat(:, :, mypix2, mypix1)
           end do loop_row
        end do loop_col
@@ -390,7 +393,7 @@ contains
          'native', fileinfo, ierr)
     IF (ierr /= 0) CALL abort_mpi('Unable to establish view to covmat file')
 
-    count = npix * nmap * (lastpix - firstpix + 1) * nmap
+    count = int(npix * nmap * (lastpix - firstpix + 1) * nmap, i4b)
     if (count > 0) then
        CALL mpi_file_write(outfilehandle, covmat_recv, count, MPI_REAL8, &
             status, ierr)
@@ -414,7 +417,8 @@ contains
   subroutine get_hitmap(idet, kstart, noba)
     ! construct a hitmap for the current pointing period
     integer(i4b), intent(in) :: idet, kstart, noba
-    integer(i4b) :: ip, ierr, k, i, hitmax, nhit
+    integer(i4b) :: ierr, k, i, hitmax, nhit
+    integer(i8b) :: ip
     integer(i4b), save :: hitmax_max = 0
 
     call reset_time(10)
@@ -482,7 +486,8 @@ contains
     ! Accumulate P^T F
     integer(i4b), intent(in) :: idet, kstart, noba
     real(dp) :: detweight
-    integer(i4b) :: ip, ierr, k, i
+    integer(i4b) :: ierr, k, i
+    integer(i8b) :: ip
     integer(i4b), save :: nobamax = 0
 
     call reset_time(10)
@@ -520,18 +525,26 @@ contains
 
 
 
-  subroutine get_middlematrix(fcov, ipsd, idet, detweight, kstart, noba)
+  subroutine get_middlematrix(fcov, ipsd, detweight, noba)
     ! compute the noba x noba middle matrix block:
     ! M = (C_a^-1 + F^T C_w^-1 F)^-1
 
     complex(dp), intent(inout) :: fcov(nof/2+1,*)
-    integer(i4b), intent(in) :: ipsd, idet
+    integer(i4b), intent(in) :: ipsd
     real(dp), intent(in) :: detweight
-    integer(i4b), intent(in) :: kstart, noba
-    integer(i4b) :: ierr, ibase, jbase, lag, buflen, offset, istart
+    integer(i4b), intent(in) :: noba
+    integer(i4b) :: ierr
 
     integer(i4b), save :: last_ipsd = -1, last_noba = -1, noba_max = 0
-    real(dp), allocatable :: buf(:, :)
+
+    real(C_DOUBLE), pointer :: xx(:) => NULL()
+    complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
+    type(C_PTR) :: pxx, pfx
+
+    pxx = fftw_alloc_real(int(nof, C_SIZE_T))
+    pfx = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    call c_f_pointer(pxx, xx, [nof])
+    call c_f_pointer(pfx, fx, [nof/2 + 1])
 
     if (ipsd == last_ipsd .and. noba == last_noba) return
 
@@ -544,153 +557,31 @@ contains
 
     if (allocated(middlematrix)) deallocate(middlematrix)
 
-    if (bfinvert) then
-       if (lag_max < noba) then
-          wband = lag_max
-       else
-          wband = noba
-       end if
-       allocate(middlematrix(wband, noba), stat=ierr)
-       if (ierr /= 0) then
-          print *,'Failed to allocate ', wband*noba*8/2**20, &
-               ' MB for middlematrix. noba = ', noba, &
-               ', wband = ', wband, ', lag_max = ', lag_max
-          call abort_mpi('No room for local middlematrix')
-       end if
-       if (noba > noba_max) then
-          memory_ncm = memory_ncm - wband*noba_max*8
-          memory_ncm = memory_ncm + wband*noba*8
-          noba_max = noba
-       end if
-    else
-       allocate(middlematrix(noba, 1), stat=ierr)
-       if (ierr /= 0) then
-          print *,'Failed to allocate ', noba*8/2**20, &
-               ' MB for middlematrix. noba = ', noba
-          call abort_mpi('No room for local middlematrix')
-       end if
-       if (noba > noba_max) then
-          memory_ncm = memory_ncm - noba_max*8
-          memory_ncm = memory_ncm + noba*8
-          noba_max = noba
-       end if
+    allocate(middlematrix(noba, 1), stat=ierr)
+    if (ierr /= 0) then
+       print *,'Failed to allocate ', noba*8/2**20, &
+            ' MB for middlematrix. noba = ', noba
+       call abort_mpi('No room for local middlematrix')
+    end if
+    if (noba > noba_max) then
+       memory_ncm = memory_ncm - noba_max*8
+       memory_ncm = memory_ncm + noba*8
+       noba_max = noba
     end if
 
     middlematrix = 0
 
-    if (.not. bfinvert) then
-       ! Approximate M to be circulant and ignore gaps
-       ! Adding the white noise term in Fourier domain means adding
-       ! a constant offset
-       call dfftinv(xx, 1/(fcov(:, ipsd) + nshort * detweight))
-       middlematrix(:,1) = xx(1:noba)
-    else
-       ! Build inverse M without circulancy and brute force invert
-       if (any(fcov(:, ipsd) == 0)) then
-          print *, id, ' : WARNING : fcov had zero modes, ', &
-               'regularizing for brute force inverse'
-          where (fcov(:, ipsd) == 0) fcov(:, ipsd) = 1.0
-       end if
-
-       ! xx == C_a, the prior baseline covariance
-       call dfftinv(xx, 1 / fcov(:, ipsd))
-
-       ! middlematrix = spread(xx(1:wband), 2, noba)
-
-       ! Process the matrix in overlapping diagonal blocks
-       offset = 0
-       loop_block : do
-          buflen = noba - offset
-          if (buflen > wband) buflen = wband
-          if (offset + buflen > noba) buflen = noba - offset
-          allocate(buf(buflen, buflen), stat=ierr)
-          if (ierr /= 0) then
-             print *,'Failed to allocate ', buflen**2*8/2**20, &
-                  ' MB for middlematrix buffer. buflen = ', buflen, &
-                  ', wband = ', wband, ', lag_max = ', lag_max
-             call abort_mpi('No room for middlematrix buffer')
-          end if
-          buf = 0
-          do ibase = 1, buflen
-             lag = 0
-             do jbase = ibase, buflen
-                lag = lag + 1
-                buf(jbase, ibase) = xx(lag)
-             end do
-          end do
-
-          ! invert using lapack to get C_a^-1
-          cputime_middlematrix = cputime_middlematrix + get_time_and_reset(10)
-          call dpotrf('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : C_a factorization failed with info = ', ierr
-             stop 'C_a factorization failed'
-          end if
-          call dpotri('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : C_a inversion failed with info = ', ierr
-             stop 'C_a inversion failed'
-          end if
-          cputime_invert_middlematrix = &
-               cputime_invert_middlematrix + get_time_and_reset(10)
-
-          ! add the white noise diagonal
-
-          do ibase = 1, buflen
-             buf(ibase, ibase) = buf(ibase, ibase) &
-                  + nna(0, 0, kstart + offset + ibase, idet)
-          end do
-          cputime_middlematrix = cputime_middlematrix + get_time_and_reset(10)
-
-          ! invert again to get the complete middle matrix
-
-          call dpotrf('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : C_a factorization failed with info = ', ierr
-             stop 'C_a factorization failed'
-          end if
-          call dpotri('L', buflen, buf, buflen, ierr)
-          if (ierr /= 0) then
-             print *, id,' : middlematrix inversion failed with info = ', ierr
-             stop 'middlematrix inversion failed'
-          end if
-          cputime_invert_middlematrix = cputime_invert_middlematrix &
-               + get_time_and_reset(10)
-
-          ! The results are in lower diagonal form
-
-          if (offset == 0) then
-             istart = 1
-          else
-             istart = 1 + lag_overlap / 2
-          end if
-
-          do ibase = istart, buflen
-             lag = 0
-             do jbase = ibase, buflen
-                lag = lag + 1
-                middlematrix(lag, offset + ibase) = buf(jbase, ibase)
-                middlematrix(lag, offset + jbase) = buf(jbase, ibase)
-             end do
-          end do
-
-          cputime_symmetrize_middlematrix = &
-               cputime_symmetrize_middlematrix + get_time_and_reset(10)
-
-          deallocate(buf)
-
-          if (offset + buflen == noba) then
-             exit loop_block
-          else
-             offset = offset + buflen - lag_overlap
-          end if
-
-       end do loop_block
-
-    end if
+    ! Adding the white noise term in Fourier domain means adding
+    ! a constant offset
+    fx = 1 / (fcov(:, ipsd) + nshort * detweight)
+    call dfftinv(xx, fx)
+    middlematrix(:, 1) = xx(1:noba)
 
     last_ipsd = ipsd
     last_noba = noba
+
+    call fftw_free(pxx)
+    call fftw_free(pfx)
 
     cputime_middlematrix = cputime_middlematrix + get_time(10)
 

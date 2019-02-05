@@ -394,12 +394,13 @@ CONTAINS
 
       type(handle_hdu), intent(out) :: handle
       character(len=*), intent(in)  :: file
-      integer :: stat
+      integer :: stat, zeroff(2)
 
       stat = 0
       call ftgiou(handle%unit,stat)
       call ftinit(handle%unit,trim(file),1,stat)
-      call ftphps(handle%unit,8,0,(/0,0/),stat)
+      zeroff = 0
+      call ftphps(handle%unit,8,0,zeroff,stat)
       call ftpdat(handle%unit,stat)
       call ftplsw(handle%unit,stat)
 

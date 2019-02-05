@@ -37,7 +37,7 @@ MODULE maptod_transfer
        scatter_map, scatter_mask, free_locmaps, initialize_alltoallv, &
        assign_submaps
 
-  real(sp), save, public :: memory_locmap = 0, memory_all2all = 0, &
+  real(dp), save, public :: memory_locmap = 0, memory_all2all = 0, &
        memory_ksubmap = 0
 
 CONTAINS
@@ -320,7 +320,7 @@ CONTAINS
     integer, intent(out) :: nosubmaps, nopix_map, nopix_cross, nosubmaps_max
 
     logical, allocatable :: ksubmap(:, :)
-    integer :: ierr, itask, ind, i, nosubmap_target, isubmap
+    integer :: ierr, itask, i, nosubmap_target, isubmap
     integer, allocatable :: nosubmaps_task(:)
     integer :: isubmap_start, isubmap_stop
 
@@ -350,65 +350,65 @@ CONTAINS
        if (.not. allocated(ksubmap_table)) &
             call abort_mpi('assign_submaps: ksubmap_table not allocated')
 
-       allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
-            nosubmaps_task(0:ntasks-1), stat=ierr)
-       if (ierr /= 0) call abort_mpi('No room to assign submaps')
+       if (ID == 0) then
+          allocate(ksubmap(0:nosubmaps_tot-1, 0:ntasks-1), &
+               nosubmaps_task(0:ntasks-1), stat=ierr)
+          if (ierr /= 0) call abort_mpi('No room to assign submaps')
+          ksubmap = ksubmap_table
+          nosubmaps_task = 0
 
-       ksubmap = .false.
-       nosubmaps_task = 0
+          ! First assign submaps to processes with local data up to
+          ! nosubmap_target submaps per process
 
-       ksubmap = ksubmap_table
-
-       ! First assign submaps to processes with local data up to
-       ! nosubmap_target submaps per process
-
-       loop_target : do i = 1, nosubmap_target
-          loop_task : do itask = 0, ntasks-1
-             loop_submap : do isubmap = 0, nosubmaps_tot-1
-                if (ksubmap(isubmap, itask)) then
-                   id_submap(isubmap) = itask
-                   ksubmap(isubmap, :) = .false.
-                   nosubmaps_task(itask) = nosubmaps_task(itask) + 1
-                   cycle loop_task
-                end if
-             end do loop_submap
-             if (nosubmaps_task(itask) == 0) then
-                ! This process did not find any available submaps,
-                ! pick the first available to have at least one
-                loop_submap2 : do isubmap = 0, nosubmaps_tot-1
-                   if (id_submap(isubmap) == -1) then
+          loop_target : do i = 1, nosubmap_target
+             loop_task : do itask = 0, ntasks-1
+                loop_submap : do isubmap = 0, nosubmaps_tot-1
+                   if (ksubmap(isubmap, itask)) then
                       id_submap(isubmap) = itask
                       ksubmap(isubmap, :) = .false.
                       nosubmaps_task(itask) = nosubmaps_task(itask) + 1
                       cycle loop_task
                    end if
-                end do loop_submap2
-             end if
-          end do loop_task
-       end do loop_target
+                end do loop_submap
+                if (nosubmaps_task(itask) == 0) then
+                   ! This process did not find any available submaps,
+                   ! pick the first available to have at least one
+                   loop_submap2 : do isubmap = 0, nosubmaps_tot-1
+                      if (id_submap(isubmap) == -1) then
+                         id_submap(isubmap) = itask
+                         ksubmap(isubmap, :) = .false.
+                         nosubmaps_task(itask) = nosubmaps_task(itask) + 1
+                         cycle loop_task
+                      end if
+                   end do loop_submap2
+                end if
+             end do loop_task
+          end do loop_target
 
-       ! Then assign the rest of the maps. This time in a round robin fashion
-       ! but never more than nosubmap_target
+          ! Then assign the rest of the maps. This time in a round robin fashion
+          ! but never more than nosubmap_target
 
-       itask = 0
-       do isubmap = 0, nosubmaps_tot-1
-          if (id_submap(isubmap) == -1) then
-             ! Make sure the current task has free slots
-             do while (nosubmaps_task(itask) == nosubmap_target)
+          itask = 0
+          do isubmap = 0, nosubmaps_tot-1
+             if (id_submap(isubmap) == -1) then
+                ! Make sure the current task has free slots
+                do while (nosubmaps_task(itask) == nosubmap_target)
+                   itask = modulo(itask+1, ntasks)
+                end do
+
+                ! Assign the unassigned submap
+                id_submap(isubmap) = itask
+                nosubmaps_task(itask) = nosubmaps_task(itask) + 1
+
+                ! Next submap is assigned to the next task
                 itask = modulo(itask+1, ntasks)
-             end do
+             end if
+          end do
 
-             ! Assign the unassigned submap
-             id_submap(isubmap) = itask
-             nosubmaps_task(itask) = nosubmaps_task(itask) + 1
-
-             ! Next submap is assigned to the next task
-             itask = modulo(itask+1, ntasks)
-          end if
-       end do
-
-       deallocate(ksubmap)
-       deallocate(nosubmaps_task)
+          deallocate(ksubmap)
+          deallocate(nosubmaps_task)
+       end if
+       call broadcast_mpi(id_submap, nosubmaps_tot, 0)
     end if
 
     ! update the auxiliary information
@@ -478,16 +478,13 @@ CONTAINS
     logical, optional :: inplace
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0
     real(dp) :: buffer(nmap, nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads, submap_type
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, locmap, nmap*nosubpix_max*nolocmaps, &
-            MPI_DOUBLE_PRECISION, MPI_SUM, comm, ierr)
-       if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to collect map with allreduce')
+       call sum_mpi(locmap)
        if (ndegrade == 1) then
           !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
           !$OMP     PRIVATE(i, j, k, m, id_thread) &
@@ -577,13 +574,22 @@ CONTAINS
 
        nmap0 = size(submaps_send, 1) ! Workaround for unpolarized subsets
 
-       call mpi_alltoallv(submaps_send, sendcounts*nmap0*nosubpix, &
-            sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-            submaps_recv, recvcounts*nmap0*nosubpix, recvoffs*nmap0*nosubpix, &
-            MPI_DOUBLE_PRECISION, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       call mpi_type_contiguous( &
+            nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+       call mpi_type_commit(submap_type, ierr)
+
+       call mpi_alltoallv( &
+            submaps_send, sendcounts, sendoffs, submap_type, &
+            submaps_recv, recvcounts, recvoffs, submap_type, &
+            comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect map with alltoallv')
+
+       call mpi_type_free(submap_type, ierr)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, map, submaps_recv, nmap)
@@ -634,17 +640,13 @@ CONTAINS
     real(dp), intent(inout) :: cc(nmap, nmap, nosubpix, nosubmaps)
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade, nmap0, col
     real(dp) :: buffer(nmap, nmap, nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads, submap_type
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
 
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, loccc, &
-            nmap*nmap*nosubpix_max*nolocmaps, MPI_DOUBLE_PRECISION, MPI_SUM, &
-            comm, ierr)
-       if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to collect cc with allreduce')
+       call sum_mpi(loccc)
        if (ndegrade == 1) then
           !$OMP PARALLEL DEFAULT(NONE) NUM_THREADS(nthreads) &
           !$OMP     PRIVATE(i, j, k, m, id_thread) &
@@ -738,12 +740,21 @@ CONTAINS
           end if
           !$OMP END PARALLEL
 
-          call mpi_alltoallv(submaps_send, sendcounts*nmap0*nosubpix, &
-               sendoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, &
-               submaps_recv, recvcounts*nmap0*nosubpix, &
-               recvoffs*nmap0*nosubpix, MPI_DOUBLE_PRECISION, comm, ierr)
+          ! Manipulate the auxiliary arrays in place rather than have
+          ! temporary arrays created
+
+          call mpi_type_contiguous( &
+               nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+          call mpi_type_commit(submap_type, ierr)
+
+          call mpi_alltoallv( &
+               submaps_send, sendcounts, sendoffs, submap_type, &
+               submaps_recv, recvcounts, recvoffs, submap_type, &
+               comm, ierr)
 
           if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect cc')
+
+          call mpi_type_free(submap_type, ierr)
 
           !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
           !$OMP     SHARED(nrecv_submap, submaps_recv_ind, cc, submaps_recv, &
@@ -797,15 +808,12 @@ CONTAINS
     integer :: i, j, k, m, n, mrecv, id_tod, id_map, ndegrade
     integer :: buffer(nosubpix)
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads, submap_type
 
     ndegrade = nosubpix_max / nosubpix
 
     if (allreduce) then
-       call mpi_allreduce(MPI_IN_PLACE, lochits, nosubpix_max*nolocmaps, &
-            MPI_INTEGER, MPI_SUM, comm, ierr)
-       if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to collect hits with allreduce')
+       call sum_mpi(lochits)
        m = 0
        k = 0
        if (ndegrade == 1) then
@@ -865,12 +873,21 @@ CONTAINS
        end if
        !$OMP END PARALLEL
 
-       call mpi_alltoallv(submaps_send, sendcounts*nosubpix, &
-            sendoffs*nosubpix, MPI_INTEGER, submaps_recv, &
-            recvcounts*nosubpix, recvoffs*nosubpix, MPI_INTEGER, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       call mpi_type_contiguous( &
+            nosubpix, MPI_INTEGER, submap_type, ierr)
+       call mpi_type_commit(submap_type, ierr)
+
+       call mpi_alltoallv( &
+            submaps_send, sendcounts, sendoffs, submap_type, &
+            submaps_recv, recvcounts, recvoffs, submap_type, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect hits with alltoallv')
+
+       call mpi_type_free(submap_type, ierr)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, hits, submaps_recv)
@@ -922,7 +939,7 @@ CONTAINS
     real(dp), intent(in) :: map(nmap, nosubpix, nosubmaps)
     integer :: i, j, k, m, msend, id_tod, id_map, ndegrade
     real(dp) :: buffer(nmap, nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads, submap_type
     real(dp), pointer :: submaps_send(:, :, :), submaps_recv(:, :, :)
     real(dp), allocatable :: recvbuf(:, :, :), sendbuf(:, :, :)
 
@@ -1017,13 +1034,21 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call mpi_alltoallv(submaps_recv, recvcounts*nmap*nosubpix, &
-            recvoffs*nmap*nosubpix, MPI_DOUBLE_PRECISION, &
-            submaps_send, sendcounts*nmap*nosubpix, sendoffs*nmap*nosubpix, &
-            MPI_DOUBLE_PRECISION, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       call mpi_type_contiguous( &
+            nmap * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+       call mpi_type_commit(submap_type, ierr)
+
+       call mpi_alltoallv( &
+            submaps_recv, recvcounts, recvoffs, submap_type, &
+            submaps_send, sendcounts, sendoffs, submap_type, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to scatter map with alltoallv')
+
+       call mpi_type_free(submap_type, ierr)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &
@@ -1085,7 +1110,7 @@ CONTAINS
     integer, intent(in) :: mask(nosubpix, nosubmaps)
     integer :: i, j, k, m, msend, id_tod, id_map, ndegrade
     integer :: buffer(nosubpix)
-    integer :: ierr, ind, id_thread, num_threads
+    integer :: ierr, id_thread, num_threads, submap_type
     integer, pointer :: submaps_send(:, :), submaps_recv(:, :)
     integer, allocatable :: recvbuf(:, :), sendbuf(:, :)
 
@@ -1179,12 +1204,21 @@ CONTAINS
        end do
        !$OMP END PARALLEL
 
-       call mpi_alltoallv(submaps_recv, recvcounts*nosubpix, &
-            recvoffs*nosubpix, MPI_INTEGER, submaps_send, sendcounts*nosubpix, &
-            sendoffs*nosubpix, MPI_INTEGER, comm, ierr)
+       ! Manipulate the auxiliary arrays in place rather than have
+       ! temporary arrays created
+
+       call mpi_type_contiguous( &
+            nosubpix, MPI_INTEGER, submap_type, ierr)
+       call mpi_type_commit(submap_type, ierr)
+
+       call mpi_alltoallv( &
+            submaps_recv, recvcounts, recvoffs, submap_type, &
+            submaps_send, sendcounts, sendoffs, submap_type, comm, ierr)
 
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to scatter mask with alltoallv')
+
+       call mpi_type_free(submap_type, ierr)
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &

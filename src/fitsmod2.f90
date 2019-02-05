@@ -504,12 +504,13 @@ contains
     type(fitshandle), intent(inout) :: handle
     character(len=*), intent(in) :: file
 
-    integer(i4b) :: stat
+    integer(i4b) :: stat, zeroff(2)
 
     stat=0
     call ftgiou(handle%lun,stat)
     call ftinit(handle%lun,trim(file),FITS_READWRITE,stat)
-    call ftphps(handle%lun,8,0,(/0,0/),stat)
+    zeroff = 0
+    call ftphps(handle%lun,8,0,zeroff,stat)
     call checkFitsErrors(stat)
     call replaceDate(handle%lun)
   end subroutine fits_create

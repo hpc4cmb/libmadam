@@ -92,7 +92,8 @@ CONTAINS
     character(len=SLEN) :: line
 
     nodetectors = ndet
-    allocate(detectors(nodetectors))
+    allocate(detectors(nodetectors), detflags(nodetectors), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for detectors')
 
     n = 1
     do while (detstring(n) /= C_NULL_CHAR)
@@ -128,7 +129,7 @@ CONTAINS
        if (nint == 0) nint = 1
        detectors(idet)%npsd = nint
        allocate(detectors(idet)%weights(nint), detectors(idet)%sigmas(nint), &
-            detectors(idet)%psdstarts(nint))
+            detectors(idet)%psdstarts(nint), detectors(idet)%plateaus(nint))
        detweight = detweights(idet)
        detectors(idet)%weights = detweight
        if (detweight > 0._dp) then
@@ -136,8 +137,8 @@ CONTAINS
        else
           detectors(idet)%sigmas = 0._dp
        end if
+       detectors(idet)%plateaus = detectors(idet)%sigmas ** 2 / fsample
        detectors(idet)%psdstarts = 0._dp
-       detectors(idet)%kpolar = (nmap /= 1)
 
        ! Then the noise PSDs
 
@@ -199,8 +200,6 @@ CONTAINS
     select case (key)
     case ('info')
        read(value, *, iostat=ierr) info
-    case ('runfile')
-       file_simulation = trim(value)
     case ('nthreads')
        read(value, *, iostat=ierr) nthreads
     case ('nsubchunk')
@@ -255,8 +254,6 @@ CONTAINS
     case ('basis_order')
        read(value, *, iostat=ierr) basis_order
        if (basis_order < 0) call abort_mpi('basis order must be nonnegative')
-    case ('filter_mean')
-       read(value, *, iostat=ierr) filter_mean
     case ('iter_min')
        read(value, *, iostat=ierr) iter_min
     case ('iter_max')
@@ -293,12 +290,14 @@ CONTAINS
        read(value, *, iostat=ierr) kfilter
     case ('diagfilter')
        read(value, *, iostat=ierr) diagfilter
-    case ('precond_width')
-       read(value, *, iostat=ierr) precond_width
-    case ('filter_time')
-       read(value, *, iostat=ierr) filter_time
-    case ('tail_time')
-       read(value, *, iostat=ierr) tail_time
+    case ('precond_width_min')
+       read(value, *, iostat=ierr) precond_width_min
+    case ('precond_width_max')
+       read(value, *, iostat=ierr) precond_width_max
+    case ('use_fprecond')
+       read(value, *, iostat=ierr) use_fprecond
+    case ('use_cgprecond')
+       read(value, *, iostat=ierr) use_cgprecond
     case ('rm_monopole')
        read(value, *, iostat=ierr) rm_monopole
 
@@ -337,19 +336,11 @@ CONTAINS
        file_spectrum = trim(value)
     case ('file_gap')
        file_gap = trim(value)
-    case ('file_fpdb_supplement')
-       file_fpdb_supplement = trim(value)
     case('binary_output')
        read(value, *, iostat=ierr) binary_output
     case('nwrite_binary')
        read(value, *, iostat=ierr) nwrite_binary
     !NCVM
-    case ('bfinvert')
-       read(value, *, iostat=ierr) bfinvert
-    case ('lag_max')
-       read(value, *, iostat=ierr) lag_max
-    case ('lag_overlap')
-       read(value, *, iostat=ierr) lag_overlap
     case ('file_covmat')
        file_covmat = trim(value)
 
@@ -380,7 +371,7 @@ CONTAINS
   subroutine parse_detset(line, nopol)
     character(len=*) :: line
     logical, optional :: nopol
-    integer(i4b) :: i, ndet
+    integer(i4b) :: i, ndet, ierr
     character(len=SLEN) :: detname
 
     i = index(line, ':')
@@ -388,11 +379,18 @@ CONTAINS
          'Failed to parse: ' // trim(line) // ' for valid detector set name')
 
     ndetset = ndetset + 1
-    if (ndetset > NDETSETMAX) call abort_mpi(&
-         'Number of detector sets exceeds NDETSETMAX')
+    if (ndetset > NDETSETMAX) then
+       call abort_mpi('Number of detector sets exceeds NDETSETMAX')
+    end if
     detsets(ndetset)%name = trim(adjustl(line(:i-1)))
-    if (len(trim(detsets(ndetset)%name)) == 0) &
-         call abort_mpi('Empty detset name')
+    if (len(trim(detsets(ndetset)%name)) == 0) then
+       call abort_mpi('Empty detset name')
+    end if
+
+    if (.not. allocated(detsets(ndetset)%detectors)) then
+       allocate(detsets(ndetset)%detectors(NDETMAX), stat=ierr)
+       if (ierr /= 0) call abort_mpi('No room for detector set')
+    end if
 
     line = trim(adjustl(line(i+1:)))
 
@@ -400,6 +398,9 @@ CONTAINS
     do
        i = index(line, ',')
        ndet = ndet + 1
+       if (ndet > NDETMAX) then
+          call abort_mpi('Number of detectors in set exceeds NDETMAX')
+       end if
        if (i /= 0) then
           detname = trim(adjustl(line(:i-1)))
           line = trim(adjustl(line(i+1:)))
@@ -411,6 +412,7 @@ CONTAINS
           ! allow user to name the full detector set
           detsets(0)%name = detsets(ndetset)%name
           ndetset = ndetset - 1
+          deallocate(detsets(ndetset)%detectors)
           return
        end if
 

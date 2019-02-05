@@ -34,7 +34,10 @@ MODULE mpi_wrappers
           sum_mpi_cmplx, &
           sum_mpi_vec_int, &
           sum_mpi_vec_long, &
-          sum_mpi_vec_double
+          sum_mpi_vec_double, &
+          sum_mpi_map_double, &
+          sum_mpi_matrix_double, &
+          sum_mpi_vec_logical
   end interface
 
   interface min_mpi
@@ -124,10 +127,10 @@ CONTAINS
        write (*,*) ' Madam fatal error'
     end if
     write (*,*) ''
-    
+
     call mpi_abort(comm, -1, rc)
     if (rc /= 0) stop 'Even MPI_abort failed ...'
-    
+
   end subroutine abort_mpi
   ! RK edit ends
 
@@ -135,11 +138,11 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE init_mpi( comm_in, ntasks_out, id_out )
+  SUBROUTINE init_mpi(comm_in, ntasks_out, id_out)
 
-    integer,intent(in) :: comm_in
-    integer,intent(out) :: ntasks_out, id_out
-    integer :: required, provided
+    integer, intent(in) :: comm_in
+    integer, intent(out) :: ntasks_out, id_out
+    !integer :: required, provided
 
     comm = comm_in
 
@@ -149,8 +152,8 @@ CONTAINS
     !call mpi_init_thread(required, provided, rc)
     !if ( rc /= 0 ) stop 'MPI_init failed'
 
-    call mpi_comm_size(comm,ntasks,rc)
-    call mpi_comm_rank(comm,id_task,rc)
+    call mpi_comm_size(comm, ntasks, rc)
+    call mpi_comm_rank(comm, id_task, rc)
 
     !if ( provided < required .and. id_task == 0 ) &
     !     print *,'WARNING: MPI environment did not provide thread support'
@@ -251,19 +254,19 @@ CONTAINS
 
   ! RK additions
 
-  SUBROUTINE sum_mpi_vec_int(ivec, n)
+  SUBROUTINE sum_mpi_vec_int(ivec)
 
     integer, intent(inout) :: ivec(:)
-    integer, intent(in) :: n
     integer, allocatable :: itemp(:)
-    integer :: ierr
+    integer :: ierr, n
+
+    n = size(ivec)
 
     allocate(itemp(n), stat=ierr)
     if (ierr /= 0) call abort_mpi('sum_mpi_vec_int failed to allocate.')
 
-    call mpi_allreduce(ivec, itemp, n, mpi_integer, mpi_sum,  &
-         comm, rc)
-         
+    call mpi_allreduce(ivec, itemp, n, mpi_integer, mpi_sum, comm, rc)
+
     ivec = itemp
 
     deallocate(itemp)
@@ -271,44 +274,109 @@ CONTAINS
   END SUBROUTINE sum_mpi_vec_int
 
 
-  SUBROUTINE sum_mpi_vec_long(ivec, n)
+  SUBROUTINE sum_mpi_vec_long(lvec)
 
-    integer(idp), intent(inout) :: ivec(:)
-    integer, intent(in) :: n
-    integer(idp), allocatable :: itemp(:)
-    integer :: ierr
+    integer(idp), intent(inout) :: lvec(:)
+    integer(idp), allocatable :: ltemp(:)
+    integer :: ierr, n
 
-    allocate(itemp(n), stat=ierr)
-    if (ierr /= 0) call abort_mpi('sum_mpi_vec_int failed to allocate.')
+    n = size(lvec)
 
-    call mpi_allreduce(ivec, itemp, n, mpi_integer8, mpi_sum, &
-         comm, rc)
-         
-    ivec = itemp
+    allocate(ltemp(n), stat=ierr)
+    if (ierr /= 0) call abort_mpi('sum_mpi_vec_long failed to allocate.')
 
-    deallocate(itemp)
+    call mpi_allreduce(lvec, ltemp, n, mpi_integer8, mpi_sum, comm, rc)
+
+    lvec = ltemp
+
+    deallocate(ltemp)
 
   END SUBROUTINE sum_mpi_vec_long
 
 
-  SUBROUTINE sum_mpi_vec_double(dvec, n)
+  SUBROUTINE sum_mpi_vec_double(dvec)
 
     real(dp), intent(inout) :: dvec(:)
-    integer, intent(in) :: n
     real(dp), allocatable :: dtemp(:)
-    integer :: ierr
+    integer :: ierr, n
+
+    n = size(dvec)
 
     allocate(dtemp(n), stat=ierr)
-    if (ierr /= 0) call abort_mpi('sum_mpi_vec_int failed to allocate.')
+    if (ierr /= 0) call abort_mpi('sum_mpi_vec_double failed to allocate.')
 
-    call mpi_allreduce(dvec, dtemp, n, MPI_DOUBLE_PRECISION, mpi_sum, &
-         comm, rc)
-         
+    call mpi_allreduce(dvec, dtemp, n, MPI_DOUBLE_PRECISION, mpi_sum, comm, rc)
+
     dvec = dtemp
 
     deallocate(dtemp)
 
   END SUBROUTINE sum_mpi_vec_double
+
+
+  SUBROUTINE sum_mpi_map_double(dmap)
+
+    real(dp), intent(inout) :: dmap(:, :)
+    real(dp), allocatable :: dtemp(:, :)
+    integer :: ierr, nmap, npix
+
+    nmap = size(dmap, 1)
+    npix = size(dmap, 2)
+
+    allocate(dtemp(nmap, npix), stat=ierr)
+    if (ierr /= 0) call abort_mpi('sum_mpi_map_double failed to allocate.')
+
+    call mpi_allreduce(dmap, dtemp, nmap * npix, MPI_DOUBLE_PRECISION, &
+         mpi_sum, comm, rc)
+
+    dmap = dtemp
+
+    deallocate(dtemp)
+
+  END SUBROUTINE sum_mpi_map_double
+
+
+  SUBROUTINE sum_mpi_matrix_double(dmatrix)
+
+    real(dp), intent(inout) :: dmatrix(:, :, :)
+    real(dp), allocatable :: dtemp(:, :, :)
+    integer :: ierr, nmap1, nmap2, npix
+
+    nmap1 = size(dmatrix, 1)
+    nmap2 = size(dmatrix, 2)
+    npix = size(dmatrix, 3)
+
+    allocate(dtemp(nmap1, nmap2, npix), stat=ierr)
+    if (ierr /= 0) call abort_mpi('sum_mpi_matrix_double failed to allocate.')
+
+    call mpi_allreduce(dmatrix, dtemp, nmap1 * nmap2 * npix, &
+         MPI_DOUBLE_PRECISION, mpi_sum, comm, rc)
+
+    dmatrix = dtemp
+
+    deallocate(dtemp)
+
+  END SUBROUTINE sum_mpi_matrix_double
+
+
+  SUBROUTINE sum_mpi_vec_logical(bvec)
+
+    logical, intent(inout) :: bvec(:)
+    logical, allocatable :: btemp(:)
+    integer :: ierr, n
+
+    n = size(bvec)
+
+    allocate(btemp(n), stat=ierr)
+    if (ierr /= 0) call abort_mpi('sum_mpi_vec_logical failed to allocate.')
+
+    call mpi_allreduce(bvec, btemp, n, MPI_LOGICAL, MPI_LOR, comm, rc)
+
+    bvec = btemp
+
+    deallocate(btemp)
+
+  END SUBROUTINE sum_mpi_vec_logical
 
 
   !-------------------------------------------------------------------------
@@ -994,7 +1062,7 @@ CONTAINS
   !
   !  Interface collect_mpi
   !
-  !  Sum the input array over all processes 
+  !  Sum the input array over all processes
   !  and store the result into another array.
 
   SUBROUTINE collect_mpi_int(ibuffer,isum,n,id)

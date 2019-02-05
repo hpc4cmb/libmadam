@@ -16,7 +16,7 @@ MODULE read_data
   implicit none
   private
 
-  real(sp), public :: cputime_read_tod=0, cputime_read_detpointing=0, &
+  real(dp), public :: cputime_read_tod=0, cputime_read_detpointing=0, &
        cputime_read_timestamps=0, cputime_postprocess_tod, memory_sat=0, &
        cputime_read_pointing_periods=0
 
@@ -92,8 +92,7 @@ CONTAINS
     integer, intent(out) :: mask(nosubpix_cross, nosubmaps)
     integer :: idr, i, m, n, isubmap, id_recv, nside_inmask, nosubpix_inmask
     integer(idp) :: offset
-    integer, allocatable :: ibuffer(:)
-    logical :: ringflag
+    real(sp), allocatable :: fbuffer(:)
     character(len=80) :: ordering
     type(fitshandle) :: infile
 
@@ -109,9 +108,7 @@ CONTAINS
        call fits_get_key(infile, 'ORDERING', ordering)
 
        if (ordering == 'NESTED') then
-          ringflag = .false.
        elseif (ordering == 'RING') then
-          ringflag = .true.
           write(*,idf) ID,'Error in subroutine Read_inmask.'
           write(*,idf) ID,'Input mask should be in NESTED ordering.'
           call exit_with_status(1)
@@ -133,65 +130,57 @@ CONTAINS
              write(*,'(a,i8)') ' Mask downgraded to resolution nside =', &
                   nside_cross
           end if
-       endif
-
-    endif
+       end if
+    end if
 
     call broadcast_mpi(nside_inmask, idr)
 
     ! up/downgrade
-    if (nside_cross.ge.nside_inmask) then
+    if (nside_cross >= nside_inmask) then
        n = (nside_cross/nside_inmask)**2
     elseif (nside_cross < nside_inmask) then
        n = (nside_inmask/nside_cross)**2
     end if
 
     nosubpix_inmask = (nside_inmask/nside_submap)**2
-    allocate(ibuffer(nosubpix_inmask))
+    allocate(fbuffer(nosubpix_inmask))
 
     offset = 0
     m = 0
     do isubmap = 0, nosubmaps_tot-1
-
        if (id == idr) then
-          call fits_read_column(infile, 1, ibuffer, offset)
-          offset = offset+nosubpix_inmask
+          call fits_read_column(infile, 1, fbuffer, offset)
+          offset = offset + nosubpix_inmask
        endif
 
        id_recv = id_submap(isubmap)
-       call send_mpi(ibuffer, nosubpix_inmask, idr, id_recv)
+       call send_mpi(fbuffer, nosubpix_inmask, idr, id_recv)
 
        if (id == id_recv) then
-
-          m = m+1
+          m = m + 1
           if (nside_cross >= nside_inmask) then
-
              do i = 1, nosubpix_inmask
-                if (ibuffer(i) > 0) then
-                   mask((i-1)*n+1:i*n, m) = 1
-                else
+                if (fbuffer(i) < 0.5) then
                    mask((i-1)*n+1:i*n, m) = 0
+                else
+                   mask((i-1)*n+1:i*n, m) = 1
                 end if
              end do
           else
-
              do i = 1, nosubpix_cross
-                if (any(ibuffer((i-1)*n+1:i*n).le.0)) then
+                if (any(fbuffer((i-1)*n+1:i*n) < 0.5)) then
                    mask(i, m) = 0
                 else
                    mask(i, m) = 1
                 end if
              end do
-
           end if
-
-       endif
-
-    enddo
+       end if
+    end do
 
     if (id == idr) call fits_close(infile)
 
-    deallocate(ibuffer)
+    deallocate(fbuffer)
 
     n = count(mask == 0)
     call sum_mpi(n)
@@ -217,9 +206,11 @@ CONTAINS
     integer(c_long), intent(in) :: periods(nperiod)
     integer(c_long), intent(in) :: nsamp
 
-    integer :: ierr, iperiod, idet
-    integer(i8b) :: ninterval_max, n, len, i, ngood, nflag, nzeroweight
-    character(len=256) :: name
+    integer :: ierr, iperiod, idet, nbad_interval, nbad
+    integer(i8b) :: ninterval_max, len, i, ngood, nflag, nzeroweight, &
+         istart, istop
+    real(dp), parameter :: fraclim = 1e-3
+    real(dp) :: frac
 
     if (id == 0 .and. info > 1) write (*,'(/,a,/)') 'Examining periods'
 
@@ -255,11 +246,38 @@ CONTAINS
           if (all(weights(:, i, idet) == 0) .and. &
                .not. pixels(i, idet) < 0) then
              nzeroweight = nzeroweight + 1
-             pixels(i,idet) = -1
+             pixels(i, idet) = -1
           end if
        end do
     end do
     call sum_mpi(nzeroweight)
+
+    ! Flag periods that are nearly completely flagged
+    istart = 1
+    nbad_interval = 0
+    nbad = 0
+    do iperiod = 1, nperiod
+       istop = istart + intervals(iperiod) - 1
+       do idet = 1, nodetectors
+          ngood = count(pixels(istart:istop, idet) >= 0)
+          if (ngood == 0) cycle
+          frac = dble(ngood) / intervals(iperiod)
+          if (frac < fraclim) then
+             pixels(istart:istop, idet) = -1
+             nbad_interval = nbad_interval + 1
+             nbad = nbad + ngood
+          end if
+       end do
+       istart = istop + 1
+    end do
+    call sum_mpi(nbad_interval)
+    call sum_mpi(nbad)
+    if (id == 0 .and. info > 0) then
+       write (*, '(a,i0,a,i0,a,f6.3,a)') &
+            'Flagged ', nbad, ' samples on ', nbad_interval, &
+            ' periods that had less than ', fraclim * 100, &
+            '% of unflagged samples'
+    end if
 
     ngood = 0
     nflag = 0

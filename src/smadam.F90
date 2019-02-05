@@ -30,7 +30,7 @@ module smadam
 
   integer :: idet
 
-  real(sp) :: cputime_init=.0, cputime_final=.0, cputime_total=.0, &
+  real(dp) :: cputime_init=.0, cputime_final=.0, cputime_total=.0, &
        cputime_wait=.0, cputime_read=.0
 
   real(dp), pointer :: temparr(:, :)=>null()
@@ -49,14 +49,15 @@ module smadam
   ! openmp
   integer :: nprocs
 
-  integer(i4b) :: subchunk_start, i
+  integer(i8b) :: i
+  integer(i2b) :: subchunk_start
   character(len=SLEN) :: subchunk_file_map, subchunk_file_base
   character(len=SLEN) :: subchunk_file_binmap
   character(len=SLEN) :: subchunk_file_hit, subchunk_file_mask
   character(len=SLEN) :: subchunk_file_matrix, subchunk_file_leakmatrix
   character(len=SLEN) :: subchunk_file_wcov
   ! subset mapping
-  real(sp) :: cputime_flag_subset=.0, cputime_subset=.0, cputime_write_subset=.0
+  real(dp) :: cputime_flag_subset=.0, cputime_subset=.0, cputime_write_subset=.0
 
 contains
 
@@ -99,7 +100,9 @@ contains
     integer(c_long), intent(in), value :: npsdval
     real(c_double), intent(in) :: psdvals(npsdval)
 
-    integer :: ierr, idet, i, pixmin, pixmax, subchunkcounter
+    integer :: idet
+    integer(i2b) :: subchunkcounter
+    integer(i8b) :: pixmin, pixmax
 
     ! set up MPI
 
@@ -113,7 +116,7 @@ contains
 
     if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
-            " threads per task.")') ntasks, nprocs, nthreads
+            & " threads per task.")') ntasks, nprocs, nthreads
     end if
 
     call reset_time()
@@ -128,7 +131,7 @@ contains
        write (*,*) 'Destriping of CMB data with a noise filter'
        write (*,*) 'Version ',version
        write (*,*)
-    endif
+    end if
 
     if (mcmode .and. cached) &
          call abort_mpi('Destripe called while caches are not empty.')
@@ -136,8 +139,9 @@ contains
          call abort_mpi('MCMode is not compatible with nsubchunk > 1.')
     if (temperature_only .and. nnz /= 1) &
          call abort_mpi('temperature_only=T but pointing weights are polarized')
+    if (ndet > NDETMAX) call abort_mpi('ndet > NDETMAX')
 
-    nmap = nnz
+    nmap = int(nnz, i4b)
 
     call read_detectors(detstring, ndet, detweights, npsd, npsdtot, &
          psdstarts, npsdbin, psdfreqs, npsdval, psdvals)
@@ -187,7 +191,7 @@ contains
 
     loop_subchunk : do subchunkcounter = subchunk_start, nsubchunk
        ! isubchunk == 0 means full data and it is the last set to run
-       isubchunk = modulo(subchunkcounter + 1, nsubchunk + 1)
+       isubchunk = modulo(subchunkcounter + 1_i2b, nsubchunk + 1_i2b)
 
        subchunk_file_map = file_map
        subchunk_file_binmap = file_binmap
@@ -205,7 +209,7 @@ contains
        if (nsubchunk > 1) then
           if (id == 0 .and. info > 0) then
              write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
-          endif
+          end if
           call add_subchunk_id(file_map, isubchunk, nsubchunk)
           call add_subchunk_id(file_hit, isubchunk, nsubchunk)
           call add_subchunk_id(file_mask, isubchunk, nsubchunk)
@@ -321,15 +325,15 @@ contains
           if (id == 0 .and. info > 0) then
              write(*,*)
              write(*,*) 'Destriping TOD'
-          endif
+          end if
           call time_stamp
 
           if (use_inmask) then
-             if (subchunkcounter == subchunk_start) then
-                call tic
-                call read_inmask(inmask)
-                if (id == 0) call toc('read_inmask')
-             end if
+             ! Must read the mask for every subchunk
+             ! because the ksubmap table may change
+             call tic
+             call read_inmask(inmask)
+             if (id == 0) call toc('read_inmask')
              call tic
              call scatter_mask(inmask, nosubpix_cross)
              if (id == 0) call toc('scatter_mask')
@@ -345,7 +349,7 @@ contains
 
           if (basis_order == 0) then
              call tic
-             call construct_preconditioner(nna(0, 0, :, :))
+             call construct_preconditioner(nna)
              if (id == 0) call toc('construct_preconditioner')
           end if
 
@@ -358,7 +362,7 @@ contains
           else
 
              call tic
-             call iterate_a(aa, yba, nna, wamap, cca, tod)
+             call iterate_a(aa, yba, nna, wamap, cca)
              if (id == 0) call toc('iterate_a')
 
              call tic
@@ -367,14 +371,14 @@ contains
 
           end if
 
-       endif
+       end if
 
        call wait_mpi
        if (id == 0 .and. info > 0) then
           write(*,*)
           write(*,*) 'Finalization begins'
           if (info > 1) write(*,*)
-       endif
+       end if
        call time_stamp
        call reset_time(1)
 
@@ -451,20 +455,20 @@ contains
           if (id == 0) write(*,*)
           if (id == 0) write(*,*) 'MEMORY (MB):'
 
-          call write_memory('Detector pointing',  memory_pointing)
-          call write_memory('TOD buffer',         memory_tod)
-          call write_memory('Maps',               memory_maps)
-          call write_memory('Baselines',          memory_baselines)
-          call write_memory('Basis functions',    memory_basis_functions)
-          call write_memory('Noise filter',       memory_filter)
-          call write_memory('Preconditioner',     memory_precond)
-          call write_memory('Submap table',       memory_ksubmap)
-          call write_memory('Temporary maps',     memory_locmap)
-          call write_memory('All2All buffers',    memory_all2all)
-          call write_memory('CG work space',      memory_cg)
+          call write_memory('Detector pointing', memory_pointing)
+          call write_memory('TOD buffer', memory_tod)
+          call write_memory('Maps', memory_maps)
+          call write_memory('Baselines', memory_baselines)
+          call write_memory('Basis functions', memory_basis_functions)
+          call write_memory('Noise filter', memory_filter)
+          call write_memory('Preconditioner', memory_precond)
+          call write_memory('Submap table', memory_ksubmap)
+          call write_memory('Temporary maps', memory_locmap)
+          call write_memory('All2All buffers', memory_all2all)
+          call write_memory('CG work space', memory_cg)
           call write_memory('NCM', memory_ncm)
           call write_memory('Total')
-       endif
+       end if
 
        ! Timing
 
@@ -529,7 +533,7 @@ contains
 
           call write_time('Total', cputime_total)
           if (id == 0 .and. info > 0) write(*,*)
-       endif
+       end if
 
        file_map = subchunk_file_map
        file_binmap = subchunk_file_binmap
@@ -551,20 +555,20 @@ contains
     call reset_timers
 
     if (.not. mcmode) then
-
-       if (allocated(intervals)) &
-            deallocate(intervals, noba_short_pp)
+       if (allocated(intervals)) deallocate(intervals, noba_short_pp)
        if (allocated(baselines_short)) deallocate(baselines_short)
        if (allocated(baselines_short_start)) &
             deallocate(baselines_short_start, baselines_short_stop)
-       if (allocated(prec_diag)) deallocate(prec_diag)
-       if (allocated(bandprec)) deallocate(bandprec)
-
        call close_filter()
        call close_output()
        call close_pointing()
        call free_mask()
        call free_tod()
+       do i = 1, ndetset
+          if (allocated(detsets(i)%detectors)) then
+             deallocate(detsets(i)%detectors)
+          end if
+       end do
     end if
 
     call close_mpi()
@@ -592,7 +596,8 @@ contains
     type(c_ptr), intent(in), value :: pixweights
     type(c_ptr), intent(in), value :: signal
 
-    integer :: ierr, idet, i, pixmin, pixmax, n
+    integer :: n
+    integer(i8b) :: i
 
     ! set up MPI
 
@@ -605,7 +610,7 @@ contains
     nthreads = nthreads_max
     if (id == 0 .and. info > 0) then
        write (*,'("OMP: ",i0," tasks with ",i0," procs per node, ",i0, &
-            " threads per task.")') ntasks, nprocs, nthreads
+            & " threads per task.")') ntasks, nprocs, nthreads
     end if
 
     call reset_time()
@@ -616,7 +621,7 @@ contains
        write (*,*) 'Destriping of CMB data with a noise filter'
        write (*,*) 'Version ',version
        write (*,*)
-    endif
+    end if
 
     if (.not. cached) &
          call abort_mpi('destripe_with_cache called with empty caches.')
@@ -638,7 +643,7 @@ contains
        path_output = trim(adjustl(path_output))
     end if
 
-    nmap = nnz
+    nmap = int(nnz, i4b)
 
     call c_f_pointer(timestamps, sampletime, (/nsamp/))
     call c_f_pointer(pix, pixels, (/nsamp, ndet/))
@@ -661,7 +666,7 @@ contains
     if (nsubchunk > 1) then
        if (id == 0 .and. info > 0) then
           write (*,'(/," ********** SUBCHUNK == ",i0,/)') isubchunk
-       endif
+       end if
        call add_subchunk_id(file_map, isubchunk, nsubchunk)
        call add_subchunk_id(file_hit, isubchunk, nsubchunk)
        call add_subchunk_id(file_mask, isubchunk, nsubchunk)
@@ -684,8 +689,8 @@ contains
     call wait_mpi
 
     if (kfirst) then
-       aa = 0.0
-       yba = 0.0
+       aa = 0
+       yba = 0
        nna = 0
        nna_inv = 0
     end if
@@ -743,7 +748,7 @@ contains
        if (id == 0 .and. info > 0) then
           write(*,*)
           write(*,*) 'First destriping phase'
-       endif
+       end if
        call time_stamp
 
        call tic
@@ -751,21 +756,21 @@ contains
        if (id == 0) call toc('initialize_a')
 
        call tic
-       call iterate_a(aa, yba, nna, wamap, cca, tod)
+       call iterate_a(aa, yba, nna, wamap, cca)
        if (id == 0) call toc('iterate_a')
 
        call tic
        call subtract_baselines_a(map, aa)
        if (id == 0) call toc('subtract_baselines_a')
 
-    endif
+    end if
 
     call wait_mpi
     if (id == 0 .and. info > 0) then
        write(*,*)
        write(*,*) 'Finalization begins'
        if (info > 1) write(*,*)
-    endif
+    end if
     call time_stamp
     call reset_time(1)
 
@@ -823,7 +828,7 @@ contains
        call write_memory('CG work space',      memory_cg)
        call write_memory('NCM', memory_ncm)
        call write_memory('Total')
-    endif
+    end if
 
     ! Timing
 
@@ -877,7 +882,7 @@ contains
        call write_time('Total', cputime_total)
        if (id == 0) write(*,*)
 
-    endif
+    end if
 
     file_map = subchunk_file_map
     file_binmap = subchunk_file_binmap
@@ -906,13 +911,16 @@ contains
     call free_maps
     call free_locmaps
 
-    if (allocated(intervals)) &
-         deallocate(intervals, noba_short_pp)
+    if (allocated(intervals)) deallocate(intervals, noba_short_pp)
     if (allocated(baselines_short)) deallocate(baselines_short)
     if (allocated(baselines_short_start)) &
          deallocate(baselines_short_start, baselines_short_stop)
-    if (allocated(prec_diag)) deallocate(prec_diag)
-    if (allocated(bandprec)) deallocate(bandprec)
+
+    do i = 1, ndetset
+       if (allocated(detsets(i)%detectors)) then
+          deallocate(detsets(i)%detectors)
+       end if
+    end do
 
     call close_filter()
     call close_output()
@@ -929,9 +937,9 @@ contains
 
     type(detset_type) :: detset
     type(survey_type) :: survey
-    integer(i8b) :: nhit_det, nhit_survey
+    integer(i8b) :: nhit_det, nhit_survey, i
     integer :: idetset, idet, jdet, isurvey
-    integer :: i, j, nmap_save, ncc_save
+    integer :: j, nmap_save, ncc_save
     logical :: do_binmap_save, kfirst_save, temperature_only_save
     logical :: concatenate_messages_save
     character(len=SLEN) :: file_binmap_save, file_hit_save

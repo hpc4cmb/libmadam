@@ -4,9 +4,10 @@ MODULE parameter_control
 
   use commonparam
   use mpi_wrappers
-  use noise_routines, only : interpolate_psd
+  use noise_routines, only : interpolate_psd, measure_noise_weights
   use pointing, only : subchunk
-  use maps_and_baselines, only : memory_baselines, memory_maps
+  use maps_and_baselines, only : memory_baselines, memory_maps, &
+       memory_basis_functions
 
   implicit none
   private
@@ -14,9 +15,8 @@ MODULE parameter_control
   public init_parameters, init_parallelization, start_timeloop, &
        write_parameters, baseline_times
 
-  real(sp), save, public :: memory_basis_functions = 0
-  character(len=40), parameter :: mstr='(x,a,t32,f9.1," MB")'
-  character(len=40), parameter :: mstr3='(x,a,t32,3(f9.1," MB"))'
+  character(len=40), parameter :: mstr='(1x,a,t32,f9.1," MB")'
+  character(len=40), parameter :: mstr3='(1x,a,t32,3(f9.1," MB"))'
 
 CONTAINS
 
@@ -29,21 +29,12 @@ CONTAINS
     ! enabled by default and looping over pointing, time and buffer
     ! are disabled
 
-    integer(i4b) :: nodets_per_point, nodet_pol, idet, ipoint, ndet, i, m, n
-    integer(i4b) :: nleft, ns, ierr
-    real(i8b) :: weight
+    integer(i4b) :: idet, i, n, ierr, idet1, idet2, horn1, horn2, ipsd
     logical :: use_all_data
-    integer(i4b) :: idet1, idet2, horn1, horn2
     character(len=SLEN) :: subsetname
-
     real(dp), allocatable :: weights(:)
+    real(dp) :: psdmax
 
-    ! noise weighting parameters
-    real(dp) :: sigma, rms, fbase, psdmin, psdmax
-    integer(i8b) :: nn, ipsd
-
-    integer (i8b) :: nbin
-    real(dp), allocatable :: freqs(:), data(:)
     real(dp), pointer :: psd(:)
 
     ! Make sure path_output contains the separator
@@ -112,59 +103,12 @@ CONTAINS
     end if
 
     if (noise_weights_from_psd) then
-
        ! Improve noise weighting in case we have full PSDs from TOAST
-
        if (id == 0 .and. info > 0) then
           write (*,*) 'Adjusting noise weights using noise spectra '
        end if
-
-       if (radiometers) then
-
-          ! well-behaved PSD, just get the last PSD bin value
-
-          nbin = 1
-          allocate(freqs(nbin), data(nbin))
-          freqs = fsample / 2
-
-          do idet = 1, nodetectors
-             do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd(detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:,ipsd), freqs, data)
-                rms = sqrt(data(1) * fsample)
-                detectors(idet)%sigmas(ipsd) = rms
-             end do
-          end do
-
-          deallocate(freqs, data)
-
-       else
-
-          ! Measure the plateau value, VERY Planck Specific but will work
-          ! for white noise filters
-
-          nbin = 1000
-          allocate(freqs(nbin), data(nbin))
-          freqs = (/ (1 + dble(i*10)/nbin, i=0, nbin-1) /)
-
-          do idet = 1, nodetectors
-             do ipsd = 1, detectors(idet)%npsd
-                call interpolate_psd(detectors(idet)%psdfreqs, &
-                     detectors(idet)%psds(:, ipsd), freqs, data)
-                rms = sqrt(minval(data) * fsample)
-                detectors(idet)%sigmas(ipsd) = rms
-             end do
-          end do
-
-          deallocate(freqs, data)
-
-       end if
-
+       call measure_noise_weights(radiometers)
     end if
-
-    ! Check for FPDB supplement
-
-    if (len_trim(file_fpdb_supplement) > 0) call parse_fpdb_supplement()
 
     ! Checkings
 
@@ -184,7 +128,6 @@ CONTAINS
     if (kwrite_covmat) then
        kfilter = .true.
        kfirst = .true.
-       filter_mean = .true.
     end if
 
     if (nthreads > nthreads_max) nthreads = nthreads_max
@@ -215,16 +158,8 @@ CONTAINS
 
     use_inmask = (len_trim(file_inmask).gt.0)
 
-    if (force_pol) detectors%kpolar = .true.
-
-    ! Polarized/unpolarized case
-    nodet_pol = count(detectors%kpolar)
-
-    if (nodet_pol == 0 .or. nmap == 1) then
-
+    if (nmap == 1) then
        if (id == 0 .and. info > 0) then
-          if (nodet_pol == 0) &
-               write(*,*) 'Only unpolarized detectors.'
           if (nmap == 1) &
                write(*,*) 'Only unpolarized detector weights.'
           write(*,*) '  Will produce only temperature map'
@@ -263,7 +198,7 @@ CONTAINS
           where (detectors(idet)%sigmas == 0)
              detectors(idet)%weights = 0
           elsewhere
-             detectors(idet)%weights = 1.d0 / detectors(idet)%sigmas**2
+             detectors(idet)%weights = 1.d0 / detectors(idet)%plateaus / fsample
           end where
        end do
 
@@ -288,19 +223,21 @@ CONTAINS
 
                 allocate(weights(detectors(idet1)%npsd))
 
-                where (detectors(idet1)%sigmas == 0 &
-                     .or. detectors(idet2)%sigmas == 0)
+                where (detectors(idet1)%plateaus == 0 &
+                     .or. detectors(idet2)%plateaus == 0)
                    weights = 0
                 elsewhere
-                   weights = 2 / (detectors(idet1)%sigmas**2 &
-                        + detectors(idet2)%sigmas**2)
+                   weights = 2 / (detectors(idet1)%plateaus &
+                        + detectors(idet2)%plateaus) / fsample
                 end where
-                detectors(idet1)%weights = weights
-                detectors(idet2)%weights = weights
-                if (id == 0) write (*,'(a,es15.6,a)') &
+                if (id == 0) write (*,'(a,g13.5,a,g13.5,a,g13.5)') &
                      'Assigning horn weight, ', weights(1), ', to ' // &
                      trim(detectors(idet1)%name) // ' and ' // &
-                     trim(detectors(idet2)%name)  // ' for the FIRST period'
+                     trim(detectors(idet2)%name)  // ' for the FIRST period' &
+                     // '. Original weights were ', detectors(idet1)%weights(1), &
+                     ' and ', detectors(idet2)%weights(1)
+                detectors(idet1)%weights = weights
+                detectors(idet2)%weights = weights
 
                 deallocate(weights)
              end if
@@ -336,8 +273,11 @@ CONTAINS
     if (.not. kfirst) then
        dnshort = 1e6
        nshort = int(dnshort  +.5)
-       precond_width = 0
+       precond_width_min = 0
+       precond_width_max = 0
        kfilter = .false.
+    else
+       precond_width_max = max(precond_width_min, precond_width_max)
     end if
 
     ! Data divided by pointing periods
@@ -364,6 +304,7 @@ CONTAINS
        endif
        noba_short_pp(i) = (intervals(i)-1) / dnshort + 1
     end do
+    noba_short = sum(noba_short_pp)
 
     ! Resolution
     nosubpix_max = nside_max**2 / nside_submap**2
@@ -375,13 +316,6 @@ CONTAINS
        concatenate_messages = .false.
        reassign_submaps = .true.
     end if
-
-    ! covmat specific checks
-    if (kwrite_covmat) then
-       ! ensure that the baseline correlation is evaluated far enough
-       filter_time = 48.*3600
-    end if
-
 
     if (checknan) then
        do idet = 1,nodetectors
@@ -397,88 +331,6 @@ CONTAINS
 
 
   CONTAINS
-
-
-    subroutine parse_fpdb_supplement()
-      !
-      ! file_fpdb_supplement is used to override information from TOAST
-      !
-      character(len=200) :: line, name, key
-      integer :: iend, nline, iline, i, i2, ifield, idet, ierr
-      logical :: there
-      real(dp) :: value
-
-      if (id == 0) then
-         ! Check file and count the number of lines
-         inquire(file=file_fpdb_supplement, exist=there)
-         if (.not. there) call abort_mpi('fpdb_supplement not found')
-
-         open(unit=55, file=trim(file_fpdb_supplement))
-         nline = 0
-         do
-            read(55, '(a)',iostat=iend) line
-            if (iend < 0) exit
-            nline = nline + 1
-         end do
-         rewind(55)
-      end if
-
-      call broadcast_mpi(nline, 0)
-
-      do iline = 1,nline
-         if (id == 0) read(55, '(a)') line
-         call broadcast_mpi(line, 0)
-
-         ! check for comment lines
-         if (index(adjustl(line),'#') == 1 .or. len_trim(line) == 0) cycle
-
-         i = 1
-         do ifield = 1,2
-            i2 = scan(line(i:), ',') - 1
-            if (i2 < 1) &
-                 call abort_mpi('Bad line in fpdb_supplement: ' // trim(line))
-
-            select case(ifield)
-            case (1)
-               name = line(i:i+i2-1)
-            case (2)
-               key = line(i:i+i2-1)
-            end select
-
-            i = i + i2 + 1
-         end do
-
-         read(line(i:), *, iostat=ierr) value
-         if (ierr /= 0) then
-            call abort_mpi('Failed to parse ' // trim(line(i:)) // &
-                 ' in ' // trim(line))
-         end if
-
-         if (id == 0) write (*,'(3(a," : "),g15.5)') &
-              'supplemental', trim(name), trim(key), value
-
-         do idet = 1,nodetectors
-            if (detectors(idet)%name == trim(name)) then
-               select case(trim(key))
-               case ('slope')
-                  detectors(idet)%slope = value
-               case ('fknee')
-                  detectors(idet)%fknee= value
-               case ('fmin')
-                  detectors(idet)%fmin = value
-               case ('sigma')
-                  detectors(idet)%sigmas = value
-               case ('psipol')
-                  detectors(idet)%psipol = value
-               case default
-                  call abort_mpi('Unknown key in fpdb_supplement: ' // trim(key))
-               end select
-               exit
-            end if
-         end do
-      end do
-
-    end subroutine parse_fpdb_supplement
 
 
     !------------------------------------------------------------------------
@@ -565,9 +417,7 @@ CONTAINS
     ! Looping over time, pointings and buffer are disabled.
 
     character(len=30) :: fi
-
-    integer(i8b) :: nleft, kstart, n, nmax
-    integer(i4b) :: i, k, iloop, nba, ierr
+    integer(i4b) :: i, k, ierr
 
     fi = '(x,a,t24,"= ",i12,   2x,a)'
 
@@ -581,10 +431,13 @@ CONTAINS
     noba_short_max = 0
     noba_short_tot = 0
 
-    nba = sum(noba_short_pp)
-    noba_short_max = nba
+    noba_short_max = noba_short
     call max_mpi(noba_short_max)
-    noba_short_tot = nba
+
+    noba_short_pp_max = maxval(noba_short_pp)
+    call max_mpi(noba_short_pp_max)
+
+    noba_short_tot = noba_short
     call sum_mpi(noba_short_tot)
 
     ! Distribute submaps
@@ -617,6 +470,8 @@ CONTAINS
 
        if (kfirst) then
           write(*,fi) 'noba_short_tot', noba_short_tot, 'Total baselines'
+          write(*,fi) 'noba_short_pp_max', noba_short_pp_max, &
+               'Longest interval in baselines'
           write(*,fi) 'noba_short_max', noba_short_max, 'Baselines/process'
        end if
 
@@ -631,7 +486,7 @@ CONTAINS
 
   SUBROUTINE write_parameters()
 
-    integer :: idet, itod, i, j
+    integer :: idet, i, j
     character(len=30) :: fi, fe, ff, fk, fs
     real(dp) :: sigma
 
@@ -771,11 +626,6 @@ CONTAINS
 
        if (kfilter) then
           write (*,fk) 'kfilter',kfilter,'Noise filter ON'
-          write (*,fk) 'filter_mean',filter_mean,'Constrain baseline mean'
-          if (info > 1) then
-             write (*,ff) 'filter_time',filter_time,'Filter length (s)'
-             write (*,ff) 'tail_time',tail_time,'Filter overlap (s)'
-          end if
        else
           write (*,fk) 'kfilter', kfilter, 'Noise filter OFF'
           write (*,fe) 'diagfilter', diagfilter, 'diagonal baseline filter'
@@ -793,9 +643,15 @@ CONTAINS
        write (*,fi) 'iter_max',iter_max, 'Maximum number of iterations'
     end if
 
-    write(*,fi) 'precond_width', precond_width, &
-         'Width of the preconditioner band matrix'
-    if (precond_width==0) write(*,*) 'No preconditioning'
+    write(*,fi) 'precond_width_min', precond_width_min, &
+         'Min width of the preconditioner band matrix'
+    write(*,fi) 'precond_width_max', precond_width_max, &
+         'Max width of the preconditioner band matrix'
+    if (precond_width_max == 0) then
+       write(*,*) 'No preconditioning'
+    else
+       write (*,fk) 'use_fprecond', use_fprecond, 'use C_a preconditioner'
+    end if
 
     if (flag_by_horn) then
        write (*,fk) 'flag_by_horn',flag_by_horn,'Combining flags within horns'
@@ -815,9 +671,8 @@ CONTAINS
     end if
 
     if (kwrite_covmat) then
-       write (*,fk) 'kwrite_covmat',kwrite_covmat,'Covariance matrix written'
-       write (*,fs)  'file_covmat',trim(file_covmat)
-       write (*,fk) 'bfinvert',bfinvert,'Brute force invert middle matrix'
+       write (*,fk) 'kwrite_covmat', kwrite_covmat, 'Covariance matrix written'
+       write (*,fs) 'file_covmat', trim(file_covmat)
     end if
 
     write (*,*)
@@ -841,19 +696,16 @@ CONTAINS
     write (*,ff) '', nosamples_tot/fsample/3600., 'hours'
 
     write (*,*)
-    write (*,*) 'Detectors available on the FIRST process and noise ' &
+    write (*,'(x,a)') 'Detectors available on the FIRST process and noise ' &
          // 'according to the FIRST period'
-    write (*,'(a)') ' Detectors:   psi_pol    kpolar       sigma' // &
-         '       slope       fknee        fmin      weight      1/sqrt(weight)'
-    do idet = 1,nodetectors
-       sigma = 0.0
-       if (detectors(idet)%weights(1) > 0) &
-            sigma = 1.d0 / sqrt(detectors(idet)%weights(1))
-       write (*,'(x,a,t12,f12.4,l5,3x,6es12.4)') detectors(idet)%name,  &
-            detectors(idet)%psipol, detectors(idet)%kpolar, &
-            detectors(idet)%sigmas(1), detectors(idet)%slope, &
-            detectors(idet)%fknee, detectors(idet)%fmin, &
-            detectors(idet)%weights(1), sigma
+    write (*,'(x,a12,3a15)') 'detector    ', 'sigma', 'weight', '1/sqrt(weight)'
+    do idet = 1, nodetectors
+       sigma = 0
+       if (detectors(idet)%weights(1) > 0) then
+          sigma = 1 / sqrt(detectors(idet)%weights(1))
+       end if
+       write (*,'(x,a12,3g15.5)') detectors(idet)%name, &
+            detectors(idet)%sigmas(1), detectors(idet)%weights(1), sigma
     end do
 
     if (info > 1) then
@@ -899,7 +751,7 @@ CONTAINS
     integer(i8b) :: nsamp, order, my_offset
     integer(i8b) :: sublen, suboffset, sub_start, sub_end, isub
     real(dp) :: dn, dn0, r, dr, rstart, ninv
-    real(dp), pointer :: basis_function(:,:)
+    real(dp), pointer :: basis_function(:, :)
     real(sp) :: memsum, mem_min, mem_max
 
     call wait_mpi
@@ -912,18 +764,17 @@ CONTAINS
 
     ! most loops iterate over baselines when there is no destriping
     kshort_start = 0
-    noba_short = sum(noba_short_pp)
 
     ! Store the baseline lengths for first destriping
 
-    allocate(baselines_short(noba_short_max), &
-         basis_functions(noba_short_max), stat=ierr)
+    allocate(baselines_short(noba_short), &
+         basis_functions(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short')
 
     basis_functions%copy = .true.
     basis_functions%nsamp = 0
 
-    memory_baselines = memory_baselines + noba_short_max*(4+4+17)
+    memory_baselines = memory_baselines + noba_short*(4+4+17)
 
     !Split the interval into short baselines of length int(dnshort)
     ! or int(dnshort+1).
@@ -948,11 +799,11 @@ CONTAINS
                .or. baselines_short(m) > int(dnshort, i8b) + 1) then
              write (*,*) id, ' : ERROR in start_timeloop: ' &
                   // 'Lengths do not match., dnshort = ', dnshort
-             write (*,*) id, ' : i, intervals(i), noba_short_max =', i, &
-                  intervals(i), noba_short_max
+             write (*,*) id, ' : i, intervals(i), noba_short =', i, &
+                  intervals(i), noba_short
              write (*,*) id, ' : last baseline =', baselines_short(m)
              print *,id, ' : noba_short_pp(i) = ', noba_short_pp(i)
-             do k=1,noba_short_pp(i)
+             do k = 1, noba_short_pp(i)
                 print *, k, baselines_short(m-k+1)
              end do
              call exit_with_status(1)
@@ -980,11 +831,11 @@ CONTAINS
 
     ! Auxiliary arrays for OpenMP threading and output
 
-    allocate(baselines_short_start(noba_short_max), &
-         baselines_short_stop(noba_short_max), stat=ierr)
+    allocate(baselines_short_start(noba_short), &
+         baselines_short_stop(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for baselines_short_start')
 
-    memory_baselines = memory_baselines + noba_short_max*(4+4)
+    memory_baselines = memory_baselines + noba_short*(4+4)
 
     baselines_short_start = 1
     baselines_short_stop = 1
@@ -1112,15 +963,14 @@ CONTAINS
     real(dp), allocatable, intent(out) :: short_times(:)
     real(c_double), pointer, intent(in) :: sample_times(:)
 
-    integer(i8b) :: i, j
     integer :: ierr
 
     ! insert the baseline start times
     ! local array of short baseline start times
-    allocate(short_times(noba_short_max), stat=ierr)
+    allocate(short_times(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for short_times')
 
-    memory_baselines = memory_baselines + noba_short_max*8
+    memory_baselines = memory_baselines + noba_short*8
 
     short_times = sample_times(baselines_short_start)
 

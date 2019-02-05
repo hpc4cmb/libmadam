@@ -6,10 +6,10 @@ MODULE memory_and_time
   implicit none
   private
 
-  real(sp), public :: memory_total = 0.0
-  real(sp) :: time1 =0.0, time2 =0.0
-  real(sp), public :: time_cum =0.0
-  real(sp), public :: time2_sum =0.0
+  real(dp), public :: memory_total = 0
+  real(dp) :: time1 = 0, time2 = 0
+  real(dp), public :: time_cum = 0
+  real(dp), public :: time2_sum = 0
 
   public write_memory, write_time, check_stat
 
@@ -23,7 +23,7 @@ CONTAINS
     integer :: allocstat
     character(len=*) :: name
 
-    if (allocstat.ne.0) then
+    if (allocstat /= 0) then
        write(*,*) 'ERROR: out of memory allocating ',name
        call exit_with_status(1)
     endif
@@ -34,11 +34,11 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE write_memory(text,memory_in)
+  SUBROUTINE write_memory(text, memory_in)
 
-    character(len=*),intent(in)          :: text
-    real,            intent(in),optional :: memory_in
-    real                                 :: memory_sum
+    character(len=*), intent(in) :: text
+    real(dp), intent(in), optional :: memory_in
+    real(dp) :: memory_sum
 
     if (text=='Total') then
        if (ID==0) then
@@ -61,12 +61,12 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE write_time(text,time)
+  SUBROUTINE write_time(text, time)
 
-    character(len=*),intent(in)          :: text
-    real,            intent(in),optional :: time
+    character(len=*), intent(in) :: text
+    real(dp), intent(in), optional :: time
 
-    real :: time_min, time_max ! -RK
+    real(dp) :: time_min, time_max ! -RK
 
     if (text=='- Other') then
        time2 = time1-time2_sum

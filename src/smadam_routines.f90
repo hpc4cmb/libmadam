@@ -14,9 +14,9 @@ MODULE madam_routines
   implicit none
   private
 
-  real(sp), save, public :: memory_cg = 0
+  real(dp), save, public :: memory_cg = 0
 
-  real(sp), save, public :: cputime_build_matrix = 0, cputime_send_matrix = 0, &
+  real(dp), save, public :: cputime_build_matrix = 0, cputime_send_matrix = 0, &
        cputime_bin_maps = 0, cputime_send_maps = 0, cputime_count_hits = 0, &
        cputime_cga = 0, cputime_cga_init = 0, cputime_cga_mpi_reduce = 0, &
        cputime_cga_mpi_scatter = 0, cputime_cga_1 = 0, cputime_cga_2 = 0, &
@@ -27,6 +27,8 @@ MODULE madam_routines
        count_hits, initialize_a, iterate_a, &
        subtract_baselines_a, clean_tod, unclean_tod, &
        leakmatrix
+
+  real(dp) :: ybalim
 
 CONTAINS
 
@@ -41,14 +43,18 @@ CONTAINS
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_map-1)
     integer, intent(in) :: mask(nosubpix_map, nosubmaps)
     real(dp) :: cca_dummy(1, 1, 1)
-    logical :: detflags_save(NDETMAX), kfirst_save
+    logical, allocatable :: detflags_save(:)
+    logical :: kfirst_save
     real(dp), allocatable :: cc_det(:, :, :), loccc_save(:, :, :)
-    integer :: ierr, ip, i, j
+    integer :: ierr, i, j
+    integer(i8b) :: ip
 
     if (info == 3 .and. id == 0) &
          write(*,*) 'Building leakage matrices...'
     if (info > 4) write(*,idf) ID, 'Building leakage matrices...'
 
+    allocate(detflags_save(NDETMAX), stat=ierr)
+    if (ierr /= 0) call abort_mpi('No room for detflags_save')
     detflags_save = detflags
     detflags = .false.
     detflags(idet) = .true.
@@ -92,6 +98,7 @@ CONTAINS
     deallocate(loccc_save)
     detflags = detflags_save
     kfirst = kfirst_save
+    deallocate(detflags_save)
 
     if (info > 4) write(*,idf) id,'Done'
 
@@ -107,7 +114,8 @@ CONTAINS
     !
     real(dp), intent(out) :: cca(nmap, nmap, 0:nopix_cross-1)
     real(dp), intent(inout) :: cc(nmap, nmap, 0:nopix_map-1)
-    integer :: i, ip, n, ierr, idet, num_threads, ival, noba, kstart, ipsd
+    integer :: i, idet, num_threads, ival, noba, kstart, ipsd
+    integer(i8b) :: ip
     integer :: k, firstpix, lastpix
     real(dp) :: detweight, sqrtweight
     real(dp) :: w(nmap)
@@ -136,6 +144,7 @@ CONTAINS
     id_thread = omp_get_thread_num()
     firstpix = id_thread * nsize_locmap / omp_get_num_threads()
     lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+    lastpix = min(lastpix, dummy_pixel - 1)
 
     do idet = 1, nodetectors
        if (.not. detflags(idet)) cycle ! not included in this subset
@@ -158,7 +167,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    loccc(1, 1, ip) = loccc(1, 1, ip) + detweight
                 end do
@@ -215,7 +223,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    call dsyr('U', nmap, detweight, weights(:, i, idet), 1, &
                         loccc(:, :, ip), nmap)
@@ -249,10 +256,11 @@ CONTAINS
     real(dp), intent(inout) :: map(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: binmap(nmap, 0:nopix_map-1)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
-    integer :: i, n, ip, m, ierr, firstpix, lastpix, idet, ival, noba, kstart
+    real(c_double), intent(in) :: tod(nosamples_proc, nodetectors)
+    integer :: i, ierr, firstpix, lastpix, idet, ival, noba, kstart
+    integer(i8b) :: ip
     integer :: ipsd, k
-    real(dp) :: pw, detweight
+    real(dp) :: detweight
 
     if (info == 3 .and. ID == 0) write(*,*) 'Binning TOD...'
 
@@ -276,6 +284,7 @@ CONTAINS
     id_thread = omp_get_thread_num()
     firstpix = id_thread * nsize_locmap / omp_get_num_threads()
     lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+    lastpix = min(lastpix, dummy_pixel - 1)
 
     do idet = 1, nodetectors
        if (.not. detflags(idet)) cycle ! not included in this subset
@@ -292,7 +301,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    locmap(1, ip) = locmap(1, ip) + tod(i, idet) * detweight
                 end do
@@ -311,7 +319,6 @@ CONTAINS
                    if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                    if (.not. surveyflags(i)) cycle
                    ip = pixels(i, idet)
-                   !if (ip == dummy_pixel) cycle
                    if (ip < firstpix .or. ip > lastpix) cycle
                    locmap(:, ip) = locmap(:, ip) &
                         + weights(:, i, idet) * tod(i, idet) * detweight
@@ -327,7 +334,7 @@ CONTAINS
     if (kfirst) call collect_map(map, nosubpix_map)
 
     if (do_binmap) call collect_map(binmap, nosubpix_map)
-    if (kfirst)    call collect_map(wamap, nosubpix_cross)
+    if (kfirst) call collect_map(wamap, nosubpix_cross)
 
     cputime_send_maps = cputime_send_maps + get_time(10)
 
@@ -344,7 +351,8 @@ CONTAINS
     ! Count the number of hits/pixel
 
     integer, intent(out) :: nohits(0:nopix_map-1,*)
-    integer :: i, n, ip, idet, ival, noba, kstart, ipsd, k, firstpix, lastpix
+    integer :: i, idet, ival, noba, kstart, ipsd, k, firstpix, lastpix
+    integer(i8b) :: ip
     real(dp) :: detweight
 
     if (.not. do_hits) return
@@ -375,11 +383,12 @@ CONTAINS
 
        id_thread = omp_get_thread_num()
        firstpix = id_thread * nsize_locmap / omp_get_num_threads()
-       lastpix = (id_thread+1) * nsize_locmap / omp_get_num_threads() - 1
+       lastpix = (id_thread + 1) * nsize_locmap / omp_get_num_threads() - 1
+       lastpix = min(lastpix, dummy_pixel - 1)
 
        do ival = 1, ninterval
           noba = noba_short_pp(ival)
-          kstart = sum(noba_short_pp(1:ival-1))
+          kstart = sum(noba_short_pp(1:ival - 1))
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) then
              print *, id,' : WARNING: there is no PSD for det # ', idet, &
@@ -390,12 +399,11 @@ CONTAINS
           end if
           detweight = detectors(idet)%weights(ipsd)
           if (detweight == 0) cycle
-          do k = kstart+1, kstart+noba
+          do k = kstart + 1, kstart + noba
              do i = baselines_short_start(k), baselines_short_stop(k)
                 if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
                 if (.not. surveyflags(i)) cycle
                 ip = pixels(i, idet)
-                if (ip == dummy_pixel) cycle
                 if (ip < firstpix .or. ip > lastpix) cycle
                 lochits(ip) = lochits(ip) + 1
              end do
@@ -419,13 +427,13 @@ CONTAINS
 
   SUBROUTINE initialize_a(yba, nna, wamap, cca, tod)
 
-    real(dp), intent(inout) :: yba(0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(inout) :: yba(0:basis_order, noba_short, nodetectors)
     real(dp), intent(out) :: &
-         nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     real(dp), intent(inout) :: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
-    real(dp) :: detweight, bf
+    real(c_double), intent(in) :: tod(nosamples_proc, nodetectors)
+    real(dp) :: detweight, bf, invvar
     integer(i8b) :: i, k, ip, j, order, order2, i0, imap, n, workspace_length
     integer(i8b) :: ntot, nbad, ngood
     integer(i4b) :: ival, noba, kstart, ipsd, idet
@@ -493,15 +501,18 @@ CONTAINS
        end do loop_idet
     end if
 
+    ybalim = 0
+
     !$OMP PARALLEL DEFAULT(NONE) &
     !$OMP    PRIVATE(idet, ival, noba, kstart, ipsd, detweight, &
-    !$OMP        k, i0, basis_function, i, ip, order, bf) &
+    !$OMP        k, i0, basis_function, i, ip, order, bf, invvar) &
     !$OMP    SHARED(nodetectors, noba_short_pp, detectors, ninterval, &
     !$OMP        yba, nna, baselines_short_start, basis_functions, &
     !$OMP        baselines_short_stop, isubchunk, subchunk, pixels, &
     !$OMP        dummy_pixel, locmap, basis_order, tod, nmap, &
     !$OMP        baselines_short_time, weights, order2, checknan, id, &
-    !$OMP        noba_short_max, nosamples_proc)
+    !$OMP        noba_short, nosamples_proc) &
+    !$OMP    REDUCTION(+: ybalim)
 
     !$OMP DO SCHEDULE(DYNAMIC,1)
     do idet = 1, nodetectors
@@ -511,6 +522,7 @@ CONTAINS
           ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
           if (ipsd < 0) cycle
           detweight = detectors(idet)%weights(ipsd)
+          invvar = detectors(idet)%sigmas(ipsd) ** 2 * detweight ** 2
           if (detweight == 0) cycle
           do k = kstart+1, kstart+noba
 
@@ -536,6 +548,7 @@ CONTAINS
                    bf = basis_function(order, i-i0)
                    yba(order, k, idet) = yba(order, k, idet) &
                         + bf*tod(i, idet)
+                   ybalim = ybalim + bf * invvar
                    nna(:, order, k, idet) = nna(:, order, k, idet) &
                         + bf*basis_function(:, i-i0)
                 end do
@@ -661,30 +674,33 @@ CONTAINS
   !-------------------------------------------------------------------------
 
 
-  SUBROUTINE iterate_a(aa, yba, nna, wamap, cca, tod)
+  SUBROUTINE iterate_a(aa, yba, nna, wamap, cca)
     !
     ! Solution of the destriping equation by conjugate gradient algorithm
     ! This routine uses tables pixel,weights directly to speed up the computation.
     !
-    real(dp), intent(out) :: aa(0:basis_order, noba_short_max, nodetectors)
-    real(dp), intent(in) :: yba(0:basis_order, noba_short_max, nodetectors), &
-         nna(0:basis_order, 0:basis_order, noba_short_max, nodetectors)
+    real(dp), intent(out) :: aa(0:basis_order, noba_short, nodetectors)
+    real(dp), intent(in) :: yba(0:basis_order, noba_short, nodetectors), &
+         nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     real(dp), intent(inout):: wamap(nmap, 0:nopix_cross-1)
     real(dp), intent(in) :: cca(nmap, nmap, 0:nopix_cross-1)
-    real(dp), intent(in) :: tod(nosamples_proc, nodetectors)
 
-    real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :)
-    real(dp) :: rz, rzinit, rzo, pap, rr, rrinit
-    real(dp) :: alpha, beta, pw, apn, bf, detweight
-    integer :: i, j, k, n, m, ip, istep, idet, first, last, order, i0, m0
-    integer :: order2, ival, noba, kstart, ipsd
+    real(dp), allocatable :: r(:, :, :), p(:, :, :), z(:, :, :), ap(:, :, :), &
+         ro(:, :, :)
+    logical, allocatable :: rmask(:, :, :)
+    real(dp) :: rz, rzinit, rzo, pap, rr, rrinit, rz2
+    real(dp) :: alpha, beta, pw, apn, detweight
+    integer :: i, k, m, istep, idet, order, i0, m0
+    integer(i8b) :: ip, ngood
+    integer :: ival, noba, kstart, kstop, ipsd, ichunk
     real(dp), pointer :: basis_function(:, :)
 
     ! for openmp -RK
-    integer :: ierr, imap, num_threads
+    integer :: ierr, num_threads
     integer(i8b) :: npix_thread, firstpix, lastpix, itask
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
+    real(dp), allocatable :: resid(:)
 
     if (info > 4) write(*,idf) ID,'Begin iteration...'
 
@@ -695,95 +711,37 @@ CONTAINS
          p(0:basis_order, noba_short, nodetectors), &
          ap(0:basis_order, noba_short, nodetectors), &
          z(0:basis_order, noba_short, nodetectors), &
-         stat=ierr)
+         rmask(0:basis_order, noba_short, nodetectors), &
+         ro(0:basis_order, noba_short, nodetectors), &
+         resid(nodetectors), stat=ierr)
     if (ierr /= 0) stop 'iterate_a: no room for CG iteration'
 
-    memory_cg = max(noba_short*nodetectors*32.,memory_cg)
+    call build_rmask()
 
-    r = 0.0
-    p = 0.0
-    ap = 0.0
-    z = 0.0
+    memory_cg = max(noba_short*nodetectors*32., memory_cg)
 
-    aa = 0.0
+    r = 0
+    p = 0
+    ap = 0
+    z = 0
+    aa = 0
 
     ! Standard aa=0 first guess
 
-    r = yba(:, 1:noba_short, 1:nodetectors)
+    r = yba
 
-    if (basis_order == 0) then
-       !call preconditioning_band(z(0, :, :), r(0, :, :))
-       call preconditioning_band(z, r)
-    else
-       do idet = 1, nodetectors
-          do i = 1, noba_short
-             z(:, i, idet) = matmul(nna_inv(:, :, i, idet), r(:, i, idet))
-          end do
-       end do
-    end if
+    call apply_preconditioner(z, r)
 
     p = z
-    rz = sum(r * z)
-    rr = sum(r * r)
+    rz = sum(r * z, mask=rmask)
+    rr = sum(r * r, mask=rmask)
 
-    if (checknan) then
-       if (isnan(rz)) print *,id,' : ERROR: rz is nan'
-
-       ybaloop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(yba(order, i, idet))) then
-                   print *,id,' : yba has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   exit ybaloop
-                end if
-             end do
-          end do
-       end do ybaloop ! yba
-
-       rloop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(r(order, i, idet))) then
-                   print *,id,' : r has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   exit rloop
-                end if
-             end do
-          end do
-       end do rloop ! r
-
-       zloop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(z(order, i, idet))) then
-                   print *,id,' : z has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   print *,id,' : nna_inv = ', &
-                        nna_inv(:, :, i, idet)
-                   print *,id,' : nna = ', nna(:, :, i, idet)
-                   print *,id,' : r = ', r(:, i, idet)
-                   exit zloop
-                end if
-             end do
-          end do
-       end do zloop ! z
-
-       ploop : do idet = 1, nodetectors
-          do i = 1, noba_short
-             do order = 0, basis_order
-                if (isnan(p(order, i, idet))) then
-                   print *,id,' : p has NaN(s) : idet, base, order : ', &
-                        idet, i, order
-                   exit ploop
-                end if
-             end do
-          end do
-       end do ploop ! p
-    end if ! checknan
+    if (checknan) call check_nan_before_iterate
 
     call sum_mpi(rz)
     call sum_mpi(rr)
+    call sum_mpi(ybalim)
+    call sum_mpi(ngood)
 
     rzinit = rz
     rrinit = rr
@@ -799,10 +757,11 @@ CONTAINS
     if (ID==0 .and. info > 1) then
        write(*,*)
        write(*,*) 'CG iteration begins'
-       write(*,'(x,a,es25.15)') 'rzinit =', rzinit
        write(*,'(x,a,es25.15)') 'rrinit =', rrinit
-       write(*,'(a4,4a16,a10)') &
-            'iter', 'rz/rzinit', 'rr/rrinit', 'alpha', 'beta', 'time'
+       write(*,'(x,a,es25.15)') '  <rr> =', ybalim
+       write(*,'(x,a,i25)') ' ngood =', ngood
+       write(*,'(a4,4a16,a12)') &
+            'iter', 'rr/rrinit', 'rz2/rz', 'alpha', 'beta', 'time'
     end if
 
     if (isnan(rz)) then
@@ -810,8 +769,9 @@ CONTAINS
        return
     end if
 
-    npix_thread = ceiling(dble(nsize_locmap) / nthreads)
+    ! Prepare for threading
 
+    npix_thread = ceiling(dble(nsize_locmap) / nthreads)
     allocate( &
          ap_all_threads(0:basis_order, noba_short, nodetectors, 0:nthreads-1), &
          stat=ierr)
@@ -819,12 +779,16 @@ CONTAINS
 
     call reset_time(99)
 
+    ! PCG iterations
+
     istep = 0
     do
        if (istep >= iter_max) exit
        istep = istep + 1
 
        call reset_time(12)
+
+       ! 1) evaluate A.p
 
        ! From baseline to map
 
@@ -864,7 +828,7 @@ CONTAINS
             + get_time_and_reset(12)
 
        if (kfilter) then
-          call cinvmul(ap, p)
+          call cinvmul(ap, p, nna)
        else
           ap = 0
           if (diagfilter /= 0) then
@@ -906,38 +870,50 @@ CONTAINS
 
        cputime_cga_2 = cputime_cga_2 + get_time(12)
 
-       pap = sum(p*ap)
+       ! 2) Evaluate p^T.A.p
+
+       pap = sum(p*ap, mask=rmask)
        call sum_mpi(pap)
 
+       ! 3) alpha = r.z / (p^T.A.p)
+
        alpha = rz/pap
-       r = r - alpha*ap
+       ro = r ! Keep a copy for Polak-Ribiere beta
+
+       ! 4) update `aa` and `r`
 
        aa(:, 1:noba_short, 1:nodetectors) = &
             aa(:, 1:noba_short, 1:nodetectors) + alpha*p
+       r = r - alpha*ap
 
-       if (basis_order == 0) then
-          call preconditioning_band(z(0, :, :), r(0, :, :))
-       else
-          do idet = 1, nodetectors
-             do i = 1, noba_short
-                z(:, i, idet) = matmul(nna_inv(:, :, i, idet), r(:, i, idet))
-             end do
-          end do
-       end if
+       ! 5) Precondition
+
+       call apply_preconditioner(z, r)
+
+       ! 6) Check for convergence
 
        rzo = rz
-       rz = sum(r * z)
-       rr = sum(r * r)
+       rz = sum(r * z, mask=rmask)
+       rz2 = sum(ro * z, mask=rmask)
+       rr = sum(r * r, mask=rmask)
        call sum_mpi(rz)
+       call sum_mpi(rz2)
        call sum_mpi(rr)
-       beta = rz / rzo
+       ! This is the Fletcher-Reeves formula that
+       ! assumes stationary preconditioning
+       !beta = rz / rzo
+       ! This is the Polak-Ribiere formula that
+       ! allows for updates to the preconditioner
+       beta = (rz - rz2) / rzo
 
-       if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f6.3,"s)")') &
-            istep, rz/rzinit, rr/rrinit, alpha, beta, get_time_and_reset(99)
+       if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
+            istep, rr/rrinit, rz2/rz, alpha, beta, get_time_and_reset(99)
 
-       if ((rz/rzinit < cglimit .or. rr/rrinit < cglimit) &
-            .and. istep > iter_min) exit
+       if (rr/rrinit > 1e3) call abort_mpi('CG is diverging')
+       if (rr/rrinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
+
+       ! 7) Update search direction, `p`
 
        p = z + beta*p
 
@@ -945,7 +921,7 @@ CONTAINS
 
     deallocate(ap_all_threads)
 
-    deallocate(r, p, ap, z)
+    deallocate(r, p, ap, z, resid, ro)
 
     noiter = istep
     if (id == 0 .and. info > 0) then
@@ -960,6 +936,98 @@ CONTAINS
 
   contains
 
+    subroutine apply_preconditioner(z, r)
+      real(dp), intent(in) :: r(0:basis_order, noba_short, nodetectors)
+      real(dp), intent(out) :: z(0:basis_order, noba_short, nodetectors)
+      integer :: i, idet
+      if (basis_order == 0) then
+         call preconditioning_band(z, r, nna)
+      else
+         do idet = 1, nodetectors
+            do i = 1, noba_short
+               z(:, i, idet) = matmul(nna_inv(:, :, i, idet), r(:, i, idet))
+            end do
+         end do
+      end if
+    end subroutine apply_preconditioner
+
+    subroutine build_rmask()
+      ! Mask out completely flagged intervals and
+      ! flagged baselines from both ends of the intervals
+      rmask = .false.
+      do idet = 1, nodetectors
+         do ichunk = 1, ninterval
+            kstart = sum(noba_short_pp(1:ichunk-1))
+            kstop = kstart + noba_short_pp(ichunk)
+            do
+               call trim_interval(kstart, kstop, noba, idet, nna)
+               if (noba == 0) exit
+               rmask(:, kstart+1:kstart+noba, idet) = .true.
+               kstart = kstart + noba
+            end do
+         end do
+      end do
+      ngood = count(rmask)
+    end subroutine build_rmask
+
+    subroutine check_nan_before_iterate()
+      ! Checking for NaNs helps localize problems but can consume time.
+      if (isnan(rz)) print *,id,' : ERROR: rz is nan'
+
+      ybaloop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(yba(order, i, idet))) then
+                  print *,id,' : yba has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  exit ybaloop
+               end if
+            end do
+         end do
+      end do ybaloop ! yba
+
+      rloop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(r(order, i, idet))) then
+                  print *,id,' : r has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  exit rloop
+               end if
+            end do
+         end do
+      end do rloop ! r
+
+      zloop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(z(order, i, idet))) then
+                  print *,id,' : z has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  print *,id,' : nna_inv = ', &
+                       nna_inv(:, :, i, idet)
+                  print *,id,' : nna = ', nna(:, :, i, idet)
+                  print *,id,' : r = ', r(:, i, idet)
+                  exit zloop
+               end if
+            end do
+         end do
+      end do zloop ! z
+
+      ploop : do idet = 1, nodetectors
+         do i = 1, noba_short
+            do order = 0, basis_order
+               if (isnan(p(order, i, idet))) then
+                  print *,id,' : p has NaN(s) : idet, base, order : ', &
+                       idet, i, order
+                  exit ploop
+               end if
+            end do
+         end do
+      end do ploop ! p
+    end subroutine check_nan_before_iterate
+
+
     ! Specific implementations of the CG iteration loop
 
     subroutine baseline_to_map_order0_nopol()
@@ -972,7 +1040,7 @@ CONTAINS
       !$OMP         ipsd, detweight, k, pw, m, ip, firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -987,7 +1055,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(1, ip) = locmap(1, ip) + pw
                end do
@@ -1010,7 +1077,7 @@ CONTAINS
       !$OMP         ipsd, detweight, k, pw, m, ip, firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1025,7 +1092,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(1, ip) = locmap(1, ip) + weights(1, m, idet) * pw
                   locmap(2, ip) = locmap(2, ip) + weights(2, m, idet) * pw
@@ -1051,7 +1117,7 @@ CONTAINS
       !$OMP         ipsd, detweight, k, pw, m, ip, firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1066,7 +1132,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(:, ip) = locmap(:, ip) + weights(:, m, idet)*pw
                end do
@@ -1091,7 +1156,7 @@ CONTAINS
       !$OMP         lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1107,7 +1172,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   locmap(1, ip) = locmap(1, ip) + detweight &
                        * dot_product(basis_function(:, m-m0), p(:, k, idet))
@@ -1133,7 +1197,7 @@ CONTAINS
       !$OMP         firstpix, lastpix)
       id_thread = omp_get_thread_num()
       firstpix = id_thread * npix_thread
-      lastpix = firstpix + npix_thread - 1
+      lastpix = min(firstpix + npix_thread - 1, dummy_pixel - 1)
       loop_detector : do idet = 1, nodetectors
          loop_chunk : do ival = 1, ninterval
             noba = noba_short_pp(ival)
@@ -1149,7 +1213,6 @@ CONTAINS
                do m = baselines_short_start(k), baselines_short_stop(k)
                   if (isubchunk /= 0 .and. subchunk(m) /= isubchunk) cycle
                   ip = pixels(m, idet)
-                  if (ip == dummy_pixel) cycle
                   if (ip < firstpix .or. ip > lastpix) cycle
                   pw = dot_product(basis_function(:, m-m0), &
                        p(:, k, idet)) * detweight
@@ -1236,9 +1299,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                apn = 0
@@ -1288,9 +1349,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                apn = 0
@@ -1340,9 +1399,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                i0 = baselines_short_start(k)
@@ -1394,9 +1451,7 @@ CONTAINS
             if (detweight == 0) cycle loop_chunk_ap
 
             itask = itask + 1
-            if (num_threads > 1) then
-               if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
-            end if
+            if (modulo(itask, num_threads) /= id_thread) cycle loop_chunk_ap
 
             loop_baseline_ap : do k = kstart+1, kstart+noba
                i0 = baselines_short_start(k)
@@ -1430,8 +1485,9 @@ CONTAINS
     !
     ! Subtract baselines and compute the final map
     real(dp), intent(inout) :: map(nmap,0:nopix_map-1)
-    real(dp), intent(in) :: aa(0:basis_order, noba_short_max, nodetectors)
-    integer :: i, k, ip, idet, i0, order, ival, noba, kstart, ipsd
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
+    integer :: i, k, idet, i0, ival, noba, kstart, ipsd
+    integer(i8b) :: ip
     real(dp) :: aw, detweight
     real(dp), pointer :: basis_function(:, :)
 
@@ -1481,12 +1537,12 @@ CONTAINS
   !---------------------------------------------------------------------------
 
 
-  SUBROUTINE clean_tod(tod,aa)
+  SUBROUTINE clean_tod(tod, aa)
     !
     ! Subtract baselines from the TOD
 
-    real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
-    real(dp), intent(in) :: aa(0:basis_order, noba_short_max, nodetectors)
+    real(c_double), intent(inout) :: tod(nosamples_proc, nodetectors)
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, idet, order, i0
     real(dp), pointer :: basis_function(:, :)
 
@@ -1531,8 +1587,8 @@ CONTAINS
     !
     ! Subtract baselines from the TOD
 
-    real(dp), intent(inout) :: tod(nosamples_proc, nodetectors)
-    real(dp), intent(in) :: aa(0:basis_order, noba_short_max, nodetectors)
+    real(c_double), intent(inout) :: tod(nosamples_proc, nodetectors)
+    real(dp), intent(in) :: aa(0:basis_order, noba_short, nodetectors)
     integer :: i, k, idet, order, i0
     real(dp), pointer :: basis_function(:, :)
 

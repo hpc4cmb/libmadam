@@ -1,14 +1,9 @@
 MODULE commonparam
   ! Common parameters and definitions
 
-  ! TOAST additions -RK
-  !use toast_mpi
-  !use toast
   use iso_c_binding
-  ! TOAST additions end -RK
 
   use planck_config
-  !use simulation, only : detector_data, pointing_data, tod_component
 
   implicit none
   public
@@ -26,18 +21,17 @@ MODULE commonparam
 
   TYPE detector_data
      integer :: idet = 0
-     integer :: ipoint = 0
-     real(dp) :: slope = 0
      real(dp) :: fknee = 0
-     real(dp) :: fmin = 0
-     real(dp) :: psipol = 0
      character(len=20) :: name = ''
-     logical :: kpolar = .false.
      integer :: npsd
      real(dp), allocatable :: psdstarts(:)
      real(dp), allocatable :: psdfreqs(:)
      real(dp), allocatable :: psds(:,:)
-     real(dp), allocatable :: sigmas(:), weights(:)
+     real(dp), allocatable :: sigmas(:) ! "white" noise sigma
+     real(dp), allocatable :: weights(:) ! detector noise weight
+     ! plateau is a constant offset subtracted from the PSD to get
+     ! the 1/f (baseline) part
+     real(dp), allocatable :: plateaus(:)
   END TYPE detector_data
 
   real(dp) :: fsample = 1 ! Sampling frequency
@@ -66,7 +60,6 @@ MODULE commonparam
   real(dp) :: diagfilter=0
   logical :: sync_output=.true., skip_existing=.false.
   logical :: write_cut=.false.
-  logical :: filter_mean=.false.
   logical :: tod_is_clean = .false.
   logical :: binary_output=.false., concatenate_binary=.false.
   ! Used for concatenate_binary when storing multiple MC maps
@@ -84,17 +77,17 @@ MODULE commonparam
   type(basis_function_type), allocatable :: basis_functions(:)
   real(dp), pointer :: basis_function(:, :)
 
-  integer, parameter :: NDETMAX=1000
+  integer, parameter :: NDETMAX=10000
   integer, parameter :: NDETSETMAX=1000
   type detset_type
      character(len=SLEN) :: name
-     character(len=SLEN) :: detectors(NDETMAX)
+     character(len=SLEN), allocatable :: detectors(:)
      integer(i4b) :: ndet
      logical :: nopol
   end type detset_type
   type(detset_type) :: detsets(0:NDETSETMAX)
   integer(i4b) :: ndetset
-  logical :: detflags(NDETMAX)
+  logical, allocatable :: detflags(:)
 
   integer, parameter :: NSPANMAX=1000
   integer, parameter :: NSURVEYMAX=1000
@@ -136,20 +129,19 @@ MODULE commonparam
   real(dp) :: dnshort=-1
   integer :: nlong=-1, nshort=-1
   logical :: kfirst=.true., kfilter=.false.
-  real(dp) :: filter_time=3600, tail_time=600
 
   real(dp) :: cglimit=1.d-12
   integer :: iter_min=3, iter_max=1000
-  integer :: precond_width=10
+  integer :: precond_width_min=10, precond_width_max=100
+  logical :: use_fprecond=.false., use_cgprecond=.false.
 
   integer :: mode_detweight=0
 
   logical :: rm_monopole=.false., temperature_only=.false.
 
   ! Input files
-  character(len=SLEN) :: file_param='', file_simulation='', &
-       file_inmask='', file_spectrum='', file_gap='', &
-       file_fpdb_supplement=''
+  character(len=SLEN) :: file_param='', &
+       file_inmask='', file_spectrum='', file_gap=''
 
   ! Output files
   character(len=SLEN) :: file_root='madam'
@@ -164,8 +156,7 @@ MODULE commonparam
   character(len=80) :: instrument  = ''
 
   ! NCVM specific parameters
-  logical :: kwrite_covmat=.false., bfinvert=.true.
-  integer :: lag_max = 4000, lag_overlap = 1000 ! Only with bfinvert=.true.
+  logical :: kwrite_covmat=.false.
   character(len=SLEN) :: file_covmat = ''
 
   type(detector_data), allocatable, target :: detectors(:)
@@ -184,7 +175,7 @@ MODULE commonparam
   integer(i8b) :: istart_mission, istart_proc
 
   ! Baselines
-  integer(i8b) :: noba_short_tot, noba_short_max, noba_short
+  integer(i8b) :: noba_short_tot, noba_short_max, noba_short, noba_short_pp_max
   integer(i8b) :: kshort_start
 
   integer(i4b), allocatable :: baselines_short(:) ! short baselines per process
