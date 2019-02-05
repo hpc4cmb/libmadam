@@ -99,18 +99,17 @@ ACX_FFTW([],[
 ])
 AC_LANG_POP([C])
 
-dnl Comment this test out for now. fftw3.f03 is in a non-standard location with MKL
-dnl FFTW_INC=""
-dnl if test x"${with_fftw}" != x; then
-dnl     FFTW_INC="$with_fftw/include"
-dnl fi
-dnl AX_F90_HEADER([fftw3.f03],[fftw3.f03],[
-dnl     use, intrinsic :: iso_c_binding
-dnl     include 'fftw3.f03'
-dnl ],[${FFTW_INC}],[],[
-dnl   AC_MSG_FAILURE([fftw3.f03 is required.])
-dnl ])
-dnl AC_SUBST([FFTW_CPPFLAGS],["$FFTW_CPPFLAGS $F90_HEADER_fftw3_f03"])
+FFTW_INC=""
+if test x"${with_fftw}" != x; then
+  FFTW_INC="$with_fftw/include"
+fi
+AX_F90_HEADER([fftw3.f03],[fftw3.f03],[
+    use, intrinsic :: iso_c_binding
+    include 'fftw3.f03'
+],[${FFTW_INC}],[],[
+  AC_MSG_FAILURE([fftw3.f03 is required.])
+])
+AC_SUBST([FFTW_CPPFLAGS],["$FFTW_CPPFLAGS $F90_HEADER_fftw3_f03"])
 
 dnl +------------------------------------------------
 dnl | Set outputs
