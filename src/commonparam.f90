@@ -103,7 +103,7 @@ MODULE commonparam
   logical :: bin_subsets = .false.
   logical :: mcmode = .false., cached = .false.
 
-  real(dp) :: good_baseline_fraction=0 ! default acceps all baselines
+  real(dp) :: good_baseline_fraction=0 ! default accepts all baselines
   ! monte Carlo mode
   integer(idp) :: mc_increment=1e7, mc_loops=1, mc_id=0, rng_base=0
   logical :: incomplete_matrices = .false.
@@ -125,6 +125,7 @@ MODULE commonparam
 
   integer :: pixmode_map=2, pixmode_cross=2
   real(dp) :: pixlim_map=1e-6, pixlim_cross=1e-3
+  logical :: allow_decoupling = .false.
 
   real(dp) :: dnshort=-1
   integer :: nlong=-1, nshort=-1

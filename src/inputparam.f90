@@ -236,6 +236,10 @@ CONTAINS
        read(value, *, iostat=ierr) pixlim_map
     case ('pixlim_cross')
        read(value, *, iostat=ierr) pixlim_cross
+    case('incomplete_matrices')
+       read(value, *, iostat=ierr) incomplete_matrices
+    case('allow_decoupling')
+       read(value, *, iostat=ierr) allow_decoupling
     case ('kfirst')
        read(value, *, iostat=ierr) kfirst
     case ('basis_func')
@@ -354,8 +358,6 @@ CONTAINS
        read(value, *, iostat=ierr) bin_subsets
     case('mcmode')
        read(value, *, iostat=ierr) mcmode
-    case('incomplete_matrices')
-       read(value, *, iostat=ierr) incomplete_matrices
 
     case default
        call abort_mpi('Unknown parameter: ' // trim(key))

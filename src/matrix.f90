@@ -3,7 +3,7 @@ MODULE matrix
   ! Routines for handling of symmetric matrices
   !
 
-  use commonparam, only : incomplete_matrices
+  use commonparam, only : incomplete_matrices, allow_decoupling
 
   implicit none
   private
@@ -23,25 +23,29 @@ CONTAINS
     integer, intent(out) :: istart
     integer :: i
 
-    !istart = 2
-    !do i = 1, n
-    !   if (cc(i, i) > 1e-30) then
-    !      if (any(abs(cc(1, 2:)) / cc(i, i) > 1e-10)) then
-    !         istart = 1
-    !      end if
-    !   end if
-    !end do
-    if (any(abs(cc(2:, 1)) > 1e-10)) then
+    if (.not. allow_decoupling) then
        istart = 1
     else
-       ! Decoupled case
        istart = 2
-    end if
+       do i = 1, n
+          if (cc(i, i) > 1e-30) then
+             if (any(abs(cc(1, 2:)) / cc(i, i) > 1e-10)) then
+                istart = 1
+             end if
+          end if
+       end do
+       if (any(abs(cc(2:, 1)) > 1e-10)) then
+          istart = 1
+       else
+          ! Decoupled case
+          istart = 2
+       end if
 
-    if (istart == 2 .and. cc(1, 1) > 1e-30) then
-       cc(1, 1) = 1 / cc(1, 1)
-       cc(2:, 1) = 0
-       cc(1, 2:) = 0
+       if (istart == 2 .and. cc(1, 1) > 1e-30) then
+          cc(1, 1) = 1 / cc(1, 1)
+          cc(2:, 1) = 0
+          cc(1, 2:) = 0
+       end if
     end if
 
   end subroutine test_decoupling
