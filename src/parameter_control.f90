@@ -967,6 +967,9 @@ CONTAINS
 
     ! insert the baseline start times
     ! local array of short baseline start times
+    if (allocated(short_times)) then
+       deallocate(short_times)
+    end if
     allocate(short_times(noba_short), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for short_times')
 

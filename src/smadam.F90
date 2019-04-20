@@ -559,6 +559,8 @@ contains
        if (allocated(baselines_short)) deallocate(baselines_short)
        if (allocated(baselines_short_start)) &
             deallocate(baselines_short_start, baselines_short_stop)
+       if (allocated(baselines_short_time)) &
+            deallocate(baselines_short_time)
        call close_filter()
        call close_output()
        call close_pointing()
@@ -915,6 +917,8 @@ contains
     if (allocated(baselines_short)) deallocate(baselines_short)
     if (allocated(baselines_short_start)) &
          deallocate(baselines_short_start, baselines_short_stop)
+    if (allocated(baselines_short_time)) &
+         deallocate(baselines_short_time)
 
     do i = 1, ndetset
        if (allocated(detsets(i)%detectors)) then
