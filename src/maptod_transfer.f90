@@ -579,17 +579,23 @@ CONTAINS
 
        call mpi_type_contiguous( &
             nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to create mpi_type')
+
        call mpi_type_commit(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        call mpi_alltoallv( &
             submaps_send, sendcounts, sendoffs, submap_type, &
             submaps_recv, recvcounts, recvoffs, submap_type, &
             comm, ierr)
-
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect map with alltoallv')
 
        call mpi_type_free(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, map, submaps_recv, nmap)
@@ -745,16 +751,22 @@ CONTAINS
 
           call mpi_type_contiguous( &
                nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+          if (ierr /= MPI_SUCCESS) &
+               call abort_mpi('Failed to create mpi_type')
+          
           call mpi_type_commit(submap_type, ierr)
+          if (ierr /= MPI_SUCCESS) &
+               call abort_mpi('Failed to commit mpi_type')
 
           call mpi_alltoallv( &
                submaps_send, sendcounts, sendoffs, submap_type, &
                submaps_recv, recvcounts, recvoffs, submap_type, &
                comm, ierr)
-
           if (ierr /= MPI_SUCCESS) call abort_mpi('Failed to collect cc')
 
           call mpi_type_free(submap_type, ierr)
+          if (ierr /= MPI_SUCCESS) &
+               call abort_mpi('Failed to commit mpi_type')
 
           !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
           !$OMP     SHARED(nrecv_submap, submaps_recv_ind, cc, submaps_recv, &
@@ -878,16 +890,22 @@ CONTAINS
 
        call mpi_type_contiguous( &
             nosubpix, MPI_INTEGER, submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to create mpi_type')
+       
        call mpi_type_commit(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        call mpi_alltoallv( &
             submaps_send, sendcounts, sendoffs, submap_type, &
             submaps_recv, recvcounts, recvoffs, submap_type, comm, ierr)
-
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to collect hits with alltoallv')
 
        call mpi_type_free(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, hits, submaps_recv)
@@ -1039,16 +1057,22 @@ CONTAINS
 
        call mpi_type_contiguous( &
             nmap * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to create mpi_type')
+       
        call mpi_type_commit(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        call mpi_alltoallv( &
             submaps_recv, recvcounts, recvoffs, submap_type, &
             submaps_send, sendcounts, sendoffs, submap_type, comm, ierr)
-
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to scatter map with alltoallv')
 
        call mpi_type_free(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &
@@ -1209,16 +1233,22 @@ CONTAINS
 
        call mpi_type_contiguous( &
             nosubpix, MPI_INTEGER, submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to create mpi_type')
+       
        call mpi_type_commit(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        call mpi_alltoallv( &
             submaps_recv, recvcounts, recvoffs, submap_type, &
             submaps_send, sendcounts, sendoffs, submap_type, comm, ierr)
-
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to scatter mask with alltoallv')
 
        call mpi_type_free(submap_type, ierr)
+       if (ierr /= MPI_SUCCESS) &
+            call abort_mpi('Failed to commit mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &
