@@ -753,7 +753,7 @@ CONTAINS
                nmap0 * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
           if (ierr /= MPI_SUCCESS) &
                call abort_mpi('Failed to create mpi_type')
-          
+
           call mpi_type_commit(submap_type, ierr)
           if (ierr /= MPI_SUCCESS) &
                call abort_mpi('Failed to commit mpi_type')
@@ -892,7 +892,7 @@ CONTAINS
             nosubpix, MPI_INTEGER, submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to create mpi_type')
-       
+
        call mpi_type_commit(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to commit mpi_type')
@@ -1059,7 +1059,7 @@ CONTAINS
             nmap * nosubpix, MPI_DOUBLE_PRECISION, submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to create mpi_type')
-       
+
        call mpi_type_commit(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to commit mpi_type')
@@ -1235,7 +1235,7 @@ CONTAINS
             nosubpix, MPI_INTEGER, submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to create mpi_type')
-       
+
        call mpi_type_commit(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
             call abort_mpi('Failed to commit mpi_type')

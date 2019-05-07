@@ -133,7 +133,7 @@ CONTAINS
 
     do idet = 1, nodetectors
        do i = 1, nosamples_proc
-          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
+          ! if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet) / nosubpix_max
           ksubmap(ip) = .true.
        end do
@@ -158,7 +158,7 @@ CONTAINS
 
     do idet = 1, nodetectors
        do i = 1, nosamples_proc
-          if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
+          ! if (isubchunk /= 0 .and. subchunkpp(i) /= isubchunk) cycle
           ip = pixels(i, idet) / nosubpix_max
           pixels(i, idet) = pixels(i, idet) - subtable1(ip) * nosubpix_max
        end do
