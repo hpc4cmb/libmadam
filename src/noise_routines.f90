@@ -323,7 +323,7 @@ CONTAINS
     ! Build the noise filter
     integer, parameter :: kmax = 2
     integer :: i, k, idet, nolines, nocols, num_threads, itask
-    real(dp) :: fa, x
+    real(dp) :: fa, x, sigma
     logical :: kread_file
     real(dp), allocatable :: aspec(:), f(:), g(:), spectrum(:), &
          ftable(:), spectrum_table(:, :)
@@ -369,7 +369,7 @@ CONTAINS
     !$OMP     SHARED(nodetectors, detectors, psddet, psdind, psdstart, &
     !$OMP         psdstop, nof, fa, fcov, kread_file) &
     !$OMP     PRIVATE(id_thread, num_threads, ipsdtot, itask, idet, ipsd, &
-    !$OMP         aspec, spectrum, f, g, ierr, k, x)
+    !$OMP         aspec, spectrum, f, g, ierr, k, x, sigma)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
@@ -397,6 +397,8 @@ CONTAINS
           else
              psdstop(ipsdtot) = 1e30
           end if
+          ! Detector sigma is used as a scale to find negligible PSD values
+          sigma = detectors(idet)%sigmas(ipsd)
 
           aspec = 0
           do k = 0, kmax
@@ -433,7 +435,7 @@ CONTAINS
 
           end do
 
-          where (abs(aspec) > 1e-30)
+          where (abs(aspec) > sigma * 1e-30)
              aspec = 1.d0 / (fa * aspec)
           elsewhere
              aspec = 0
