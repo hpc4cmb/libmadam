@@ -168,6 +168,11 @@ class MadamTest(TestCase):
         npt.assert_allclose(madam_hmap, hmap)
         npt.assert_allclose(madam_bmap, bmap)
 
+        madam_hmap1 = hp.read_map("pymaps/madam_pytest_hmap_sub1of2.fits", nest=True)
+        madam_hmap2 = hp.read_map("pymaps/madam_pytest_hmap_sub2of2.fits", nest=True)
+
+        npt.assert_allclose(madam_hmap, madam_hmap1 + madam_hmap2)
+
     if itask == 0:
         shutil.rmtree("pymaps")
 

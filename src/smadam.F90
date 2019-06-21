@@ -264,6 +264,27 @@ contains
           call time_stamp
 
           call baseline_times(baselines_short_time, sampletime)
+
+          call tic
+          call reduce_pixels
+          if (id == 0) call toc('reduce_pixels')
+
+          call tic
+          call update_maptod_transfer(ksubmap)
+          if (id == 0) call toc('update_maptod_transfer')
+
+          if (reassign_submaps) then
+             call tic
+             call assign_submaps(id_submap, nosubmaps, nopix_map, nopix_cross, &
+                  nosubmaps_max)
+             if (id == 0) call toc('assign_submaps')
+          end if
+
+          call tic
+          call initialize_alltoallv()
+          if (id == 0) call toc('initialize_alltoallv')
+
+          dummy_pixel = 12*nside_max**2
        else
           if (kfirst) then
              aa = 0
@@ -275,28 +296,7 @@ contains
 
        subchunkpp => subchunk(1:nosamples_proc)
 
-       call tic
-       call reduce_pixels
-       if (id == 0) call toc('reduce_pixels')
-
-       call tic
-       call update_maptod_transfer(ksubmap)
-       if (id == 0) call toc('update_maptod_transfer')
-
-       if (reassign_submaps) then
-          call tic
-          call assign_submaps(id_submap, nosubmaps, nopix_map, nopix_cross, &
-               nosubmaps_max)
-          if (id == 0) call toc('assign_submaps')
-       end if
-
        call allocate_maps
-
-       call tic
-       call initialize_alltoallv()
-       if (id == 0) call toc('initialize_alltoallv')
-
-       dummy_pixel = 12*nside_max**2
 
        if (kfirst) then
           call tic
@@ -431,14 +431,12 @@ contains
           if (id == 0) call toc('clean_tod')
        end if
 
-       call restore_pixels
-
        if (.not. mcmode) then
           if (subchunkcounter == nsubchunk) then
              call free_baselines
+             call free_locmaps
           end if
           call free_maps
-          call free_locmaps
        else
           cached = .true.
        end if
@@ -549,6 +547,8 @@ contains
        call reset_timers
 
     end do loop_subchunk
+
+    call restore_pixels
 
     isubchunk = subchunk_start
 
