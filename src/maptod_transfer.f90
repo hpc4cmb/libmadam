@@ -595,7 +595,7 @@ CONTAINS
 
        call mpi_type_free(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to commit mpi_type')
+            call abort_mpi('Failed to free mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, map, submaps_recv, nmap)
@@ -766,7 +766,7 @@ CONTAINS
 
           call mpi_type_free(submap_type, ierr)
           if (ierr /= MPI_SUCCESS) &
-               call abort_mpi('Failed to commit mpi_type')
+               call abort_mpi('Failed to free mpi_type')
 
           !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
           !$OMP     SHARED(nrecv_submap, submaps_recv_ind, cc, submaps_recv, &
@@ -905,7 +905,7 @@ CONTAINS
 
        call mpi_type_free(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to commit mpi_type')
+            call abort_mpi('Failed to free mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(id_thread, num_threads, i, m) &
        !$OMP     SHARED(nrecv_submap, submaps_recv_ind, hits, submaps_recv)
@@ -1072,7 +1072,7 @@ CONTAINS
 
        call mpi_type_free(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to commit mpi_type')
+            call abort_mpi('Failed to free mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &
@@ -1248,7 +1248,7 @@ CONTAINS
 
        call mpi_type_free(submap_type, ierr)
        if (ierr /= MPI_SUCCESS) &
-            call abort_mpi('Failed to commit mpi_type')
+            call abort_mpi('Failed to free mpi_type')
 
        !$OMP PARALLEL DEFAULT(NONE) PRIVATE(i, m, k) &
        !$OMP     SHARED(ndegrade, nsend_submap, submaps_send_ind, nosubpix, &
