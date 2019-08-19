@@ -651,6 +651,7 @@ CONTAINS
        write(*,*) 'No preconditioning'
     else
        write (*,fk) 'use_fprecond', use_fprecond, 'use C_a preconditioner'
+       write (*,fk) 'use_cgprecond', use_cgprecond, 'use CG preconditioner'
     end if
 
     if (flag_by_horn) then
