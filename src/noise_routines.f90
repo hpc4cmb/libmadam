@@ -1157,8 +1157,8 @@ CONTAINS
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
     type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
     ! DEBUG begin
-    real(dp) :: time_cholesky(100), time_cgprecond(100), time_cgprecond_filter(100)
-    integer :: ncall_cholesky(100), ncall_cgprecond(100), niter_cgprecond(100)
+    real(dp), allocatable :: time_cholesky(:), time_cgprecond(:), time_cgprecond_filter(:)
+    integer, allocatable :: ncall_cholesky(:), ncall_cgprecond(:), niter_cgprecond(:)
     ! DEBUG end
 
     z = r
@@ -1168,6 +1168,18 @@ CONTAINS
     end if
 
     call reset_time(16)
+
+    ! DEBUG begin
+    allocate(time_cholesky(0:nthreads-1), time_cgprecond(0:nthreads-1), &
+         time_cgprecond_filter(0:nthreads-1), ncall_cholesky(0:nthreads-1), &
+         ncall_cgprecond(0:nthreads-1), niter_cgprecond(0:nthreads-1))
+    time_cholesky = 0
+    time_cgprecond = 0
+    time_cgprecond_filter = 0
+    ncall_cholesky = 0
+    ncall_cgprecond = 0
+    niter_cgprecond = 0
+    ! DEBUG end
 
     if (use_diagonal) then
        z(0, :, :) = r(0, :, :) * prec_diag
@@ -1181,15 +1193,6 @@ CONTAINS
           pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
           pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
        end do
-
-       ! DEBUG begin
-       time_cholesky = 0
-       time_cgprecond = 0
-       time_cgprecond_filter = 0
-       ncall_cholesky = 0
-       ncall_cgprecond = 0
-       niter_cgprecond = 0
-       ! DEBUG end
 
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
@@ -1278,6 +1281,8 @@ CONTAINS
             "niter_cgprecond", niter_cgprecond(id_thread), &
             "time_cgprecond_filter", time_cgprecond_filter(id_thread)
     end do
+    deallocate(time_cholesky, time_cgprecond, time_cgprecond_filter, &
+         ncall_cholesky, ncall_cgprecond, niter_cgprecond)
     ! DEBUG end
 
     cputime_precond = cputime_precond + get_time(16)
