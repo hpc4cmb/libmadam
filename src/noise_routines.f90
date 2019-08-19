@@ -1151,7 +1151,7 @@ CONTAINS
 
     integer :: j, k, idet, kstart, kstop, noba, ichunk, ierr, itask, &
          num_threads, m, nband, ipsd, isub, niter
-    real(dp) :: t1, t2, tf
+    real(dp) :: t1, t2, tf, t_fftw_memory
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
@@ -1189,10 +1189,12 @@ CONTAINS
     else
        ! Allocate FFTW work space outside the threaded region to avoid
        ! a GCC compiler segfault when freeing the workspace
+       t1 = MPI_Wtime()  ! DEBUG
        do id_thread = 0, nthreads - 1
           pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
           pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
        end do
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "fftw_alloc", MPI_Wtime() - t1  ! DEBUG
 
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
@@ -1236,8 +1238,7 @@ CONTAINS
                            noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
                            nband, bandprec(isub, ichunk, idet)%data)
                       ! DEBUG begin
-                      t2 = MPI_Wtime()
-                      time_cholesky(id_thread) = time_cholesky(id_thread) + (t2 - t1)
+                      time_cholesky(id_thread) = time_cholesky(id_thread) + (MPI_Wtime() - t1)
                       ncall_cholesky(id_thread) = ncall_cholesky(id_thread) + 1
                       ! DEBUG end
                    else
@@ -1248,8 +1249,7 @@ CONTAINS
                            z(0, kstart+1, idet), r(0, kstart+1, idet), &
                            invcov(1, ipsd), fx, xx, tf, niter)
                       ! DEBUG begin
-                      t2 = MPI_Wtime()
-                      time_cgprecond(id_thread) = time_cgprecond(id_thread) + (t2 - t1)
+                      time_cgprecond(id_thread) = time_cgprecond(id_thread) + (MPI_Wtime() - t1)
                       time_cgprecond_filter(id_thread) = time_cgprecond_filter(id_thread) + tf
                       niter_cgprecond(id_thread) = niter_cgprecond(id_thread) + niter
                       ncall_cgprecond(id_thread) = ncall_cgprecond(id_thread) + 1
@@ -1264,22 +1264,26 @@ CONTAINS
 
        !$OMP END PARALLEL
 
+       t1 = MPI_Wtime()  ! DEBUG
        do id_thread = 0, nthreads - 1
           call fftw_free(pxx(id_thread))
           call fftw_free(pfx(id_thread))
        end do
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "fftw_free", MPI_Wtime() - t1  ! DEBUG
     end if
 
     ! DEBUG begin
     do id_thread = 0, nthreads - 1
-       write(1000 + id, *) "step", istep, "thread", id_thread, &
-            "time_cholesky", time_cholesky(id_thread), &
-            "ncall_cholesky", ncall_cholesky(id_thread)
-       write(1000 + id, *) "step", istep, "thread", id_thread, &
-            "time_cgprecond", time_cgprecond(id_thread), &
-            "ncall_cgprecond", ncall_cgprecond(id_thread), &
-            "niter_cgprecond", niter_cgprecond(id_thread), &
-            "time_cgprecond_filter", time_cgprecond_filter(id_thread)
+       write(1000 + id, '(a,x,i3,a,x,i3,a,x,f8.2,a,x,i8)') &
+            "step", istep, " thread", id_thread, &
+            " time_cholesky", time_cholesky(id_thread), &
+            " ncall_cholesky", ncall_cholesky(id_thread)
+       write(1000 + id, '(a,x,i3,a,x,i3,a,x,f8.2,a,x,i6,a,x,i8,a,x,f8.2)') &
+            "step", istep, " thread", id_thread, &
+            " time_cgprecond", time_cgprecond(id_thread), &
+            " ncall_cgprecond", ncall_cgprecond(id_thread), &
+            " niter_cgprecond", niter_cgprecond(id_thread), &
+            " time_cgprecond_filter", time_cgprecond_filter(id_thread)
     end do
     deallocate(time_cholesky, time_cgprecond, time_cgprecond_filter, &
          ncall_cholesky, ncall_cgprecond, niter_cgprecond)
@@ -1432,7 +1436,7 @@ CONTAINS
       complex(dp) :: fc(nof / 2 + 1)
       real(dp), intent(out) :: y(noba)
       real(dp) :: t
-      xx(:noba) = x - sum(x)/noba
+      xx(:noba) = x - sum(x) / noba
       xx(noba + 1:) = 0
       t = MPI_Wtime()
       call dfft(fx, xx)

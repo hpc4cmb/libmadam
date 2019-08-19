@@ -814,7 +814,7 @@ CONTAINS
        end if
 
        t2 = MPI_Wtime()  ! DEBUG
-       write(1000 + id, *) "step", istep, "baseline_to_map", t2 - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "baseline_to_map", t2 - t1  ! DEBUG
 
        ! Communicate maps between processes
        call wait_mpi
@@ -823,18 +823,18 @@ CONTAINS
        wamap = 0
        t1 = MPI_Wtime()  ! DEBUG
        call collect_map(wamap, nosubpix_cross, .true.) ! locmap -> wamap
-       write(1000 + id, *) "step", istep, "collect_map", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "collect_map", MPI_Wtime() - t1  ! DEBUG
        call wait_mpi
        cputime_cga_mpi_reduce = cputime_cga_mpi_reduce + get_time_and_reset(12)
        ! apply cca, rejects masked pixels
        t1 = MPI_Wtime()  ! DEBUG
        call ccmultiply(cca, wamap, nopix_cross)
-       write(1000 + id, *) "step", istep, "ccmultiply", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "ccmultiply", MPI_Wtime() - t1  ! DEBUG
        call wait_mpi
        cputime_cga_cc = cputime_cga_cc + get_time_and_reset(12)
        t1 = MPI_Wtime()  ! DEBUG
        call scatter_map(wamap, nosubpix_cross) ! wamap -> locmap
-       write(1000 + id, *) "step", istep, "scatter_map", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "scatter_map", MPI_Wtime() - t1  ! DEBUG
        call wait_mpi
        cputime_cga_mpi_scatter = cputime_cga_mpi_scatter &
             + get_time_and_reset(12)
@@ -856,7 +856,7 @@ CONTAINS
              end do
           end if
        end if
-       write(1000 + id, *) "step", istep, "cinvmul", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "cinvmul", MPI_Wtime() - t1  ! DEBUG
 
        ! From map to baseline
 
@@ -883,35 +883,38 @@ CONTAINS
 
        ap = ap + sum(ap_all_threads, dim=4)
 
-       write(1000 + id, *) "step", istep, "map_to_baseline", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "map_to_baseline", MPI_Wtime() - t1  ! DEBUG
        cputime_cga_2 = cputime_cga_2 + get_time(12)
 
        ! 2) Evaluate p^T.A.p
 
+       call wait_mpi  ! DEBUB
        t1 = MPI_Wtime()  ! DEBUG
-       pap = sum(p*ap, mask=rmask)
+       pap = sum(p * ap, mask=rmask)
        call sum_mpi(pap)
 
        ! 3) alpha = r.z / (p^T.A.p)
 
-       alpha = rz/pap
+       alpha = rz / pap
        ro = r ! Keep a copy for Polak-Ribiere beta
 
        ! 4) update `aa` and `r`
 
        aa(:, 1:noba_short, 1:nodetectors) = &
-            aa(:, 1:noba_short, 1:nodetectors) + alpha*p
-       r = r - alpha*ap
+            aa(:, 1:noba_short, 1:nodetectors) + alpha * p
+       r = r - alpha * ap
 
-       write(1000 + id, *) "step", istep, "update_guess", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "update_guess", MPI_Wtime() - t1  ! DEBUG
        ! 5) Precondition
 
+       call wait_mpi  ! DEBUB
        t1 = MPI_Wtime()  ! DEBUG
        call apply_preconditioner(z, r, istep)
-       write(1000 + id, *) "step", istep, "precondition", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "precondition", MPI_Wtime() - t1  ! DEBUG
 
        ! 6) Check for convergence
 
+       call wait_mpi  ! DEBUB
        t1 = MPI_Wtime()  ! DEBUG
        rzo = rz
        rz = sum(r * z, mask=rmask)
@@ -922,22 +925,22 @@ CONTAINS
        call sum_mpi(rr)
        ! This is the Fletcher-Reeves formula that
        ! assumes stationary preconditioning
-       !beta = rz / rzo
+       ! beta = rz / rzo
        ! This is the Polak-Ribiere formula that
        ! allows for updates to the preconditioner
        beta = (rz - rz2) / rzo
-       write(1000 + id, *) "step", istep, "check_convergence", MPI_Wtime() - t1  ! DEBUG
+       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "check_convergence", MPI_Wtime() - t1  ! DEBUG
 
        if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
-            istep, rr/rrinit, rz2/rz, alpha, beta, get_time_and_reset(99)
+            istep, rr / rrinit, rz2 / rz, alpha, beta, get_time_and_reset(99)
 
-       if (rr/rrinit > 1e3) call abort_mpi('CG is diverging')
-       if (rr/rrinit < cglimit .and. istep > iter_min) exit
+       if (rr / rrinit > 1e3) call abort_mpi('CG is diverging')
+       if (rr / rrinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
 
        ! 7) Update search direction, `p`
 
-       p = z + beta*p
+       p = z + beta * p
 
     end do
 
