@@ -41,6 +41,9 @@ MODULE noise_routines
   type(bandprec_pointer), allocatable :: bandprec(:, :, :)
   real(dp), allocatable, target :: prec_diag(:, :)
 
+  ! Pointers for FFT workspace
+  type(C_PTR), allocatable :: pxx(:), pfx(:)
+
   ! PSD information
 
   integer :: npsdtot
@@ -235,6 +238,7 @@ CONTAINS
   SUBROUTINE init_filter
 
     integer :: nof_min, ierr
+    real(dp) :: t1
 
     if (.not. kfilter) return
 
@@ -247,16 +251,29 @@ CONTAINS
     nof = 1
     do
        if (nof >= nof_min) exit
-       nof = 2*nof
+       nof = 2 * nof
     end do
     if (ID == 0) write(*,*) 'FFT length =', nof
 
     !allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
     !if (ierr /= 0) call abort_mpi('No room for fx and xx')
 
-    memory_filter = ((nof/2+1)*16. + nof*8) * nthreads
+    memory_filter = ((nof / 2 + 1) * 16. + nof * 8) * nthreads
 
     call init_fourier(nof)
+
+    ! Permanently allocate space for FFT for each OpenMP thread
+
+    t1 = MPI_Wtime()  ! DEBUG
+    allocate(pxx(0:nthreads - 1), pfx(0:nthreads - 1), stat=ierr)
+    if (ierr /= 0) stop 'Failed to allocate pxx and pfx'
+    pxx = C_NULL_PTR
+    pfx = C_NULL_PTR
+    do id_thread = 0, nthreads - 1
+       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
+    end do
+    write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", -1, "fftw_alloc", MPI_Wtime() - t1  ! DEBUG
 
   END SUBROUTINE init_filter
 
@@ -295,6 +312,8 @@ CONTAINS
 
   SUBROUTINE close_filter
 
+    real(dp) :: t1
+
     if (.not. kfilter) return
 
     if (allocated(fcov)) deallocate(fcov)
@@ -310,6 +329,14 @@ CONTAINS
     call free_bandprec
 
     call close_fourier
+
+    t1 = MPI_Wtime()  ! DEBUG
+    do id_thread = 0, nthreads - 1
+       call fftw_free(pxx(id_thread))
+       call fftw_free(pfx(id_thread))
+    end do
+    deallocate(pxx, pfx)
+    write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", 999, "fftw_free", MPI_Wtime() - t1  ! DEBUG
 
     nof = -1
 
@@ -833,18 +860,10 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     call reset_time(14)
 
     y = x
-
-    ! Allocate FFTW work space outside the threaded region to avoid
-    ! a GCC compiler segfault when freeing the workspace
-    do id_thread = 0, nthreads - 1
-       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-    end do
 
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
@@ -870,11 +889,6 @@ CONTAINS
 
     !$OMP END PARALLEL
 
-    do id_thread = 0, nthreads - 1
-       call fftw_free(pxx(id_thread))
-       call fftw_free(pfx(id_thread))
-    end do
-
     cputime_filter = cputime_filter + get_time(14)
 
   END SUBROUTINE convolve_pp
@@ -897,7 +911,6 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     if (precond_width_max < 1) return
 
@@ -969,13 +982,6 @@ CONTAINS
 
     call allocate_bandprec
 
-    ! Allocate FFTW work space outside the threaded region to avoid
-    ! a GCC compiler segfault when freeing the workspace
-    do id_thread = 0, nthreads - 1
-       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-    end do
-
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nof, npsdtot, fcov, invcov, pxx, pfx) &
@@ -995,11 +1001,6 @@ CONTAINS
     end do
 
     !$OMP END PARALLEL
-
-    do id_thread = 0, nthreads - 1
-       call fftw_free(pxx(id_thread))
-       call fftw_free(pfx(id_thread))
-    end do
 
     if (.not. use_cgprecond) then
        nempty = 0
@@ -1155,7 +1156,6 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
     ! DEBUG begin
     real(dp), allocatable :: time_cholesky(:), time_cgprecond(:), &
          time_cgprecond_filter(:), time_cgprecond_convolve(:)
@@ -1190,15 +1190,6 @@ CONTAINS
        ! Apply the filter-based preconditioner
        call convolve_pp(z, r, fprecond, nna)
     else
-       ! Allocate FFTW work space outside the threaded region to avoid
-       ! a GCC compiler segfault when freeing the workspace
-       t1 = MPI_Wtime()  ! DEBUG
-       do id_thread = 0, nthreads - 1
-          pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-          pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-       end do
-       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "fftw_alloc", MPI_Wtime() - t1  ! DEBUG
-
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
@@ -1268,12 +1259,6 @@ CONTAINS
 
        !$OMP END PARALLEL
 
-       t1 = MPI_Wtime()  ! DEBUG
-       do id_thread = 0, nthreads - 1
-          call fftw_free(pxx(id_thread))
-          call fftw_free(pfx(id_thread))
-       end do
-       write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", istep, "fftw_free", MPI_Wtime() - t1  ! DEBUG
     end if
 
     ! DEBUG begin
