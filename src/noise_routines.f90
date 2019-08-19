@@ -1137,7 +1137,7 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE preconditioning_band(z, r, nna)
+  SUBROUTINE preconditioning_band(z, r, nna, istep)
     !Apply the preconditioner
 
     ! z and r may be 3-dimensional arrays in the calling code but
@@ -1147,14 +1147,19 @@ CONTAINS
     real(dp), intent(in), target :: r(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
+    integer, intent(in) :: istep
 
     integer :: j, k, idet, kstart, kstop, noba, ichunk, ierr, itask, &
-         num_threads, m, nband, ipsd, isub
+         num_threads, m, nband, ipsd, isub, niter
     real(dp) :: t1, t2, tf
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
     type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
+    ! DEBUG begin
+    real(dp) :: time_cholesky(100), time_cgprecond(100), time_cgprecond_filter(100)
+    integer :: ncall_cholesky(100), ncall_cgprecond(100), niter_cgprecond(100)
+    ! DEBUG end
 
     z = r
 
@@ -1177,14 +1182,25 @@ CONTAINS
           pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
        end do
 
+       ! DEBUG begin
+       time_cholesky = 0
+       time_cgprecond = 0
+       time_cgprecond_filter = 0
+       ncall_cholesky = 0
+       ncall_cgprecond = 0
+       niter_cgprecond = 0
+       ! DEBUG end
+
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
-       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx) &
+       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx, &
+       !$OMP         time_cholesky, ncall_cholesky, time_cgprecond, &
+       !$OMP         ncall_cgprecond, niter_cgprecond, time_cgprecond_filter) &
        !$OMP     PRIVATE(idet, ichunk, kstart, kstop, noba, j, k, ierr, m, &
        !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub, &
-       !$OMP         t1, t2, tf)
+       !$OMP         t1, t2, tf, niter)
 
        !t1 = get_time(55)
        !tf = 0
@@ -1211,16 +1227,30 @@ CONTAINS
                    ipsd = psd_index(idet, baselines_short_time(kstart+1))
                    if (allocated(bandprec(isub, ichunk, idet)%data)) then
                       ! Use the precomputed Cholesky decomposition
+                      t1 = MPI_Wtime()  ! DEBUG
                       nband = size(bandprec(isub, ichunk, idet)%data, 1)
                       call apply_cholesky_decomposition( &
                            noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
                            nband, bandprec(isub, ichunk, idet)%data)
+                      ! DEBUG begin
+                      t2 = MPI_Wtime()
+                      time_cholesky(id_thread) = time_cholesky(id_thread) + (t2 - t1)
+                      ncall_cholesky(id_thread) = ncall_cholesky(id_thread) + 1
+                      ! DEBUG end
                    else
                       ! Use CG iteration to apply the preconditioner
+                      t1 = MPI_Wtime()  ! DEBUG
                       call apply_CG_preconditioner( &
                            noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
                            z(0, kstart+1, idet), r(0, kstart+1, idet), &
-                           invcov(1, ipsd), fx, xx, tf)
+                           invcov(1, ipsd), fx, xx, tf, niter)
+                      ! DEBUG begin
+                      t2 = MPI_Wtime()
+                      time_cgprecond(id_thread) = time_cgprecond(id_thread) + (t2 - t1)
+                      time_cgprecond_filter(id_thread) = time_cgprecond_filter(id_thread) + tf
+                      niter_cgprecond(id_thread) = niter_cgprecond(id_thread) + niter
+                      ncall_cgprecond(id_thread) = ncall_cgprecond(id_thread) + 1
+                      ! DEBUG end
                    end if
                 end if
                 kstart = kstart + noba
@@ -1236,6 +1266,19 @@ CONTAINS
           call fftw_free(pfx(id_thread))
        end do
     end if
+
+    ! DEBUG begin
+    do id_thread = 0, nthreads - 1
+       write(1000 + id, *) "step", istep, "thread", id_thread, &
+            "time_cholesky", time_cholesky(id_thread), &
+            "ncall_cholesky", ncall_cholesky(id_thread)
+       write(1000 + id, *) "step", istep, "thread", id_thread, &
+            "time_cgprecond", time_cgprecond(id_thread), &
+            "ncall_cgprecond", ncall_cgprecond(id_thread), &
+            "niter_cgprecond", niter_cgprecond(id_thread), &
+            "time_cgprecond_filter", time_cgprecond_filter(id_thread)
+    end do
+    ! DEBUG end
 
     cputime_precond = cputime_precond + get_time(16)
 
@@ -1289,7 +1332,7 @@ CONTAINS
 
 
   subroutine apply_CG_preconditioner( &
-       noba, nof, fcov, nna, x, b, invcov, fx, xx, tf)
+       noba, nof, fcov, nna, x, b, invcov, fx, xx, tf, niter)
     !
     ! Apply the preconditioner using CG iteration
     !
@@ -1298,9 +1341,10 @@ CONTAINS
     real(dp), intent(in) :: nna(noba), invcov(noba)
     real(dp), intent(out) :: x(noba)
     real(dp), intent(in) :: b(noba)
-    real(dp), intent(inout) :: tf
     real(C_DOUBLE), intent(inout) :: xx(nof)
     complex(C_DOUBLE_COMPLEX), intent(inout) :: fx(nof/2 + 1)
+    real(dp), intent(inout) :: tf
+    integer, intent(inout) :: niter
 
     real(dp), allocatable :: resid(:), prop(:), Aprop(:), zresid(:), precond(:)
     real(dp) :: alpha, beta, rr, rr0, rr_old, rz, rz_old, Anorm
@@ -1310,6 +1354,7 @@ CONTAINS
     ! Polak-Ribiere formula to allow for a changing preconditioner
     real(dp), parameter :: cglimit = 1e-6
     integer, parameter :: itermax = 100
+    real(dp) :: tfilter
 
     allocate(resid(noba), prop(noba), Aprop(noba), zresid(noba), &
          precond(noba), stat=ierr)
@@ -1328,8 +1373,9 @@ CONTAINS
 
     prop = zresid
     iter = 1
+    tfilter = 0
     do
-       call apply_A(prop, Aprop, tf)
+       call apply_A(prop, Aprop)
        Anorm = dot_product(prop, Aprop)
        alpha = rz / Anorm
        x = x + alpha * prop
@@ -1348,6 +1394,9 @@ CONTAINS
 
     deallocate(resid, prop, Aprop, zresid, precond)
 
+    tf = tfilter
+    niter = iter
+
   contains
 
     subroutine apply_precond(x, z)
@@ -1360,34 +1409,33 @@ CONTAINS
       z = precond * x
     end subroutine apply_precond
 
-    subroutine apply_A(x, y, tf)
+    subroutine apply_A(x, y)
       !
       ! Apply the square matrix `A` to `x` and place the result in `y`
       !
       real(dp), intent(in) :: x(noba)
       real(dp), intent(out) :: y(noba)
-      real(dp), intent(inout) :: tf
-      call convolve(x, fcov, y, tf)
-      y = y + nna*x
+      call convolve(x, fcov, y)
+      y = y + nna * x
     end subroutine apply_A
 
-    subroutine convolve(x, fc, y, tf)
+    subroutine convolve(x, fc, y)
       !
       ! Convolve `x` with filter `fc` and place result in `y`.
       !
       real(dp), intent(in) :: x(noba)
-      complex(dp) :: fc(nof/2 + 1)
+      complex(dp) :: fc(nof / 2 + 1)
       real(dp), intent(out) :: y(noba)
-      real(dp), intent(inout) :: tf
-      real(dp) :: t1, t2
+      real(dp) :: t
       xx(:noba) = x - sum(x)/noba
-      xx(noba+1:) = 0
-      !t1 = get_time(56)
+      xx(noba + 1:) = 0
+      t = MPI_Wtime()
       call dfft(fx, xx)
-      fx = fx*fc
+      tfilter = tfilter + (MPI_Wtime() - t)
+      fx = fx * fc
+      t = MPI_Wtime()
       call dfftinv(xx, fx)
-      !t2 = get_time(56)
-      !tf = tf + t2 - t1
+      tfilter = tfilter + (MPI_Wtime() - t)
       y = xx(:noba)
       y = y - sum(y) / noba
     end subroutine convolve

@@ -701,6 +701,7 @@ CONTAINS
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
     real(dp), allocatable :: resid(:)
+    real(dp) :: t0, t1, t2, t3
 
     if (info > 4) write(*,idf) ID,'Begin iteration...'
 
@@ -730,7 +731,7 @@ CONTAINS
 
     r = yba
 
-    call apply_preconditioner(z, r)
+    call apply_preconditioner(z, r, -1)
 
     p = z
     rz = sum(r * z, mask=rmask)
@@ -786,6 +787,8 @@ CONTAINS
        if (istep >= iter_max) exit
        istep = istep + 1
 
+       t1 = MPI_Wtime()  ! DEBUG
+
        call reset_time(12)
 
        ! 1) evaluate A.p
@@ -810,23 +813,33 @@ CONTAINS
           end if
        end if
 
+       t2 = MPI_Wtime()  ! DEBUG
+       write(1000 + id, *) "step", istep, "baseline_to_map", t2 - t1  ! DEBUG
+
        ! Communicate maps between processes
        call wait_mpi
        cputime_cga_1 = cputime_cga_1 + get_time_and_reset(12)
 
        wamap = 0
+       t1 = MPI_Wtime()  ! DEBUG
        call collect_map(wamap, nosubpix_cross, .true.) ! locmap -> wamap
+       write(1000 + id, *) "step", istep, "collect_map", MPI_Wtime() - t1  ! DEBUG
        call wait_mpi
        cputime_cga_mpi_reduce = cputime_cga_mpi_reduce + get_time_and_reset(12)
        ! apply cca, rejects masked pixels
+       t1 = MPI_Wtime()  ! DEBUG
        call ccmultiply(cca, wamap, nopix_cross)
+       write(1000 + id, *) "step", istep, "ccmultiply", MPI_Wtime() - t1  ! DEBUG
        call wait_mpi
        cputime_cga_cc = cputime_cga_cc + get_time_and_reset(12)
+       t1 = MPI_Wtime()  ! DEBUG
        call scatter_map(wamap, nosubpix_cross) ! wamap -> locmap
+       write(1000 + id, *) "step", istep, "scatter_map", MPI_Wtime() - t1  ! DEBUG
        call wait_mpi
        cputime_cga_mpi_scatter = cputime_cga_mpi_scatter &
             + get_time_and_reset(12)
 
+       t1 = MPI_Wtime()  ! DEBUG
        if (kfilter) then
           call cinvmul(ap, p, nna)
        else
@@ -843,11 +856,13 @@ CONTAINS
              end do
           end if
        end if
+       write(1000 + id, *) "step", istep, "cinvmul", MPI_Wtime() - t1  ! DEBUG
 
        ! From map to baseline
 
        call reset_time(12)
 
+       t1 = MPI_Wtime()  ! DEBUG
        ap_all_threads = 0
 
        if (basis_order == 0) then
@@ -868,10 +883,12 @@ CONTAINS
 
        ap = ap + sum(ap_all_threads, dim=4)
 
+       write(1000 + id, *) "step", istep, "map_to_baseline", MPI_Wtime() - t1  ! DEBUG
        cputime_cga_2 = cputime_cga_2 + get_time(12)
 
        ! 2) Evaluate p^T.A.p
 
+       t1 = MPI_Wtime()  ! DEBUG
        pap = sum(p*ap, mask=rmask)
        call sum_mpi(pap)
 
@@ -886,12 +903,16 @@ CONTAINS
             aa(:, 1:noba_short, 1:nodetectors) + alpha*p
        r = r - alpha*ap
 
+       write(1000 + id, *) "step", istep, "update_guess", MPI_Wtime() - t1  ! DEBUG
        ! 5) Precondition
 
-       call apply_preconditioner(z, r)
+       t1 = MPI_Wtime()  ! DEBUG
+       call apply_preconditioner(z, r, istep)
+       write(1000 + id, *) "step", istep, "precondition", MPI_Wtime() - t1  ! DEBUG
 
        ! 6) Check for convergence
 
+       t1 = MPI_Wtime()  ! DEBUG
        rzo = rz
        rz = sum(r * z, mask=rmask)
        rz2 = sum(ro * z, mask=rmask)
@@ -905,6 +926,7 @@ CONTAINS
        ! This is the Polak-Ribiere formula that
        ! allows for updates to the preconditioner
        beta = (rz - rz2) / rzo
+       write(1000 + id, *) "step", istep, "check_convergence", MPI_Wtime() - t1  ! DEBUG
 
        if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
             istep, rr/rrinit, rz2/rz, alpha, beta, get_time_and_reset(99)
@@ -936,12 +958,13 @@ CONTAINS
 
   contains
 
-    subroutine apply_preconditioner(z, r)
+    subroutine apply_preconditioner(z, r, istep)
       real(dp), intent(in) :: r(0:basis_order, noba_short, nodetectors)
       real(dp), intent(out) :: z(0:basis_order, noba_short, nodetectors)
+      integer, intent(in) :: istep
       integer :: i, idet
       if (basis_order == 0) then
-         call preconditioning_band(z, r, nna)
+         call preconditioning_band(z, r, nna, istep)
       else
          do idet = 1, nodetectors
             do i = 1, noba_short
