@@ -264,7 +264,6 @@ CONTAINS
 
     ! Permanently allocate space for FFT for each OpenMP thread
 
-    t1 = MPI_Wtime()  ! DEBUG
     allocate(pxx(0:nthreads - 1), pfx(0:nthreads - 1), stat=ierr)
     if (ierr /= 0) stop 'Failed to allocate pxx and pfx'
     pxx = C_NULL_PTR
@@ -273,7 +272,6 @@ CONTAINS
        pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
        pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
     end do
-    write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", -1, "fftw_alloc", MPI_Wtime() - t1  ! DEBUG
 
   END SUBROUTINE init_filter
 
@@ -330,13 +328,11 @@ CONTAINS
 
     call close_fourier
 
-    t1 = MPI_Wtime()  ! DEBUG
     do id_thread = 0, nthreads - 1
        call fftw_free(pxx(id_thread))
        call fftw_free(pfx(id_thread))
     end do
     deallocate(pxx, pfx)
-    write(1000 + id, '(a,x,i3,x,a,x,f8.2)') "step", 999, "fftw_free", MPI_Wtime() - t1  ! DEBUG
 
     nof = -1
 
@@ -1151,16 +1147,11 @@ CONTAINS
     integer, intent(in) :: istep
 
     integer :: j, k, idet, kstart, kstop, noba, ichunk, ierr, itask, &
-         num_threads, m, nband, ipsd, isub, niter
-    real(dp) :: t1, t2, tf, t_fftw_memory, tc
+         num_threads, m, nband, ipsd, isub
+    real(dp) :: t1, t2, tf
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    ! DEBUG begin
-    real(dp), allocatable :: time_cholesky(:), time_cgprecond(:), &
-         time_cgprecond_filter(:), time_cgprecond_convolve(:)
-    integer, allocatable :: ncall_cholesky(:), ncall_cgprecond(:), niter_cgprecond(:)
-    ! DEBUG end
 
     z = r
 
@@ -1169,20 +1160,6 @@ CONTAINS
     end if
 
     call reset_time(16)
-
-    ! DEBUG begin
-    allocate(time_cholesky(0:nthreads-1), time_cgprecond(0:nthreads-1), &
-         time_cgprecond_filter(0:nthreads-1), time_cgprecond_convolve(0:nthreads-1), &
-         ncall_cholesky(0:nthreads-1), &
-         ncall_cgprecond(0:nthreads-1), niter_cgprecond(0:nthreads-1))
-    time_cholesky = 0
-    time_cgprecond = 0
-    time_cgprecond_filter = 0
-    time_cgprecond_convolve = 0
-    ncall_cholesky = 0
-    ncall_cgprecond = 0
-    niter_cgprecond = 0
-    ! DEBUG end
 
     if (use_diagonal) then
        z(0, :, :) = r(0, :, :) * prec_diag
@@ -1194,12 +1171,10 @@ CONTAINS
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
-       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx, &
-       !$OMP         time_cholesky, ncall_cholesky, time_cgprecond, &
-       !$OMP         ncall_cgprecond, niter_cgprecond, time_cgprecond_filter, time_cgprecond_convolve) &
+       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx) &
        !$OMP     PRIVATE(idet, ichunk, kstart, kstop, noba, j, k, ierr, m, &
        !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub, &
-       !$OMP         t1, t2, tf, tc, niter)
+       !$OMP         t1, t2, tf)
 
        !t1 = get_time(55)
        !tf = 0
@@ -1226,29 +1201,16 @@ CONTAINS
                    ipsd = psd_index(idet, baselines_short_time(kstart+1))
                    if (allocated(bandprec(isub, ichunk, idet)%data)) then
                       ! Use the precomputed Cholesky decomposition
-                      t1 = MPI_Wtime()  ! DEBUG
                       nband = size(bandprec(isub, ichunk, idet)%data, 1)
                       call apply_cholesky_decomposition( &
                            noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
                            nband, bandprec(isub, ichunk, idet)%data)
-                      ! DEBUG begin
-                      time_cholesky(id_thread) = time_cholesky(id_thread) + (MPI_Wtime() - t1)
-                      ncall_cholesky(id_thread) = ncall_cholesky(id_thread) + 1
-                      ! DEBUG end
                    else
                       ! Use CG iteration to apply the preconditioner
-                      t1 = MPI_Wtime()  ! DEBUG
                       call apply_CG_preconditioner( &
                            noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
                            z(0, kstart+1, idet), r(0, kstart+1, idet), &
-                           invcov(1, ipsd), fx, xx, tf, tc, niter)
-                      ! DEBUG begin
-                      time_cgprecond(id_thread) = time_cgprecond(id_thread) + (MPI_Wtime() - t1)
-                      time_cgprecond_filter(id_thread) = time_cgprecond_filter(id_thread) + tf
-                      time_cgprecond_convolve(id_thread) = time_cgprecond_convolve(id_thread) + tc
-                      niter_cgprecond(id_thread) = niter_cgprecond(id_thread) + niter
-                      ncall_cgprecond(id_thread) = ncall_cgprecond(id_thread) + 1
-                      ! DEBUG end
+                           invcov(1, ipsd), fx, xx, tf)
                    end if
                 end if
                 kstart = kstart + noba
@@ -1260,24 +1222,6 @@ CONTAINS
        !$OMP END PARALLEL
 
     end if
-
-    ! DEBUG begin
-    do id_thread = 0, nthreads - 1
-       write(1000 + id, '(a,x,i3,a,x,i3,a,x,f8.2,a,x,i8)') &
-            "step", istep, " thread", id_thread, &
-            " time_cholesky", time_cholesky(id_thread), &
-            " ncall_cholesky", ncall_cholesky(id_thread)
-       write(1000 + id, '(a,x,i3,a,x,i3,a,x,f8.2,a,x,i6,a,x,i8,a,x,f8.2,a,x,f8.2)') &
-            "step", istep, " thread", id_thread, &
-            " time_cgprecond", time_cgprecond(id_thread), &
-            " ncall_cgprecond", ncall_cgprecond(id_thread), &
-            " niter_cgprecond", niter_cgprecond(id_thread), &
-            " time_cgprecond_filter", time_cgprecond_filter(id_thread), &
-            " time_cgprecond_convolve", time_cgprecond_convolve(id_thread)
-    end do
-    deallocate(time_cholesky, time_cgprecond, time_cgprecond_filter, &
-         ncall_cholesky, ncall_cgprecond, niter_cgprecond)
-    ! DEBUG end
 
     cputime_precond = cputime_precond + get_time(16)
 
@@ -1331,7 +1275,7 @@ CONTAINS
 
 
   subroutine apply_CG_preconditioner( &
-       noba, nof, fcov, nna, x, b, invcov, fx, xx, tf, tc, niter)
+       noba, nof, fcov, nna, x, b, invcov, fx, xx, tfilter)
     !
     ! Apply the preconditioner using CG iteration
     !
@@ -1342,8 +1286,7 @@ CONTAINS
     real(dp), intent(in) :: b(noba)
     real(C_DOUBLE), intent(inout) :: xx(nof)
     complex(C_DOUBLE_COMPLEX), intent(inout) :: fx(nof/2 + 1)
-    real(dp), intent(inout) :: tf, tc
-    integer, intent(inout) :: niter
+    real(dp), intent(out) :: tfilter
 
     real(dp), allocatable :: resid(:), prop(:), Aprop(:), zresid(:), precond(:)
     real(dp) :: alpha, beta, rr, rr0, rr_old, rz, rz_old, Anorm
@@ -1353,7 +1296,6 @@ CONTAINS
     ! Polak-Ribiere formula to allow for a changing preconditioner
     real(dp), parameter :: cglimit = 1e-6
     integer, parameter :: itermax = 100
-    real(dp) :: tfilter, tconv  ! DEBUG
 
     allocate(resid(noba), prop(noba), Aprop(noba), zresid(noba), &
          precond(noba), stat=ierr)
@@ -1372,10 +1314,7 @@ CONTAINS
 
     prop = zresid
     iter = 1
-    ! DEBUG begin
     tfilter = 0
-    tconv = 0
-    ! DEBUG end
     do
        call apply_A(prop, Aprop)
        Anorm = dot_product(prop, Aprop)
@@ -1395,12 +1334,6 @@ CONTAINS
     end do
 
     deallocate(resid, prop, Aprop, zresid, precond)
-
-    ! DEBUG begin
-    tf = tfilter
-    tc = tconv
-    niter = iter
-    ! DEBUG end
 
   contains
 
@@ -1431,20 +1364,18 @@ CONTAINS
       real(dp), intent(in) :: x(noba)
       complex(dp) :: fc(nof / 2 + 1)
       real(dp), intent(out) :: y(noba)
-      real(dp) :: t1, t2
-      t1 = MPI_Wtime()  ! DEBUG
+      !real(dp) :: t
       xx(:noba) = x - sum(x) / noba
       xx(noba + 1:) = 0
-      t2 = MPI_Wtime()  ! DEBUG
+      !t = MPI_Wtime()
       call dfft(fx, xx)
-      tfilter = tfilter + (MPI_Wtime() - t2)  ! DEBUG
+      !tfilter = tfilter + (MPI_Wtime() - t)
       fx = fx * fc
-      t2 = MPI_Wtime()  ! DEBUG
+      !t = MPI_Wtime()
       call dfftinv(xx, fx)
-      tfilter = tfilter + (MPI_Wtime() - t2)  ! DEBUG
+      !tfilter = tfilter + (MPI_Wtime() - t)
       y = xx(:noba)
       y = y - sum(y) / noba
-      tconv = tconv + (MPI_Wtime() - t1)  ! DEBUG
     end subroutine convolve
 
   end subroutine apply_CG_preconditioner
