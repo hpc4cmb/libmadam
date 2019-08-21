@@ -241,6 +241,7 @@ CONTAINS
     real(dp) :: t1
 
     if (.not. kfilter) return
+    if (nof >= 0) return  ! Filter already initialized
 
     nofilter = 2 * noba_short_pp_max
 
@@ -357,8 +358,6 @@ CONTAINS
 
     if (info == 3 .and. ID == 0) write(*,*) 'Building filter...'
     if (info > 4) write(*,*) 'Building filter...'
-
-    if (nof < 0) call init_filter
 
     npsdtot = 0
     do idet = 1, nodetectors

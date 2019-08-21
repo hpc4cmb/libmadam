@@ -255,6 +255,10 @@ contains
           cputime_init = cputime_init + get_time(1)
 
           call tic
+          call init_filter
+          if (id == 0) call toc('init_filter')
+
+          call tic
           call build_filter
           if (id == 0) call toc('build_filter')
 
