@@ -21,9 +21,10 @@ MODULE fourier
 
 CONTAINS
 
-  SUBROUTINE init_fourier(nof_in)
+  SUBROUTINE init_fourier(nof_in, unaligned)
 
     integer, intent(in) :: nof_in
+    logical, intent(in) :: unaligned
     integer :: fftw_planning_strategy
     real(C_DOUBLE), pointer :: in(:)
     complex(C_DOUBLE_COMPLEX), pointer :: out(:)
@@ -63,7 +64,9 @@ CONTAINS
 
     fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_DESTROY_INPUT)
     !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_PRESERVE_INPUT)
-    !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_UNALIGNED)
+    if (unaligned) then
+       fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_UNALIGNED)
+    end if
 
     plan = fftw_plan_dft_r2c_1d(nof, in, out, fftw_planning_strategy)
     plan_inv = fftw_plan_dft_c2r_1d(nof, out, in, fftw_planning_strategy)
