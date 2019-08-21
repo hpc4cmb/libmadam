@@ -620,12 +620,13 @@ CONTAINS
 
     if (kfirst) then
        write (*,*)
-       write (*,fk) 'kfirst',kfirst, 'First destriping ON'
-       write (*,ff) 'dnshort',dnshort,'Baseline length (samples)'
+       write (*,fk) 'kfirst', kfirst, 'First destriping ON'
+       write (*,ff) 'dnshort', dnshort, 'Baseline length (samples)'
        write (*,ff) ' ',dnshort/fsample,'seconds'
 
        if (kfilter) then
-          write (*,fk) 'kfilter',kfilter,'Noise filter ON'
+          write (*,fk) 'kfilter', kfilter, 'Noise filter ON'
+          write (*,fk) 'unaligned_fft', unaligned_fft
        else
           write (*,fk) 'kfilter', kfilter, 'Noise filter OFF'
           write (*,fe) 'diagfilter', diagfilter, 'diagonal baseline filter'
