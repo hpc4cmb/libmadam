@@ -46,15 +46,15 @@ CONTAINS
     call c_f_pointer(pin, in, [nof])
     call c_f_pointer(pout, out, [nof/2 + 1])
 
-    ierr = fftw_import_system_wisdom()
-
-    if (info /= 0) then
-       if (ierr /= 0) then
-          write (*,*) 'FFTW: System wide wisdom loaded'
-       else
-          write (*,*) 'FFTW: Unable to load system wisdom'
-       end if
-    end if
+!!$    ierr = fftw_import_system_wisdom()
+!!$
+!!$    if (info /= 0) then
+!!$       if (ierr /= 0) then
+!!$          write (*,*) 'FFTW: System wide wisdom loaded'
+!!$       else
+!!$          write (*,*) 'FFTW: Unable to load system wisdom'
+!!$       end if
+!!$    end if
 
     !if (nof <= 65536) then
     fftw_planning_strategy = FFTW_MEASURE
