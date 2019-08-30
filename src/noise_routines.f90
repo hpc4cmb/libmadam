@@ -19,10 +19,11 @@ MODULE noise_routines
 
   real(dp), save, public :: memory_filter = 0, memory_precond = 0, &
        cputime_filter = 0, cputime_precond = 0, &
-       cputime_prec_construct = 0
+       cputime_prec_construct = 0, &
+       cputime_filter_allocate = 0, &
+       cputime_filter_init = 0, &
+       cputime_filter_build = 0
 
-  !real(dp), allocatable :: xx(:)
-  !complex(dp), allocatable :: fx(:)
   complex(dp), allocatable, target :: fcov(:, :), fprecond(:, :)
   real(dp), allocatable :: invcov(:, :)
 
@@ -260,12 +261,13 @@ CONTAINS
     end do
     if (ID == 0) write(*,*) 'FFT length =', nof
 
-    !allocate(fx(nof / 2 + 1), xx(nof), stat=ierr) ! Work space
-    !if (ierr /= 0) call abort_mpi('No room for fx and xx')
-
     memory_filter = ((nof / 2 + 1) * 16. + nof * 8) * nthreads
 
+    call reset_time(16)
+
     call init_fourier(nof, unaligned_fft)
+
+    cputime_filter_init = cputime_filter_init + get_time_and_reset(16)
 
     ! Permanently allocate space for FFT for each OpenMP thread
 
@@ -283,6 +285,8 @@ CONTAINS
           pfx(id_thread) = fftw_alloc_complex(int(nof / 2 + 1, C_SIZE_T))
        end do
     end if
+
+    cputime_filter_allocate = cputime_filter_allocate + get_time(16)
 
   END SUBROUTINE init_filter
 
@@ -374,6 +378,8 @@ CONTAINS
 
     if (info == 3 .and. ID == 0) write(*,*) 'Building filter...'
     if (info > 4) write(*,*) 'Building filter...'
+
+    call reset_time(16)
 
     npsdtot = 0
     do idet = 1, nodetectors
@@ -495,6 +501,8 @@ CONTAINS
     !$OMP END PARALLEL
 
     if (kread_file) deallocate(ftable, spectrum_table)
+
+    cputime_filter_build = cputime_filter_build + get_time(16)
 
     if (info > 4) write(*,*) 'Done'
 

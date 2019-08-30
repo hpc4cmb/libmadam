@@ -499,6 +499,9 @@ contains
           call write_time('Binning TOD', cputime_bin_maps)
           call write_time('Sending binned TOD', cputime_send_maps)
           call write_time('Counting hits', cputime_count_hits)
+          call write_time('Filter - allocate', cputime_filter_allocate)
+          call write_time('Filter - initialize', cputime_filter_init)
+          call write_time('Filter - build', cputime_filter_build)
           call write_time('Building preconditioner', cputime_prec_construct)
           call write_time('Subtract/add baselines', &
                cputime_clean_tod+cputime_unclean_tod)
@@ -863,6 +866,9 @@ contains
        call write_time('Binning TOD', cputime_bin_maps)
        call write_time('Sending binned TOD', cputime_send_maps)
        call write_time('Counting hits', cputime_count_hits)
+       call write_time('Filter - allocate', cputime_filter_allocate)
+       call write_time('Filter - initialize', cputime_filter_init)
+       call write_time('Filter - build', cputime_filter_build)
        call write_time('Building preconditioner', cputime_prec_construct)
        call write_time('Subtract/add baselines', &
             cputime_clean_tod + cputime_unclean_tod)
@@ -1354,6 +1360,9 @@ contains
     cputime_send_maps = 0
     cputime_count_hits = 0
     cputime_prec_construct = 0
+    cputime_filter_allocate = 0
+    cputime_filter_init = 0
+    cputime_filter_build = 0
 
     cputime_cga_init = 0
     cputime_cga = 0

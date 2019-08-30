@@ -57,9 +57,9 @@ CONTAINS
 !!$    end if
 
     !if (nof <= 65536) then
-    fftw_planning_strategy = FFTW_MEASURE
+    !fftw_planning_strategy = FFTW_MEASURE
     !else
-    !   fftw_planning_strategy = FFTW_ESTIMATE
+    fftw_planning_strategy = FFTW_ESTIMATE
     !end if
 
     fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_DESTROY_INPUT)
