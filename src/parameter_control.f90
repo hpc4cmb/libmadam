@@ -8,6 +8,7 @@ MODULE parameter_control
   use pointing, only : subchunk
   use maps_and_baselines, only : memory_baselines, memory_maps, &
        memory_basis_functions
+  use memory_and_time, only : write_memory
 
   implicit none
   private
@@ -933,16 +934,7 @@ CONTAINS
        end do
     end if ! if (kfirst)
 
-    memsum = memory_basis_functions / 2**20
-    mem_min = memsum
-    mem_max = memsum
-    call min_mpi(mem_min)
-    call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,mstr3) 'Allocated memory for basis_functions:', &
-            memsum, mem_min, mem_max
-    end if
+    call write_memory("Basis function memory", memory_basis_functions)
 
     !end if
 

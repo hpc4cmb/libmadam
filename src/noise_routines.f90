@@ -7,6 +7,7 @@ MODULE noise_routines
   use fourier
   use mpi_wrappers
   use timing
+  use memory_and_time, only : write_memory
 
   use tod_storage, only : sampletime
 
@@ -392,16 +393,9 @@ CONTAINS
          psddet(npsdtot), psdind(npsdtot), psdstart(npsdtot), psdstop(npsdtot), &
          stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for fcov')
-    memory_filter = memory_filter + (nof / 2 + 1)*npsdtot*16. + npsdtot*24.
+    memory_filter = memory_filter + (nof / 2 + 1) * npsdtot * 16 + npsdtot * 24
 
-    memsum = memory_filter / 2 ** 20
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,'(1x,a,t32,3(f9.1," MB"))') &
-            'Allocated memory for filter:', memsum, mem_min, mem_max
-    end if
+    call write_memory("Filter memory", memory_filter)
 
     kread_file = (len_trim(file_spectrum) > 0)
     if (kread_file) call read_spectrum
@@ -1142,7 +1136,7 @@ CONTAINS
           print *, 'Constructed ', sum(ntries), ' band preconditioners.'
           do try = 1, trymax
              if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
-                  min(try*precond_width_min, precond_width_max)
+                  min(try * precond_width_min, precond_width_max)
           end do
           if (nfail > 0) print *, '            ', nfail, ' failed (using CG)'
           if (nempty > 0) print *, '    Skipped ', nempty, ' empty intervals.'
@@ -1150,14 +1144,7 @@ CONTAINS
 
     end if
 
-    memsum = memory_precond / 2 ** 20
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,'(1x,a,t32,3(f9.1," MB"))') &
-            'Allocated memory for precond:', memsum, mem_min, mem_max
-    end if
+    call write_memory("Precond memory", memory_precond)
 
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 

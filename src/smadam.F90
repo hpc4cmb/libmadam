@@ -457,6 +457,7 @@ contains
           if (id == 0) write(*,*)
           if (id == 0) write(*,*) 'MEMORY (MB):'
 
+          memory_total = 0
           call write_memory('Detector pointing', memory_pointing)
           call write_memory('TOD buffer', memory_tod)
           call write_memory('Maps', memory_maps)
@@ -824,17 +825,18 @@ contains
        if (id == 0) write(*,*)
        if (id == 0) write(*,*) 'MEMORY (MB):'
 
-       call write_memory('Detector pointing',  memory_pointing)
-       call write_memory('TOD buffer',         memory_tod)
-       call write_memory('Maps',               memory_maps)
-       call write_memory('Baselines',          memory_baselines)
-       call write_memory('Basis functions',    memory_basis_functions)
-       call write_memory('Noise filter',       memory_filter)
-       call write_memory('Preconditioner',     memory_precond)
-       call write_memory('Submap table',       memory_ksubmap)
-       call write_memory('Temporary maps',     memory_locmap)
-       call write_memory('All2All buffers',    memory_all2all)
-       call write_memory('CG work space',      memory_cg)
+       memory_total = 0
+       call write_memory('Detector pointing', memory_pointing)
+       call write_memory('TOD buffer', memory_tod)
+       call write_memory('Maps', memory_maps)
+       call write_memory('Baselines', memory_baselines)
+       call write_memory('Basis functions', memory_basis_functions)
+       call write_memory('Noise filter', memory_filter)
+       call write_memory('Preconditioner', memory_precond)
+       call write_memory('Submap table', memory_ksubmap)
+       call write_memory('Temporary maps', memory_locmap)
+       call write_memory('All2All buffers', memory_all2all)
+       call write_memory('CG work space', memory_cg)
        call write_memory('NCM', memory_ncm)
        call write_memory('Total')
     end if

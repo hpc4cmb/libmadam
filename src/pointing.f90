@@ -5,7 +5,7 @@ MODULE pointing
 
   use commonparam
   use mpi_wrappers
-  use memory_and_time, only : check_stat
+  use memory_and_time, only : check_stat, write_memory
 
   implicit none
   private
@@ -59,15 +59,7 @@ CONTAINS
 
     dummy_pixel = 12 * nside_max ** 2
 
-    memory = memory_pointing / 2d0 ** 20
-
-    mem_min = memory; mem_max = memory
-    call min_mpi(mem_min)
-    call max_mpi(mem_max)
-    call sum_mpi(memory)
-
-    if (id == 0 .and. info > 0) write(*,'(a,t32,3(f12.1," MB"))')   &
-         ' Allocated memory for pointing:', memory, mem_min, mem_max
+    call write_memory("Pointing memory", memory_pointing)
 
   END SUBROUTINE init_pointing
 

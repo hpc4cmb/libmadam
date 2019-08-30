@@ -6,7 +6,7 @@ MODULE tod_storage
 
   use commonparam
   use mpi_wrappers
-  use memory_and_time, only : check_stat
+  use memory_and_time, only : check_stat, write_memory
 
   implicit none
   private
@@ -43,14 +43,7 @@ CONTAINS
     memory_tod = memory_tod + nosamples_proc
     surveyflags = .true.
 
-    memsum = memory_tod/1024./1024.
-
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
-    call sum_mpi(memsum)
-
-    if (id == 0 .and. info >= 1) &
-         write(*,mstr3) 'Allocated memory for TOD:', memsum, mem_min, mem_max
+    call write_memory("TOD memory", memory_tod)
 
   END SUBROUTINE allocate_tod
 
