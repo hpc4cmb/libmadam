@@ -110,7 +110,7 @@ CONTAINS
 
        if (ierr /= 0) call abort_mpi('Failed to allocate locmap')
 
-       memory_locmap = (nsize_locmap + 1) * (nmap * 8 + nmap ** 2 * 8 + 4)
+       memory_locmap = (nsize_locmap + 1.) * (nmap * 8. + nmap ** 2 * 8. + 4)
 
     end if
 
