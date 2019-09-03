@@ -54,11 +54,11 @@ CONTAINS
 !!$       end if
 !!$    end if
 
-    if (nof <= 1000000) then
-       fftw_planning_strategy = FFTW_MEASURE
-    else
-       fftw_planning_strategy = FFTW_ESTIMATE
-    end if
+    !if (nof <= 1000000) then
+    fftw_planning_strategy = FFTW_MEASURE
+    !else
+    !   fftw_planning_strategy = FFTW_ESTIMATE
+    !end if
 
     fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_DESTROY_INPUT)
     !fftw_planning_strategy = ior(fftw_planning_strategy, FFTW_PRESERVE_INPUT)
