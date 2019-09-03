@@ -590,10 +590,13 @@ CONTAINS
     write (*,fi) 'nside_cross', nside_cross, 'Healpix resolution (destriping)'
     if (info > 1) &
          write (*,fi) 'nside_submap', nside_submap, 'Submap resolution'
-    write (*,fk) 'concatenate_messages', concatenate_messages, &
-         'use mpi_alltoallv to communicate'
-    write (*,fk) 'allreduce', allreduce, &
-         'use allreduce to communicate'
+    if (allreduce) then
+       write (*,fk) 'allreduce', allreduce, &
+            'use allreduce to communicate'
+    else
+       write (*,fk) 'concatenate_messages', concatenate_messages, &
+            'use mpi_alltoallv to communicate'
+    end if
     write (*,fk) 'reassign_submaps', reassign_submaps, &
          'minimize communication by reassigning submaps'
 

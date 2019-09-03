@@ -130,7 +130,7 @@ MODULE commonparam
   real(dp) :: dnshort=-1
   integer :: nlong=-1, nshort=-1
   logical :: kfirst=.true., kfilter=.false.
-  logical :: unaligned_fft=.true.
+  logical :: unaligned_fft=.false.
 
   real(dp) :: cglimit=1.d-12
   integer :: iter_min=3, iter_max=1000
