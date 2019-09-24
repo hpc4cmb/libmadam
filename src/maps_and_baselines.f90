@@ -8,7 +8,7 @@ MODULE maps_and_baselines
        noba_short, nodetectors, do_binmap, do_hits, do_mask, &
        ndetset, nmap, nopix_cross, nopix_map, nsurvey, use_inmask
   use mpi_wrappers, only : min_mpi, max_mpi, sum_mpi
-  use memory_and_time, only : check_stat
+  use memory_and_time, only : check_stat, write_memory
 
   implicit none
   private
@@ -102,16 +102,7 @@ CONTAINS
        allocate(cca(nmap, nmap, 0:0), wamap(nmap, 0:0))
     endif
 
-    memsum = memory_maps / 2. ** 20.
-    mem_min = memsum
-    mem_max = memsum
-    call min_mpi(mem_min)
-    call max_mpi(mem_max)
-    call sum_mpi(memsum)
-
-    if (ID==0 .and. info > 0) then
-       write(*,mstr3) 'Allocated memory for maps:', memsum, mem_min, mem_max
-    end if
+    call write_memory("Map memory", memory_maps)
 
   END SUBROUTINE allocate_maps
 
@@ -171,15 +162,7 @@ CONTAINS
        allocate(yba(1, 1, 1), nna(1, 1, 1, 1))
     endif
 
-    memsum = memory_baselines / 2**20
-    mem_min = memsum
-    mem_max = memsum
-    call min_mpi(mem_min)
-    call max_mpi(mem_max)
-    call sum_mpi(memsum)
-
-    if (ID==0 .and. info > 0) write(*,mstr3)  &
-         'Allocated memory for baselines:', memsum, mem_min, mem_max
+    call write_memory("Baseline memory", memory_baselines)
 
   END SUBROUTINE allocate_baselines
 

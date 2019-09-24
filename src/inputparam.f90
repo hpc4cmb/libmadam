@@ -294,6 +294,8 @@ CONTAINS
        read(value, *, iostat=ierr) kfilter
     case ('diagfilter')
        read(value, *, iostat=ierr) diagfilter
+    case ('unaligned_fft')
+       read(value, *, iostat=ierr) unaligned_fft
     case ('precond_width_min')
        read(value, *, iostat=ierr) precond_width_min
     case ('precond_width_max')

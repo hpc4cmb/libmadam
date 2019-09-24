@@ -2,6 +2,7 @@ MODULE maptod_transfer
 
   use commonparam
   use mpi_wrappers
+  use memory_and_time, only : write_memory
   implicit none
   private
 
@@ -54,31 +55,42 @@ CONTAINS
     logical, allocatable, intent(in) :: ksubmap(:)
     integer(i4b) :: ierr
     real(sp) :: memsum, mem_min, mem_max
+    integer :: nolocmaps_min, nolocmaps_max
+    real(dp) :: nolocmaps_sum
 
     nolocmaps = count(ksubmap(0:nosubmaps_tot-1))
     nolocpix = nolocmaps * nosubpix_max
 
+    nolocmaps_min = nolocmaps
+    nolocmaps_max = nolocmaps
+    nolocmaps_sum = nolocmaps
+    call min_mpi(nolocmaps_min)
+    call max_mpi(nolocmaps_max)
+    call sum_mpi(nolocmaps_sum)
+    if (ID == 0 .and. info > 0) then
+       write(*, '(x,"Total submaps = ",i0,"  submap size = ",i0)') &
+            nosubmaps_tot, nosubpix_max
+       write(*, '(x,"Local submaps:  min = ",i0,"  max = ",i0,"  mean = ",f8.2)') &
+            nolocmaps_min, nolocmaps_max, nolocmaps_sum / ntasks
+    end if
+
     if (.not. allocated(ksubmap_table)) then
        ! Default Fortran logical is 32 bits (!)
        if (allreduce) then
-          allocate(ksubmap_table(0:nosubmaps_tot-1, 0:0), stat=ierr)
+          allocate(ksubmap_table(0:nosubmaps_tot - 1, 0:0), stat=ierr)
           memory_ksubmap = nosubmaps_tot*4
        else
-          allocate(ksubmap_table(0:nosubmaps_tot-1, 0:ntasks-1), stat=ierr)
-          memory_ksubmap = nosubmaps_tot*ntasks*4
+          allocate(ksubmap_table(0:nosubmaps_tot - 1, 0:ntasks-1), stat=ierr)
+          memory_ksubmap = nosubmaps_tot * ntasks * 4
        end if
        if (ierr /= 0) call abort_mpi('No room for ksubmap_table')
        ksubmap_table = .false.
-       if (ID==0 .and. info > 0) then
-          memsum = memory_ksubmap / 2**20
-          write(*,mstr3) 'Allocated memory for submap table:', &
-               memsum, memsum, memsum
-       end if
+       call write_memory('Submap table memory', memory_ksubmap)
     end if
 
     if (allreduce) then
        ! All processes share ksubmap
-       ksubmap_table(:, 0) = ksubmap(0:nosubmaps_tot-1)
+       ksubmap_table(:, 0) = ksubmap(0:nosubmaps_tot - 1)
     else
        call mpi_allgather(ksubmap, nosubmaps_tot, MPI_LOGICAL, &
             ksubmap_table, nosubmaps_tot, MPI_LOGICAL, comm, ierr)
@@ -98,7 +110,7 @@ CONTAINS
 
        if (ierr /= 0) call abort_mpi('Failed to allocate locmap')
 
-       memory_locmap = (nsize_locmap+1) * (nmap*8.+nmap**2*8.+8)
+       memory_locmap = (nsize_locmap + 1.) * (nmap * 8. + nmap ** 2 * 8. + 4)
 
     end if
 
@@ -107,17 +119,7 @@ CONTAINS
     locmask = 0
     lochits = 0
 
-    memsum = memory_locmap / 2**20
-    mem_min = memsum
-    mem_max = memsum
-    call min_mpi(mem_min)
-    call max_mpi(mem_max)
-    call sum_mpi(memsum)
-
-    if (ID==0 .and. info > 0) then
-       write(*,mstr3) 'Allocated memory for local maps:', &
-            memsum, mem_min, mem_max
-    end if
+    call write_memory('local maps memory', memory_locmap)
 
   END SUBROUTINE update_maptod_transfer
 
@@ -165,14 +167,7 @@ CONTAINS
                + recvcounts_gather(itask-1)
        end do
 
-       memsum = memory_all2all / 2**20
-       mem_min = memsum; mem_max = memsum
-       call min_mpi(mem_min); call max_mpi(mem_max)
-       call sum_mpi(memsum)
-       if (ID == 0 .and. info > 0) then
-          write(*,'(x,a,t32,3(f9.1," MB"))') &
-               'Allocated memory for allreduce:', memsum, mem_min, mem_max
-       end if
+       call write_memory("Allreduce memory", memory_all2all)
     end if
 
     ! allreduce implies concatenate_messages = .false.
@@ -293,14 +288,7 @@ CONTAINS
        offset = offset + nrecv
     end do
 
-    memsum = memory_all2all / 2**20
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,'(x,a,t32,3(f9.1," MB"))') &
-            'Allocated memory for all2allv:', memsum, mem_min, mem_max
-    end if
+    call write_memory("All2allv memory", memory_all2all)
 
   END SUBROUTINE initialize_alltoallv
 

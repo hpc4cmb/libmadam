@@ -104,6 +104,8 @@ contains
     integer(i2b) :: subchunkcounter
     integer(i8b) :: pixmin, pixmax
 
+    call set_parameter_defaults()
+
     ! set up MPI
 
     call init_mpi(comm, ntasks, id)
@@ -253,6 +255,10 @@ contains
           call wait_mpi
 
           cputime_init = cputime_init + get_time(1)
+
+          call tic
+          call init_filter
+          if (id == 0) call toc('init_filter')
 
           call tic
           call build_filter
@@ -453,6 +459,7 @@ contains
           if (id == 0) write(*,*)
           if (id == 0) write(*,*) 'MEMORY (MB):'
 
+          memory_total = 0
           call write_memory('Detector pointing', memory_pointing)
           call write_memory('TOD buffer', memory_tod)
           call write_memory('Maps', memory_maps)
@@ -495,6 +502,9 @@ contains
           call write_time('Binning TOD', cputime_bin_maps)
           call write_time('Sending binned TOD', cputime_send_maps)
           call write_time('Counting hits', cputime_count_hits)
+          call write_time('Filter - allocate', cputime_filter_allocate)
+          call write_time('Filter - initialize', cputime_filter_init)
+          call write_time('Filter - build', cputime_filter_build)
           call write_time('Building preconditioner', cputime_prec_construct)
           call write_time('Subtract/add baselines', &
                cputime_clean_tod+cputime_unclean_tod)
@@ -817,17 +827,18 @@ contains
        if (id == 0) write(*,*)
        if (id == 0) write(*,*) 'MEMORY (MB):'
 
-       call write_memory('Detector pointing',  memory_pointing)
-       call write_memory('TOD buffer',         memory_tod)
-       call write_memory('Maps',               memory_maps)
-       call write_memory('Baselines',          memory_baselines)
-       call write_memory('Basis functions',    memory_basis_functions)
-       call write_memory('Noise filter',       memory_filter)
-       call write_memory('Preconditioner',     memory_precond)
-       call write_memory('Submap table',       memory_ksubmap)
-       call write_memory('Temporary maps',     memory_locmap)
-       call write_memory('All2All buffers',    memory_all2all)
-       call write_memory('CG work space',      memory_cg)
+       memory_total = 0
+       call write_memory('Detector pointing', memory_pointing)
+       call write_memory('TOD buffer', memory_tod)
+       call write_memory('Maps', memory_maps)
+       call write_memory('Baselines', memory_baselines)
+       call write_memory('Basis functions', memory_basis_functions)
+       call write_memory('Noise filter', memory_filter)
+       call write_memory('Preconditioner', memory_precond)
+       call write_memory('Submap table', memory_ksubmap)
+       call write_memory('Temporary maps', memory_locmap)
+       call write_memory('All2All buffers', memory_all2all)
+       call write_memory('CG work space', memory_cg)
        call write_memory('NCM', memory_ncm)
        call write_memory('Total')
     end if
@@ -859,6 +870,9 @@ contains
        call write_time('Binning TOD', cputime_bin_maps)
        call write_time('Sending binned TOD', cputime_send_maps)
        call write_time('Counting hits', cputime_count_hits)
+       call write_time('Filter - allocate', cputime_filter_allocate)
+       call write_time('Filter - initialize', cputime_filter_init)
+       call write_time('Filter - build', cputime_filter_build)
        call write_time('Building preconditioner', cputime_prec_construct)
        call write_time('Subtract/add baselines', &
             cputime_clean_tod + cputime_unclean_tod)
@@ -1350,6 +1364,9 @@ contains
     cputime_send_maps = 0
     cputime_count_hits = 0
     cputime_prec_construct = 0
+    cputime_filter_allocate = 0
+    cputime_filter_init = 0
+    cputime_filter_build = 0
 
     cputime_cga_init = 0
     cputime_cga = 0

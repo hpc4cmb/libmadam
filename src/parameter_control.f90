@@ -8,6 +8,7 @@ MODULE parameter_control
   use pointing, only : subchunk
   use maps_and_baselines, only : memory_baselines, memory_maps, &
        memory_basis_functions
+  use memory_and_time, only : write_memory
 
   implicit none
   private
@@ -589,10 +590,13 @@ CONTAINS
     write (*,fi) 'nside_cross', nside_cross, 'Healpix resolution (destriping)'
     if (info > 1) &
          write (*,fi) 'nside_submap', nside_submap, 'Submap resolution'
-    write (*,fk) 'concatenate_messages', concatenate_messages, &
-         'use mpi_alltoallv to communicate'
-    write (*,fk) 'allreduce', allreduce, &
-         'use allreduce to communicate'
+    if (allreduce) then
+       write (*,fk) 'allreduce', allreduce, &
+            'use allreduce to communicate'
+    else
+       write (*,fk) 'concatenate_messages', concatenate_messages, &
+            'use mpi_alltoallv to communicate'
+    end if
     write (*,fk) 'reassign_submaps', reassign_submaps, &
          'minimize communication by reassigning submaps'
 
@@ -620,12 +624,13 @@ CONTAINS
 
     if (kfirst) then
        write (*,*)
-       write (*,fk) 'kfirst',kfirst, 'First destriping ON'
-       write (*,ff) 'dnshort',dnshort,'Baseline length (samples)'
+       write (*,fk) 'kfirst', kfirst, 'First destriping ON'
+       write (*,ff) 'dnshort', dnshort, 'Baseline length (samples)'
        write (*,ff) ' ',dnshort/fsample,'seconds'
 
        if (kfilter) then
-          write (*,fk) 'kfilter',kfilter,'Noise filter ON'
+          write (*,fk) 'kfilter', kfilter, 'Noise filter ON'
+          write (*,fk) 'unaligned_fft', unaligned_fft
        else
           write (*,fk) 'kfilter', kfilter, 'Noise filter OFF'
           write (*,fe) 'diagfilter', diagfilter, 'diagonal baseline filter'
@@ -932,16 +937,7 @@ CONTAINS
        end do
     end if ! if (kfirst)
 
-    memsum = memory_basis_functions / 2**20
-    mem_min = memsum
-    mem_max = memsum
-    call min_mpi(mem_min)
-    call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,mstr3) 'Allocated memory for basis_functions:', &
-            memsum, mem_min, mem_max
-    end if
+    call write_memory("Basis function memory", memory_basis_functions)
 
     !end if
 

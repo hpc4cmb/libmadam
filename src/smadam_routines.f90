@@ -701,6 +701,7 @@ CONTAINS
     real(dp), allocatable, target :: ap_all_threads(:, :, :, :)
     real(dp), pointer :: ap_thread(:, :, :)
     real(dp), allocatable :: resid(:)
+    real(dp) :: t0, t1, t2, t3
 
     if (info > 4) write(*,idf) ID,'Begin iteration...'
 
@@ -730,7 +731,7 @@ CONTAINS
 
     r = yba
 
-    call apply_preconditioner(z, r)
+    call apply_preconditioner(z, r, -1)
 
     p = z
     rz = sum(r * z, mask=rmask)
@@ -872,26 +873,29 @@ CONTAINS
 
        ! 2) Evaluate p^T.A.p
 
-       pap = sum(p*ap, mask=rmask)
+       call wait_mpi  ! DEBUB
+       pap = sum(p * ap, mask=rmask)
        call sum_mpi(pap)
 
        ! 3) alpha = r.z / (p^T.A.p)
 
-       alpha = rz/pap
+       alpha = rz / pap
        ro = r ! Keep a copy for Polak-Ribiere beta
 
        ! 4) update `aa` and `r`
 
        aa(:, 1:noba_short, 1:nodetectors) = &
-            aa(:, 1:noba_short, 1:nodetectors) + alpha*p
-       r = r - alpha*ap
+            aa(:, 1:noba_short, 1:nodetectors) + alpha * p
+       r = r - alpha * ap
 
        ! 5) Precondition
 
-       call apply_preconditioner(z, r)
+       call wait_mpi  ! DEBUB
+       call apply_preconditioner(z, r, istep)
 
        ! 6) Check for convergence
 
+       call wait_mpi  ! DEBUB
        rzo = rz
        rz = sum(r * z, mask=rmask)
        rz2 = sum(ro * z, mask=rmask)
@@ -901,21 +905,21 @@ CONTAINS
        call sum_mpi(rr)
        ! This is the Fletcher-Reeves formula that
        ! assumes stationary preconditioning
-       !beta = rz / rzo
+       ! beta = rz / rzo
        ! This is the Polak-Ribiere formula that
        ! allows for updates to the preconditioner
        beta = (rz - rz2) / rzo
 
-       if (ID==0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
-            istep, rr/rrinit, rz2/rz, alpha, beta, get_time_and_reset(99)
+       if (ID == 0 .and. info > 1) write(*,'(i4,4es16.6," (",f8.3,"s)")') &
+            istep, rr / rrinit, rz2 / rz, alpha, beta, get_time_and_reset(99)
 
-       if (rr/rrinit > 1e3) call abort_mpi('CG is diverging')
-       if (rr/rrinit < cglimit .and. istep > iter_min) exit
+       if (rr / rrinit > 1e3) call abort_mpi('CG is diverging')
+       if (rr / rrinit < cglimit .and. istep > iter_min) exit
        if (rz == 0) exit
 
        ! 7) Update search direction, `p`
 
-       p = z + beta*p
+       p = z + beta * p
 
     end do
 
@@ -936,12 +940,13 @@ CONTAINS
 
   contains
 
-    subroutine apply_preconditioner(z, r)
+    subroutine apply_preconditioner(z, r, istep)
       real(dp), intent(in) :: r(0:basis_order, noba_short, nodetectors)
       real(dp), intent(out) :: z(0:basis_order, noba_short, nodetectors)
+      integer, intent(in) :: istep
       integer :: i, idet
       if (basis_order == 0) then
-         call preconditioning_band(z, r, nna)
+         call preconditioning_band(z, r, nna, istep)
       else
          do idet = 1, nodetectors
             do i = 1, noba_short

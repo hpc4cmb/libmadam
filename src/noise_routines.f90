@@ -7,6 +7,7 @@ MODULE noise_routines
   use fourier
   use mpi_wrappers
   use timing
+  use memory_and_time, only : write_memory
 
   use tod_storage, only : sampletime
 
@@ -19,10 +20,11 @@ MODULE noise_routines
 
   real(dp), save, public :: memory_filter = 0, memory_precond = 0, &
        cputime_filter = 0, cputime_precond = 0, &
-       cputime_prec_construct = 0
+       cputime_prec_construct = 0, &
+       cputime_filter_allocate = 0, &
+       cputime_filter_init = 0, &
+       cputime_filter_build = 0
 
-  !real(dp), allocatable :: xx(:)
-  !complex(dp), allocatable :: fx(:)
   complex(dp), allocatable, target :: fcov(:, :), fprecond(:, :)
   real(dp), allocatable :: invcov(:, :)
 
@@ -40,6 +42,11 @@ MODULE noise_routines
   integer, parameter :: NSUBMAX = 100
   type(bandprec_pointer), allocatable :: bandprec(:, :, :)
   real(dp), allocatable, target :: prec_diag(:, :)
+
+  ! Pointers for FFT workspace
+  type(C_PTR), allocatable :: pxx(:), pfx(:)
+  real(C_DOUBLE), allocatable, target :: xxthreads(:, :)
+  complex(C_DOUBLE_COMPLEX), allocatable, target :: fxthreads(:, :)
 
   ! PSD information
 
@@ -162,18 +169,18 @@ CONTAINS
        end if
        flog = log(targetfreq(i))
        if (j < n_in - 1) then
-          do while (logfreq(j+1) < flog)
+          do while (logfreq(j + 1) < flog)
              j = j + 1
              if (j == n_in - 1) exit
           end do
        end if
-       if (psd(j) > 0 .and. psd(j+1) > 0) then
+       if (psd(j) > 0 .and. psd(j + 1) > 0) then
           ! Logarithmic interpolation
-          r = (flog - logfreq(j)) / (logfreq(j+1) - logfreq(j))
+          r = (flog - logfreq(j)) / (logfreq(j + 1) - logfreq(j))
           targetpsd(i) = exp(logpsd(j) * (1._dp - r) + logpsd(j + 1) * r)
        else
           ! Linear interpolation
-          r = (targetfreq(i) - freq(j)) / (freq(j+1) - freq(j))
+          r = (targetfreq(i) - freq(j)) / (freq(j + 1) - freq(j))
           targetpsd(i) = psd(j) * (1._dp - r) + psd(j + 1) * r
        end if
     end do
@@ -220,7 +227,7 @@ CONTAINS
           if (detectors(idet)%psdstarts(ipsd) > starttime) ipsd = -1
           return
        end if
-       if (detectors(idet)%psdstarts(ipsd+1) > starttime) exit
+       if (detectors(idet)%psdstarts(ipsd + 1) > starttime) exit
        ipsd = ipsd + 1
     end do
 
@@ -235,8 +242,12 @@ CONTAINS
   SUBROUTINE init_filter
 
     integer :: nof_min, ierr
+    real(dp) :: t1
 
     if (.not. kfilter) return
+    if (nof >= 0) return  ! Filter already initialized
+
+    if (info == 3 .and. ID == 0) write(*,*) 'Initializing filter...'
 
     nofilter = 2 * noba_short_pp_max
 
@@ -247,16 +258,36 @@ CONTAINS
     nof = 1
     do
        if (nof >= nof_min) exit
-       nof = 2*nof
+       nof = 2 * nof
     end do
     if (ID == 0) write(*,*) 'FFT length =', nof
 
-    !allocate(fx(nof/2+1), xx(nof), stat=ierr) ! Work space
-    !if (ierr /= 0) call abort_mpi('No room for fx and xx')
+    memory_filter = ((nof / 2 + 1) * 16. + nof * 8) * nthreads
 
-    memory_filter = ((nof/2+1)*16. + nof*8) * nthreads
+    call reset_time(16)
 
-    call init_fourier(nof)
+    call init_fourier(nof, unaligned_fft)
+
+    cputime_filter_init = cputime_filter_init + get_time_and_reset(16)
+
+    ! Permanently allocate space for FFT for each OpenMP thread
+
+    if (unaligned_fft) then
+       allocate(xxthreads(nof, 0:nthreads - 1), &
+            fxthreads(nof / 2 + 1, 0:nthreads - 1), stat=ierr)
+       if (ierr /= 0) stop 'Failed to allocate xxthreads and fxthreads'
+    else
+       allocate(pxx(0:nthreads - 1), pfx(0:nthreads - 1), stat=ierr)
+       if (ierr /= 0) stop 'Failed to allocate pxx and pfx'
+       pxx = C_NULL_PTR
+       pfx = C_NULL_PTR
+       do id_thread = 0, nthreads - 1
+          pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
+          pfx(id_thread) = fftw_alloc_complex(int(nof / 2 + 1, C_SIZE_T))
+       end do
+    end if
+
+    cputime_filter_allocate = cputime_filter_allocate + get_time(16)
 
   END SUBROUTINE init_filter
 
@@ -295,6 +326,8 @@ CONTAINS
 
   SUBROUTINE close_filter
 
+    real(dp) :: t1
+
     if (.not. kfilter) return
 
     if (allocated(fcov)) deallocate(fcov)
@@ -310,6 +343,18 @@ CONTAINS
     call free_bandprec
 
     call close_fourier
+
+    if (unaligned_fft) then
+       if (allocated(xxthreads)) deallocate(xxthreads, fxthreads)
+    else
+       if (allocated(pxx)) then
+          do id_thread = 0, nthreads - 1
+             call fftw_free(pxx(id_thread))
+             call fftw_free(pfx(id_thread))
+          end do
+          deallocate(pxx, pfx)
+       end if
+    end if
 
     nof = -1
 
@@ -335,7 +380,7 @@ CONTAINS
     if (info == 3 .and. ID == 0) write(*,*) 'Building filter...'
     if (info > 4) write(*,*) 'Building filter...'
 
-    if (nof < 0) call init_filter
+    call reset_time(16)
 
     npsdtot = 0
     do idet = 1, nodetectors
@@ -344,20 +389,13 @@ CONTAINS
 
     ! Construct and store the filters
     if (allocated(fcov)) deallocate(fcov)
-    allocate(fcov(nof/2+1, npsdtot), & ! Fourier inverse of the noise filter
+    allocate(fcov(nof / 2 + 1, npsdtot), & ! Fourier inverse of the noise filter
          psddet(npsdtot), psdind(npsdtot), psdstart(npsdtot), psdstop(npsdtot), &
          stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for fcov')
-    memory_filter = memory_filter + (nof/2+1)*npsdtot*16. + npsdtot*24.
+    memory_filter = memory_filter + (nof / 2 + 1) * npsdtot * 16 + npsdtot * 24
 
-    memsum = memory_filter / 2**20
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,'(1x,a,t32,3(f9.1," MB"))') &
-            'Allocated memory for filter:', memsum, mem_min, mem_max
-    end if
+    call write_memory("Filter memory", memory_filter)
 
     kread_file = (len_trim(file_spectrum) > 0)
     if (kread_file) call read_spectrum
@@ -374,7 +412,7 @@ CONTAINS
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
 
-    allocate(aspec(nof/2+1), spectrum(nof), f(nof), g(nof), stat=ierr)
+    allocate(aspec(nof / 2 + 1), spectrum(nof), f(nof), g(nof), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for aspec')
 
     ipsdtot = 0
@@ -393,7 +431,7 @@ CONTAINS
           psdind(ipsdtot) = ipsd
           psdstart(ipsdtot) = detectors(idet)%psdstarts(ipsd)
           if (ipsd < detectors(idet)%npsd) then
-             psdstop(ipsdtot) = detectors(idet)%psdstarts(ipsd+1)
+             psdstop(ipsdtot) = detectors(idet)%psdstarts(ipsd + 1)
           else
              psdstop(ipsdtot) = 1e30
           end if
@@ -414,23 +452,23 @@ CONTAINS
              end if
 
              do i = 1, nof
-                x = pi*f(i)/fa
+                x = pi * f(i) / fa
                 if (x < 1.e-30) then
-                   g(i) = 1.d0
+                   g(i) = 1
                 else
-                   g(i) = sin(x)**2/x**2
+                   g(i) = sin(x) ** 2 / x ** 2
                 end if
              end do
 
              if (k == 0) then
                 aspec(1) = spectrum(1)
              else
-                aspec(1) = aspec(1) + 2*spectrum(1)*g(1)
+                aspec(1) = aspec(1) + 2 * spectrum(1) * g(1)
              end if
 
-             do i = 2, nof/2+1
-                aspec(i) = aspec(i) + spectrum(i)*g(i) &
-                     + spectrum(nof-i+2)*g(nof-i+2)
+             do i = 2, nof / 2 + 1
+                aspec(i) = aspec(i) + spectrum(i) * g(i) &
+                     + spectrum(nof - i + 2) * g(nof - i + 2)
              end do
 
           end do
@@ -457,6 +495,8 @@ CONTAINS
     !$OMP END PARALLEL
 
     if (kread_file) deallocate(ftable, spectrum_table)
+
+    cputime_filter_build = cputime_filter_build + get_time(16)
 
     if (info > 4) write(*,*) 'Done'
 
@@ -488,7 +528,7 @@ CONTAINS
          end if
 
          allocate(ftable(nolines), spectrum_table(nolines, nodetectors), &
-              dtemp(nocols+1, nolines), stemp(nocols), sigmas(nocols), &
+              dtemp(nocols + 1, nolines), stemp(nocols), sigmas(nocols), &
               stat=ierr)
          if (ierr /= 0) call abort_mpi('No room to read the noise spectra')
 
@@ -518,7 +558,7 @@ CONTAINS
          do idet = 1, nodetectors
             ! find the column of the read table that corresponds to
             ! detector # idet
-            do icol = 1, nocols+1
+            do icol = 1, nocols + 1
                if (icol > nocols) then
                   call abort_mpi('ERROR: ' // trim(detectors(idet)%name) // &
                        ' not in ' // trim(file_spectrum))
@@ -532,7 +572,7 @@ CONTAINS
 
             ! prepare for logaritmic interpolation
             ! first column was the frequency
-            spectrum_table(:, idet) = log(dtemp(icol+1, :))
+            spectrum_table(:, idet) = log(dtemp(icol + 1, :))
          end do
 
          deallocate(stemp, dtemp)
@@ -542,7 +582,7 @@ CONTAINS
       call broadcast_mpi(nolines, 0)
       do idet = 1, nodetectors
          call broadcast_mpi(detectors(idet)%sigmas, detectors(idet)%npsd, 0)
-         detectors(idet)%weights = 1 / detectors(idet)%sigmas**2
+         detectors(idet)%weights = 1 / detectors(idet)%sigmas ** 2
       end do
 
       if (id /= 0) then
@@ -578,16 +618,16 @@ CONTAINS
          logf = log(f(i))
 
          do
-            if (logf <= ftable(k+1) .or. k == nolines-1) exit
+            if (logf <= ftable(k + 1) .or. k == nolines-1) exit
             k = k + 1
          end do
 
-         p = (logf-ftable(k)) / (ftable(k+1)-ftable(k))
+         p = (logf - ftable(k)) / (ftable(k + 1) - ftable(k))
 
          if (p < 0) p = 0
          if (p > 1) p = 1
 
-         logspec = (1.d0-p)*spectrum_table(k, icol) + p*spectrum_table(k+1, icol)
+         logspec = (1.d0 - p) * spectrum_table(k, icol) + p * spectrum_table(k + 1, icol)
          spectrum(i) = exp(logspec) ! *sigma*sigma/fsample  -RK
       end do
 
@@ -615,7 +655,7 @@ CONTAINS
 
          ! the sigmas have already been updated from the PSDs
 
-         !plateau = detectors(idet)%sigmas(ipsd)**2 / fsample
+         !plateau = detectors(idet)%sigmas(ipsd) ** 2 / fsample
          plateau = detectors(idet)%plateaus(ipsd)
 
       else
@@ -673,7 +713,7 @@ CONTAINS
          loop_bins : do i = 1, nof
             if (spectrum(i) <= 0) then
                ! First look for valid value in higher frequency
-               loop_next_bins: do j = i+1, nof
+               loop_next_bins: do j = i + 1, nof
                   if (spectrum(j) > 0) then
                      spectrum(i) = spectrum(j)
                      cycle loop_bins
@@ -733,7 +773,7 @@ CONTAINS
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
     integer :: gapmin, gaplen, i
 
-    if (all(nna(:, :, kstart+1:kstop, idet) == 0)) then
+    if (all(nna(:, :, kstart + 1:kstop, idet) == 0)) then
        noba = 0
        return
     end if
@@ -741,7 +781,7 @@ CONTAINS
     ! trim the beginning
 
     do while (kstart < kstop)
-       if (any(nna(:, :, kstart+1, idet) /= 0)) exit
+       if (any(nna(:, :, kstart + 1, idet) /= 0)) exit
        kstart = kstart + 1
     end do
 
@@ -777,19 +817,19 @@ CONTAINS
     integer, intent(in) :: ichunk, idet
     real(dp), intent(out) :: y(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in) :: x(0:basis_order, noba_short, nodetectors)
-    complex(dp), intent(in) :: fc(nof/2 + 1, npsdtot)
+    complex(dp), intent(in) :: fc(nof / 2 + 1, npsdtot)
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
     real(C_DOUBLE) :: xx(nof)
-    complex(C_DOUBLE_COMPLEX) :: fx(nof/2 + 1)
+    complex(C_DOUBLE_COMPLEX) :: fx(nof / 2 + 1)
     integer :: noba, kstart, kstop, ipsd
 
     kstart = sum(noba_short_pp(1:ichunk-1))
     kstop = kstart + noba_short_pp(ichunk)
-    ipsd = psd_index(idet, baselines_short_time(kstart+1))
+    ipsd = psd_index(idet, baselines_short_time(kstart + 1))
 
-    y(0, kstart+1:kstop, idet) = x(0, kstart+1:kstop, idet)
+    y(0, kstart + 1:kstop, idet) = x(0, kstart + 1:kstop, idet)
 
     if (ipsd == -1) then
        ! no PSD
@@ -802,14 +842,14 @@ CONTAINS
        call trim_interval(kstart, kstop, noba, idet, nna)
        if (noba == 0) exit
 
-       xx(1:noba) = x(0, kstart+1:kstart+noba, idet)
+       xx(1:noba) = x(0, kstart + 1:kstart+noba, idet)
        xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
-       xx(noba+1:) = 0
+       xx(noba + 1:) = 0
        call dfft(fx, xx)
        fx = fx * fc(:, ipsd)
        call dfftinv(xx, fx)
        xx(1:noba) = xx(1:noba) - sum(xx(1:noba)) / noba
-       y(0, kstart+1:kstart+noba, idet) = xx(1:noba)
+       y(0, kstart + 1:kstart+noba, idet) = xx(1:noba)
 
        kstart = kstart + noba
     end do
@@ -825,7 +865,7 @@ CONTAINS
 
     real(dp), intent(out) :: y(noba_short, nodetectors)
     real(dp), intent(in) :: x(noba_short, nodetectors)
-    complex(dp), intent(in) :: fc(nof/2+1, npsdtot)
+    complex(dp), intent(in) :: fc(nof / 2 + 1, npsdtot)
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
 
@@ -833,31 +873,29 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     call reset_time(14)
 
     y = x
 
-    ! Allocate FFTW work space outside the threaded region to avoid
-    ! a GCC compiler segfault when freeing the workspace
-    do id_thread = 0, nthreads - 1
-       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-    end do
-
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
     !$OMP     SHARED(nof, nodetectors, ninterval, noba_short_pp, &
-    !$OMP         baselines_short_time, fc, x, y, nthreads, nna, pxx, pfx) &
+    !$OMP         baselines_short_time, fc, x, y, nthreads, nna, pxx, pfx, &
+    !$OMP         unaligned_fft, xxthreads, fxthreads) &
     !$OMP     PRIVATE(idet, ichunk, m, xx, fx, ierr, id_thread, itask, &
     !$OMP         num_threads)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
 
-    call c_f_pointer(pxx(id_thread), xx, [nof])
-    call c_f_pointer(pfx(id_thread), fx, [nof/2 + 1])
+    if (unaligned_fft) then
+       xx => xxthreads(:, id_thread)
+       fx => fxthreads(:, id_thread)
+    else
+       call c_f_pointer(pxx(id_thread), xx, [nof])
+       call c_f_pointer(pfx(id_thread), fx, [nof / 2 + 1])
+    end if
 
     itask = -1
     do idet = 1, nodetectors
@@ -869,11 +907,6 @@ CONTAINS
     end do
 
     !$OMP END PARALLEL
-
-    do id_thread = 0, nthreads - 1
-       call fftw_free(pxx(id_thread))
-       call fftw_free(pfx(id_thread))
-    end do
 
     cputime_filter = cputime_filter + get_time(14)
 
@@ -897,7 +930,6 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     if (precond_width_max < 1) return
 
@@ -921,15 +953,15 @@ CONTAINS
           do ichunk = 1, ninterval
              kstart = sum(noba_short_pp(1:ichunk-1))
              noba = noba_short_pp(ichunk)
-             ipsddet = psd_index_det(idet, baselines_short_time(kstart+1))
+             ipsddet = psd_index_det(idet, baselines_short_time(kstart + 1))
              if (ipsddet < 0) then
                 ! No PSD available
-                do k = kstart+1, kstart+noba
+                do k = kstart + 1, kstart+noba
                    prec_diag(k, idet) = 1.
                 end do
                 cycle
              end if
-             do k = kstart+1, kstart+noba
+             do k = kstart + 1, kstart+noba
                 if (nna(0, 0, k, idet) == 0) then
                    prec_diag(k, idet) = 1. / detectors(idet)%weights(ipsddet)
                 else
@@ -943,10 +975,10 @@ CONTAINS
 
     ! Build fprecond to act as a fall back option
     if (allocated(fprecond)) deallocate(fprecond)
-    allocate(fprecond(nof/2+1, npsdtot), stat=ierr)
+    allocate(fprecond(nof / 2 + 1, npsdtot), stat=ierr)
     if (ierr /= 0) call abort_mpi('No room for fprecond')
     fprecond = 0
-    memory_precond = memory_precond + (nof/2+1)*npsdtot*16.
+    memory_precond = memory_precond + (nof / 2 + 1)*npsdtot*16.
     ipsd = 0
     do idet = 1, nodetectors
        do ipsddet = 1, detectors(idet)%npsd
@@ -969,23 +1001,22 @@ CONTAINS
 
     call allocate_bandprec
 
-    ! Allocate FFTW work space outside the threaded region to avoid
-    ! a GCC compiler segfault when freeing the workspace
-    do id_thread = 0, nthreads - 1
-       pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-       pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-    end do
-
     !$OMP PARALLEL NUM_THREADS(nthreads) &
     !$OMP     DEFAULT(NONE) &
-    !$OMP     SHARED(nof, npsdtot, fcov, invcov, pxx, pfx) &
+    !$OMP     SHARED(nof, npsdtot, fcov, invcov, pxx, pfx, &
+    !$OMP         unaligned_fft, xxthreads, fxthreads) &
     !$OMP     PRIVATE(id_thread, num_threads, ipsd, xx, fx)
 
     id_thread = omp_get_thread_num()
     num_threads = omp_get_num_threads()
 
-    call c_f_pointer(pxx(id_thread), xx, [nof])
-    call c_f_pointer(pfx(id_thread), fx, [nof/2 + 1])
+    if (unaligned_fft) then
+       xx => xxthreads(:, id_thread)
+       fx => fxthreads(:, id_thread)
+    else
+       call c_f_pointer(pxx(id_thread), xx, [nof])
+       call c_f_pointer(pfx(id_thread), fx, [nof / 2 + 1])
+    end if
 
     do ipsd = 1, npsdtot
        if (modulo(ipsd-1, num_threads) /= id_thread) cycle
@@ -995,11 +1026,6 @@ CONTAINS
     end do
 
     !$OMP END PARALLEL
-
-    do id_thread = 0, nthreads - 1
-       call fftw_free(pxx(id_thread))
-       call fftw_free(pfx(id_thread))
-    end do
 
     if (.not. use_cgprecond) then
        nempty = 0
@@ -1034,10 +1060,10 @@ CONTAINS
              loop_subchunk : do
                 call trim_interval(kstart, kstop, noba, idet, nna)
                 if (noba == 0) exit
-                ipsd = psd_index(idet, baselines_short_time(kstart+1))
+                ipsd = psd_index(idet, baselines_short_time(kstart + 1))
 
                 if (ipsd == -1 .or. noba < 1 .or. &
-                     all(nna(0, 0, kstart+1:kstart+noba, idet) == 0)) then
+                     all(nna(0, 0, kstart + 1:kstart+noba, idet) == 0)) then
                    nempty = nempty + 1
                    cycle
                 end if
@@ -1045,15 +1071,15 @@ CONTAINS
                 ! Rough guess for the width of the preconditioner based on
                 ! total power in the band
 
-                p_tot = sum(invcov(:nof/2, ipsd)**2)
+                p_tot = sum(invcov(:nof / 2, ipsd) ** 2)
                 try = 1
                 ierr = -1
                 loop_try : do
-                   ! Rows from kstart+1 to kstart+noba for one band-diagonal
+                   ! Rows from kstart + 1 to kstart+noba for one band-diagonal
                    ! submatrix.  Do the computation in double precision
                    nband = min(noba, try * precond_width_min)
                    nband = min(nband, precond_width_max)
-                   p = sum(invcov(:nband, ipsd)**2)
+                   p = sum(invcov(:nband, ipsd) ** 2)
                    if (p > plim * p_tot) then
                       ierr = 0
                       exit
@@ -1068,7 +1094,7 @@ CONTAINS
                    do
                       call get_cholesky_decomposition( &
                            bandprec(isub, ichunk, idet)%data, nband, noba, &
-                           invcov(1, ipsd), nna(0, 0, kstart+1, idet), ierr)
+                           invcov(1, ipsd), nna(0, 0, kstart + 1, idet), ierr)
 
                       if (ierr == 0) exit
 
@@ -1088,7 +1114,7 @@ CONTAINS
                    !write (*, '(1x,a,i0,a,es18.10,a,es18.10)') &
                    !     'Cholesky decomposition failed for ' // &
                    !     trim(detectors(idet)%name) // ', noba = ', noba, ', t = ', &
-                   !     baselines_short_time(kstart+1), ' - ', &
+                   !     baselines_short_time(kstart + 1), ' - ', &
                    !     baselines_short_time(kstart+noba)
                    nfail = nfail + 1
                 else
@@ -1110,7 +1136,7 @@ CONTAINS
           print *, 'Constructed ', sum(ntries), ' band preconditioners.'
           do try = 1, trymax
              if (ntries(try) > 0) print *, ntries(try), ' at width = ', &
-                  min(try*precond_width_min, precond_width_max)
+                  min(try * precond_width_min, precond_width_max)
           end do
           if (nfail > 0) print *, '            ', nfail, ' failed (using CG)'
           if (nempty > 0) print *, '    Skipped ', nempty, ' empty intervals.'
@@ -1118,14 +1144,7 @@ CONTAINS
 
     end if
 
-    memsum = memory_precond / 2**20
-    mem_min = memsum; mem_max = memsum
-    call min_mpi(mem_min); call max_mpi(mem_max)
-    call sum_mpi(memsum)
-    if (ID == 0 .and. info > 0) then
-       write(*,'(1x,a,t32,3(f9.1," MB"))') &
-            'Allocated memory for precond:', memsum, mem_min, mem_max
-    end if
+    call write_memory("Precond memory", memory_precond)
 
     cputime_prec_construct = cputime_prec_construct + get_time(16)
 
@@ -1137,7 +1156,7 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE preconditioning_band(z, r, nna)
+  SUBROUTINE preconditioning_band(z, r, nna, istep)
     !Apply the preconditioner
 
     ! z and r may be 3-dimensional arrays in the calling code but
@@ -1147,6 +1166,7 @@ CONTAINS
     real(dp), intent(in), target :: r(0:basis_order, noba_short, nodetectors)
     real(dp), intent(in)  :: &
          nna(0:basis_order, 0:basis_order, noba_short, nodetectors)
+    integer, intent(in) :: istep
 
     integer :: j, k, idet, kstart, kstop, noba, ichunk, ierr, itask, &
          num_threads, m, nband, ipsd, isub
@@ -1154,7 +1174,6 @@ CONTAINS
 
     real(C_DOUBLE), pointer :: xx(:) => NULL()
     complex(C_DOUBLE_COMPLEX), pointer :: fx(:) => NULL()
-    type(C_PTR) :: pxx(0:nthreads-1), pfx(0:nthreads-1)
 
     z = r
 
@@ -1170,18 +1189,12 @@ CONTAINS
        ! Apply the filter-based preconditioner
        call convolve_pp(z, r, fprecond, nna)
     else
-       ! Allocate FFTW work space outside the threaded region to avoid
-       ! a GCC compiler segfault when freeing the workspace
-       do id_thread = 0, nthreads - 1
-          pxx(id_thread) = fftw_alloc_real(int(nof, C_SIZE_T))
-          pfx(id_thread) = fftw_alloc_complex(int(nof/2 + 1, C_SIZE_T))
-       end do
-
        !$OMP PARALLEL NUM_THREADS(nthreads) &
        !$OMP     DEFAULT(NONE) &
        !$OMP     SHARED(noba_short_pp, ninterval, bandprec, z, r, nodetectors, &
        !$OMP         id, nof, nshort, detectors, nthreads, fprecond, nna, &
-       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx) &
+       !$OMP         baselines_short_time, invcov, fcov, checknan, pxx, pfx, &
+       !$OMP         unaligned_fft, xxthreads, fxthreads) &
        !$OMP     PRIVATE(idet, ichunk, kstart, kstop, noba, j, k, ierr, m, &
        !$OMP         xx, fx, nband, id_thread, itask, num_threads, ipsd, isub, &
        !$OMP         t1, t2, tf)
@@ -1191,8 +1204,13 @@ CONTAINS
        id_thread = omp_get_thread_num()
        num_threads = omp_get_num_threads()
 
-       call c_f_pointer(pxx(id_thread), xx, [nof])
-       call c_f_pointer(pfx(id_thread), fx, [nof/2 + 1])
+       if (unaligned_fft) then
+          xx => xxthreads(:, id_thread)
+          fx => fxthreads(:, id_thread)
+       else
+          call c_f_pointer(pxx(id_thread), xx, [nof])
+          call c_f_pointer(pfx(id_thread), fx, [nof / 2 + 1])
+       end if
 
        itask = -1
        do idet = 1, nodetectors
@@ -1205,21 +1223,21 @@ CONTAINS
                 if (noba == 0) exit loop_subchunk
                 itask = itask + 1
                 if (modulo(itask, num_threads) == id_thread) then
-                   ipsd = psd_index_det(idet, baselines_short_time(kstart+1))
+                   ipsd = psd_index_det(idet, baselines_short_time(kstart + 1))
                    if (ipsd < 0) cycle
                    if (detectors(idet)%weights(ipsd) == 0) cycle
-                   ipsd = psd_index(idet, baselines_short_time(kstart+1))
+                   ipsd = psd_index(idet, baselines_short_time(kstart + 1))
                    if (allocated(bandprec(isub, ichunk, idet)%data)) then
                       ! Use the precomputed Cholesky decomposition
                       nband = size(bandprec(isub, ichunk, idet)%data, 1)
                       call apply_cholesky_decomposition( &
-                           noba, z(0, kstart+1, idet), r(0, kstart+1, idet), &
+                           noba, z(0, kstart + 1, idet), r(0, kstart + 1, idet), &
                            nband, bandprec(isub, ichunk, idet)%data)
                    else
                       ! Use CG iteration to apply the preconditioner
                       call apply_CG_preconditioner( &
-                           noba, nof, fcov(1, ipsd), nna(0, 0, kstart+1, idet), &
-                           z(0, kstart+1, idet), r(0, kstart+1, idet), &
+                           noba, nof, fcov(1, ipsd), nna(0, 0, kstart + 1, idet), &
+                           z(0, kstart + 1, idet), r(0, kstart + 1, idet), &
                            invcov(1, ipsd), fx, xx, tf)
                    end if
                 end if
@@ -1231,10 +1249,6 @@ CONTAINS
 
        !$OMP END PARALLEL
 
-       do id_thread = 0, nthreads - 1
-          call fftw_free(pxx(id_thread))
-          call fftw_free(pfx(id_thread))
-       end do
     end if
 
     cputime_precond = cputime_precond + get_time(16)
@@ -1289,18 +1303,18 @@ CONTAINS
 
 
   subroutine apply_CG_preconditioner( &
-       noba, nof, fcov, nna, x, b, invcov, fx, xx, tf)
+       noba, nof, fcov, nna, x, b, invcov, fx, xx, tfilter)
     !
     ! Apply the preconditioner using CG iteration
     !
     integer, intent(in) :: noba, nof
-    complex(dp), intent(in) :: fcov(nof/2+1)
+    complex(dp), intent(in) :: fcov(nof / 2 + 1)
     real(dp), intent(in) :: nna(noba), invcov(noba)
     real(dp), intent(out) :: x(noba)
     real(dp), intent(in) :: b(noba)
-    real(dp), intent(inout) :: tf
     real(C_DOUBLE), intent(inout) :: xx(nof)
-    complex(C_DOUBLE_COMPLEX), intent(inout) :: fx(nof/2 + 1)
+    complex(C_DOUBLE_COMPLEX), intent(inout) :: fx(nof / 2 + 1)
+    real(dp), intent(out) :: tfilter
 
     real(dp), allocatable :: resid(:), prop(:), Aprop(:), zresid(:), precond(:)
     real(dp) :: alpha, beta, rr, rr0, rr_old, rz, rz_old, Anorm
@@ -1328,8 +1342,9 @@ CONTAINS
 
     prop = zresid
     iter = 1
+    tfilter = 0
     do
-       call apply_A(prop, Aprop, tf)
+       call apply_A(prop, Aprop)
        Anorm = dot_product(prop, Aprop)
        alpha = rz / Anorm
        x = x + alpha * prop
@@ -1360,34 +1375,33 @@ CONTAINS
       z = precond * x
     end subroutine apply_precond
 
-    subroutine apply_A(x, y, tf)
+    subroutine apply_A(x, y)
       !
       ! Apply the square matrix `A` to `x` and place the result in `y`
       !
       real(dp), intent(in) :: x(noba)
       real(dp), intent(out) :: y(noba)
-      real(dp), intent(inout) :: tf
-      call convolve(x, fcov, y, tf)
-      y = y + nna*x
+      call convolve(x, fcov, y)
+      y = y + nna * x
     end subroutine apply_A
 
-    subroutine convolve(x, fc, y, tf)
+    subroutine convolve(x, fc, y)
       !
       ! Convolve `x` with filter `fc` and place result in `y`.
       !
       real(dp), intent(in) :: x(noba)
-      complex(dp) :: fc(nof/2 + 1)
+      complex(dp) :: fc(nof / 2 + 1)
       real(dp), intent(out) :: y(noba)
-      real(dp), intent(inout) :: tf
-      real(dp) :: t1, t2
-      xx(:noba) = x - sum(x)/noba
-      xx(noba+1:) = 0
-      !t1 = get_time(56)
+      !real(dp) :: t
+      xx(:noba) = x - sum(x) / noba
+      xx(noba + 1:) = 0
+      !t = MPI_Wtime()
       call dfft(fx, xx)
-      fx = fx*fc
+      !tfilter = tfilter + (MPI_Wtime() - t)
+      fx = fx * fc
+      !t = MPI_Wtime()
       call dfftinv(xx, fx)
-      !t2 = get_time(56)
-      !tf = tf + t2 - t1
+      !tfilter = tfilter + (MPI_Wtime() - t)
       y = xx(:noba)
       y = y - sum(y) / noba
     end subroutine convolve
