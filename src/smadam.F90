@@ -104,6 +104,8 @@ contains
     integer(i2b) :: subchunkcounter
     integer(i8b) :: pixmin, pixmax
 
+    call set_parameter_defaults()
+
     ! set up MPI
 
     call init_mpi(comm, ntasks, id)
