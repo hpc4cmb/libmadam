@@ -7,10 +7,7 @@ from __future__ import print_function
 
 import ctypes as ct
 import ctypes.util as ctu
-import os
-import sys
-import glob
-import shutil
+from sys import platform
 
 import numpy as np
 import numpy.ctypeslib as npc
@@ -25,7 +22,7 @@ REPEATED_KEYS = ["detset", "detset_nopol", "survey"]
 
 
 try:
-    _madam = ct.CDLL("libmadam.so")
+    _madam = ct.CDLL("libmadam.dylib") if platform == "darwin" else ct.CDLL("libmadam.so")
 except OSError:
     path = ctu.find_library("madam")
     if path is not None:
