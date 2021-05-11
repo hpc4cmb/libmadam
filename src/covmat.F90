@@ -52,7 +52,7 @@ contains
          jbase, i, j, kstart, kstop, noba, lag
     integer(i8b) :: ipix, jpix
     real(dp) :: detweight, mm, ptf1
-    character(len=SLEN) :: outfile
+    character(len=PATHLEN) :: outfile
     logical :: there
 
     call reset_time(5)

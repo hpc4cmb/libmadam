@@ -85,7 +85,7 @@ CONTAINS
 
     SUBROUTINE addpath(path, filename)
 
-      character(len=SLEN) :: path, filename
+      character(len=PATHLEN) :: path, filename
       integer :: n
 
       n = len_trim(path)
@@ -125,7 +125,7 @@ CONTAINS
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
 
-    character(len=SLEN) :: file_map_bin, file_map_txt
+    character(len=PATHLEN) :: file_map_bin, file_map_txt
     INTEGER(i4b) :: ierr, pix
 
     INTEGER :: nsend, nrecv, mysubmap, rec_len
@@ -537,7 +537,7 @@ CONTAINS
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
 
-    character(len=SLEN) :: file_map_bin, file_map_txt
+    character(len=PATHLEN) :: file_map_bin, file_map_txt
     INTEGER(i4b) :: ierr, pix
 
     INTEGER :: nsend, nrecv, mysubmap, rec_len
@@ -1041,7 +1041,7 @@ CONTAINS
     integer(i8b), allocatable :: i8buffer(:)
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
-    character(len=SLEN) :: outfile
+    character(len=PATHLEN) :: outfile
 
     outfile = file_matrix
     if (present(mask)) outfile = file_wcov
@@ -1192,7 +1192,7 @@ CONTAINS
     integer(i8b), allocatable :: i8buffer(:)
     type(fitshandle) :: out
     type(fitscolumn), pointer :: columns(:)
-    character(len=SLEN) :: outfile
+    character(len=PATHLEN) :: outfile
 
     if (len_trim(file_leakmatrix) <= 0) return
 

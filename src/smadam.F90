@@ -51,11 +51,11 @@ module smadam
 
   integer(i8b) :: i
   integer(i2b) :: subchunk_start
-  character(len=SLEN) :: subchunk_file_map, subchunk_file_base
-  character(len=SLEN) :: subchunk_file_binmap
-  character(len=SLEN) :: subchunk_file_hit, subchunk_file_mask
-  character(len=SLEN) :: subchunk_file_matrix, subchunk_file_leakmatrix
-  character(len=SLEN) :: subchunk_file_wcov
+  character(len=PATHLEN) :: subchunk_file_map, subchunk_file_base
+  character(len=PATHLEN) :: subchunk_file_binmap
+  character(len=PATHLEN) :: subchunk_file_hit, subchunk_file_mask
+  character(len=PATHLEN) :: subchunk_file_matrix, subchunk_file_leakmatrix
+  character(len=PATHLEN) :: subchunk_file_wcov
   ! subset mapping
   real(dp) :: cputime_flag_subset=.0, cputime_subset=.0, cputime_write_subset=.0
 
@@ -960,10 +960,10 @@ contains
     integer :: j, nmap_save, ncc_save
     logical :: do_binmap_save, kfirst_save, temperature_only_save
     logical :: concatenate_messages_save
-    character(len=SLEN) :: file_binmap_save, file_hit_save
-    character(len=SLEN) :: file_matrix_save, file_leakmatrix_save
-    character(len=SLEN) :: file_wcov_save, file_mask_save, subsetname
-    character(len=SLEN) :: detsetname, surveyname
+    character(len=PATHLEN) :: file_binmap_save, file_hit_save
+    character(len=PATHLEN) :: file_matrix_save, file_leakmatrix_save
+    character(len=PATHLEN) :: file_wcov_save, file_mask_save, subsetname
+    character(len=PATHLEN) :: detsetname, surveyname
     integer(i4b) :: pass, npass
 
     if (.not. bin_subsets) return
@@ -1287,7 +1287,7 @@ contains
     integer(i2b) :: subchunk_id, nsubchunk
 
     integer :: i
-    character(len=SLEN) :: stemp
+    character(len=PATHLEN) :: stemp
 
     if (len_trim(filename) == 0 .or. subchunk_id == 0) return
 

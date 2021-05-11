@@ -8,7 +8,8 @@ MODULE commonparam
   implicit none
   public
 
-  integer, parameter :: SLEN  = 150
+  integer, parameter :: SLEN = 150
+  integer, parameter :: PATHLEN = 1024
 
   integer, parameter :: idp = i8b
   integer, parameter :: byte = 1 ! 1-byte logical kind
@@ -51,8 +52,6 @@ MODULE commonparam
   ! Enable sub ring map making
   integer(i2b) :: nsubchunk, isubchunk
   real(dp) :: fnoise_max
-  character(len=SLEN) :: file_profile = ''
-  character(len=SLEN) :: file_intermediate_profile = ''
   logical :: checknan
   real(dp) :: diagfilter
   logical :: sync_output, skip_existing
@@ -139,10 +138,10 @@ MODULE commonparam
   logical :: rm_monopole, temperature_only
 
   ! Input files
-  character(len=SLEN) :: file_param, file_inmask, file_spectrum, file_gap
+  character(len=PATHLEN) :: file_param, file_inmask, file_spectrum, file_gap
 
   ! Output files
-  character(len=SLEN) :: file_root, file_map, file_hit, file_base, &
+  character(len=PATHLEN) :: file_root, file_map, file_hit, file_base, &
        file_matrix, file_mask, file_binmap, file_wcov, file_leakmatrix, &
        file_gap_out, file_mc, path_output
 
@@ -153,7 +152,7 @@ MODULE commonparam
 
   ! NCVM specific parameters
   logical :: kwrite_covmat
-  character(len=SLEN) :: file_covmat
+  character(len=PATHLEN) :: file_covmat
 
   type(detector_data), allocatable, target :: detectors(:)
 
