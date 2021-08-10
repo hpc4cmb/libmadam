@@ -1389,7 +1389,7 @@ CONTAINS
     call fits_add_key(out, 'LASTPIX', 12*nside**2-1, 'Last pixel # (0 based)')
     call fits_add_key(out, 'POLAR', (nmap/=1),  &
          'Polarisation included (True/False)')
-    call fits_add_key(out,'POLCONV','COSMO',   &
+    call fits_add_key(out,'POLCCONV','COSMO',   &
          'Coord. convention for polarisation (COSMO/IAU)')
     if (write_cut) then
        call fits_update_key(out, 'EXTNAME', "'CUT SKY MAP'")
